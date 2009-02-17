@@ -1,0 +1,118 @@
+/*
+ * This file is part of the honeybrid project.
+ *
+ * Copyright (C) 2007-2009 University of Maryland (http://www.umd.edu)
+ * (Written by Robin Berthier <robinb@umd.edu>, Thomas Coquelin <coquelin@umd.edu> and Julien Vehent <jvehent@umd.edu> for the University of Maryland)
+ *
+ * Honeybrid is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
+
+QUICK INSTALL
+	% vim makefile
+	(edit configuration parameters)
+	% make
+	% sudo make install
+
+
+DEPENDENCIES
+
+Honeybrid is dependent on the following public domain packages:
+	gcc
+	make
+	binutils
+	pkg-config
+	openssl
+	libnetfilter-conntrack-dev
+	libnetfilter-conntrack1	(must be >= version 0.0.50-1)
+	libnetfilter-queue-dev
+	libnetfilter-queue1
+	libnfnetlink-dev
+	libnfnetlink0
+	libglib2.0-0 (must be >= 2.14 to have support for regexp)
+	libglib2.0-dev
+	libc6-dev
+	linux-libc-dev
+	libpcap0.8
+	libpcap0.8-dev
+	libssl-dev
+
+For Debian Lenny, running the following command will take care of all the dependencies:
+	% sudo apt-get install make binutils gcc libnetfilter-conntrack-dev libnetfilter-conntrack1 libnetfilter-queue-dev libnetfilter-queue1 libnfnetlink-dev libnfnetlink0 pkg-config libc6-dev libglib2.0-0 libglib2.0-dev linux-libc-dev libpcap0.8-dev libpcap0.8 openssl libssl-dev
+
+
+CONFIGURE
+
+There is currently no ./configure script to automatically check dependencies
+and generate configuration files.
+However, the makefile is designed to take care of the second task by generating
+the different configurations files needed by honeybrid to run properly. 
+
+The makefile uses configuration file templates (ending in ".gen.sh") and its
+parameters to generate each of the following script and configuration files:
+
+   * honeybrid-netconf.sh 	
+	Installed by default in "/etc/honeybrid/honeybrid-netconf.sh"
+	The network configuration around honeybrid. This script is called
+	each time honeybrid is started. It runs tcpdump on eth0 and eth1 
+	for each IP addresses listed behind honeybrid, including low and 
+	high interaction honeypot.
+	In our test bed, all the machine are on the same network, so we use 
+	the Proxy ARP capabilities of Linux to route the traffic to the 
+	honeypots. This is also set up in this file.
+
+   * honeybrid.sh		
+	Installed by default in "/etc/init.d/honeybrid.sh"
+	The Start/Stop script
+
+   * honeybrid.conf
+	Installed by default in "/etc/honeybrid/honeybrid.conf"
+	The general policy of honeybrid. THE FILE IS NOT CONTROLLED AT STARTUP, 
+	so make sure it doesn't contain any typos.
+
+   * rules.conf
+	This table contain the services correspondances between the low and 
+	the high interactions honeypots. Each time a connection has to be 
+	redirected, honeybrid searches the new destination in this file. 
+	If it doesn't find a destination, the redirection fails.
+
+It is required before building honeybrid to edit the makefile and change
+the parameters according to your architecture.
+
+The makefile launched with the "install" argument is configured to backup existing
+configuration files (marked with a filename ending in "~")
+
+
+BUILDING HONEYBRID
+
+After editing the makefile to change configuration parameters, honeybrid is built
+by running:
+	% make
+
+The honeybrid binary will be compiled and the configuration files will be generated
+in the working directory of honeybrid.
+
+
+INSTALLATION
+
+The final step to install honeybrid is to run:
+	% sudo make install
+
+The honeybrid binary will be copied to the program directory configured in makefile
+(/usr/local/sbin/ by default).
+Configuration files will also be copied to their respective directoried (mostly in 
+/etc/honeybrid/)
+
+When running "make install", the makefile is configured to backup existing configuration
+files (by appending "~" at the name of files) 

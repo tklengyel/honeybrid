@@ -1,0 +1,56 @@
+/*
+ * This file is part of the honeybrid project.
+ *
+ * Copyright (C) 2007-2009 University of Maryland (http://www.umd.edu)
+ * (Written by Robin Berthier <robinb@umd.edu>, Thomas Coquelin <coquelin@umd.edu> and Julien Vehent <jvehent@umd.edu> for the University of Maryland)
+ *
+ * Honeybrid is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
+
+OVERVIEW
+
+Thank you for your interest in Honeybrid.  I hope that you find it useful.
+
+
+USAGE
+
+Netfilter's functions are used to redirect traffic to honeybrid. For example, in an architecture like the following:
+
+                          +=================+
++----------+              |eth0:192.168.1.1||
+| attacker | ===========> ||   HONEYBRID   ||
+|(internet)|              ||    1.1.1.1:eth1|
++----------+              +=================+
+                           /            \
+                          /              \
+                     +--------+          +---------+
+                     |honeypot|          | honeyd  |
+                     |1.1.1.3 |          | 1.1.1.2 |
+                     +--------+          +---------+
+
+The following rules will queue the traffic from the attacker to honeyd and from honeyd to the attacker :
+iptables -A FORWARD -p tcp -i eth1 -s 1.1.1.2 -j QUEUE
+iptables -A FORWARD -p tcp -i eth0 -j QUEUE
+
+don't forget to active the routing mode :
+echo 1 > /proc/sys/net/ipv4/ip_forward
+
+The connections between Honeybrid and the honeypot must not be queued.
+
+
+CONTACT
+
+Send problems, bug reports, questions and comments to robinb@umd.edu
+
