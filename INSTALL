@@ -62,19 +62,11 @@ the different configurations files needed by honeybrid to run properly.
 The makefile uses configuration file templates (ending in ".gen.sh") and its
 parameters to generate each of the following script and configuration files:
 
-   * honeybrid-netconf.sh 	
-	Installed by default in "/etc/honeybrid/honeybrid-netconf.sh"
-	The network configuration around honeybrid. This script is called
-	each time honeybrid is started. It runs tcpdump on eth0 and eth1 
-	for each IP addresses listed behind honeybrid, including low and 
-	high interaction honeypot.
-	In our test bed, all the machine are on the same network, so we use 
-	the Proxy ARP capabilities of Linux to route the traffic to the 
-	honeypots. This is also set up in this file.
-
    * honeybrid.sh		
 	Installed by default in "/etc/init.d/honeybrid.sh"
 	The Start/Stop script
+	Also includes "add" and "del" option to automatically add IP addresses
+	to the iptables queue
 
    * honeybrid.conf
 	Installed by default in "/etc/honeybrid/honeybrid.conf"

@@ -22,32 +22,46 @@
 OVERVIEW
 
 Thank you for your interest in Honeybrid.  I hope that you find it useful.
+The goal of honeybrid is to combine low and high interaction honeypot to provide an highly scalable
+honeypot framework. This goal is achieved through a redirection mechanism that can transparently
+change the destination of a network session (TCP or UDP). Thus, uninteresting traffic can be handled
+by a front-end of low interaction honeypots, while interesting attacks can be forwarded to a back-end
+of high interaction honeypots for further analysis.
+
+Honeybrid is a program that runs on a gateway between the farm of honeypots and the Internet.
+Honeybrid has two main components:
+ - a Decision Engine that analyzes incoming packets from Internet and that decide which connection should
+   be redirected and when the redirection should occur,
+ - a Redirection Engine that handles the network session to change dynamically and transparently the 
+   destination IP.
 
 
-USAGE
+EXAMPLE
 
-Netfilter's functions are used to redirect traffic to honeybrid. For example, in an architecture like the following:
+Netfilter's functions are used to redirect traffic to honeybrid. It is important to correctly add
+the queueing rules using iptables for honeybrid to receive the traffic it needs.
+For example, in an architecture like the following:
 
                           +=================+
-+----------+              |eth0:192.168.1.1||
++----------+              |eth0            ||
 | attacker | ===========> ||   HONEYBRID   ||
-|(internet)|              ||    1.1.1.1:eth1|
+|(internet)|              ||   10.0.0.1:eth1|
 +----------+              +=================+
                            /            \
                           /              \
                      +--------+          +---------+
                      |honeypot|          | honeyd  |
-                     |1.1.1.3 |          | 1.1.1.2 |
+                     |10.0.0.3|          |10.0.0.2 |
                      +--------+          +---------+
 
-The following rules will queue the traffic from the attacker to honeyd and from honeyd to the attacker :
-iptables -A FORWARD -p tcp -i eth1 -s 1.1.1.2 -j QUEUE
-iptables -A FORWARD -p tcp -i eth0 -j QUEUE
+The following rules will queue the traffic from the attacker to honeyd and from honeyd to the attacker, as well
+as from the high interaction honeypot to honeybrid:
+iptables -A FORWARD -p tcp -i eth1 -s 10.0.0.2 -j QUEUE -m comment --comment 'honeybrid: packets from honeyd (LIH)'
+iptables -A FORWARD -p tcp -i eth0 -d 10.0.0.2 -j QUEUE -m comment --comment 'honeybrid: packets to honeyd (LIH)'
+iptables -A FORWARD -p tcp -i eth1 -s 10.0.0.3 -j QUEUE -m comment --comment 'honeybrid: packets from honeypot (HIH)'
 
-don't forget to active the routing mode :
+Don't forget to active the routing mode:
 echo 1 > /proc/sys/net/ipv4/ip_forward
-
-The connections between Honeybrid and the honeypot must not be queued.
 
 
 CONTACT
