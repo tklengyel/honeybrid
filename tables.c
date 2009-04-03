@@ -33,6 +33,9 @@
 #include <netinet/udp.h>
 #include <arpa/inet.h>
 
+#include <time.h>
+#include <sys/time.h>
+
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -55,10 +58,12 @@
  */
 int init_packet_struct( char *nf_packet, struct pkt_struct *new_packet_data)
 {
+	char *logbuf;
+
 	/* Init a new structure for the current packet */
 	new_packet_data->origin = EXT;
 	new_packet_data->DE = 0;
-	new_packet_data->packet.ip = malloc( ntohs(((struct iphdr*)nf_packet)->tot_len) );
+	new_packet_data->packet.ip = malloc( ntohs(((struct iphdr*)nf_packet)->tot_len) ); ///TODO: check if it's correctly freed
 	new_packet_data->key = malloc(64);
 	new_packet_data->key_src = malloc(32);
 	new_packet_data->key_dst = malloc(32);
@@ -107,7 +112,7 @@ int init_packet_struct( char *nf_packet, struct pkt_struct *new_packet_data)
 		/* The volume of data is the total size of the packet minus the size of the IP and TCP headers */
 		new_packet_data->data = ntohs(new_packet_data->packet.ip->tot_len) - (new_packet_data->packet.ip->ihl << 2) - (new_packet_data->packet.tcp->doff << 2);
 	}
-	else if( new_packet_data->packet.ip->protocol == 0x17 )
+	else if( new_packet_data->packet.ip->protocol == 0x11 )	/* 0x11 == 17 */
 	{
 		new_packet_data->packet.payload = (char*)new_packet_data->packet.udp + 8;
 		/*! Process UDP packet */
@@ -121,7 +126,10 @@ int init_packet_struct( char *nf_packet, struct pkt_struct *new_packet_data)
 	else
 	{
 		/*! Every other packets are ignored */
-		L("init_packet_struct():\tInvalid protocol: dropped\n",NULL,2,4);
+		logbuf = malloc(128);
+		sprintf(logbuf, "init_packet_struct():\tInvalid protocol: %d, packet dropped\n", new_packet_data->packet.ip->protocol);
+		L(NULL, logbuf, 2, 4);
+		//L("init_packet_struct():\tInvalid protocol: dropped\n",NULL,2,4);
 		return NOK;
 	}
 
@@ -194,6 +202,16 @@ int get_current_struct(struct pkt_struct *current_packet_data, struct conn_struc
 	g_get_current_time(&t);
 	gint curtime = (t.tv_sec);
 
+	gdouble microtime = 0.0;
+	microtime +=  ((gdouble)t.tv_sec);
+	microtime += (((gdouble)t.tv_usec)/1000000.0);
+
+	/*! debug 
+        char* logbuf = malloc(128);
+        sprintf(logbuf,"get_current_struct():\tmicrotime set to %f [tv_sec:%u and tv_usec:%u]\n",microtime, (unsigned int)t.tv_sec, (unsigned int)t.tv_usec);
+        L(NULL,logbuf,2,4);
+	*/
+
 	/*! g_tree_lookup_extended - lookup for a key in the B-Tree
 	 *
 	\param[in] conn_tree:  name of the b-tree
@@ -241,6 +259,33 @@ int get_current_struct(struct pkt_struct *current_packet_data, struct conn_struc
 		add_new_data->id				= c_id++;
 		add_new_data->replay_id				= 0;
 		g_static_rw_lock_init( &add_new_data->lock );
+		int j;
+		for (j = INVALID; j<= DROP; j++) {
+			add_new_data->stat_time[j]   = 0.0;
+			add_new_data->stat_packet[j] = 0;
+			add_new_data->stat_byte[j]   = 0;	
+		}	
+
+		/*! statistics */
+		add_new_data->start_microtime = microtime;
+		add_new_data->stat_time[   INIT ] = microtime;
+		add_new_data->stat_packet[ INIT ] = 1;
+		add_new_data->stat_byte[   INIT ] = current_packet_data->size;
+		add_new_data->total_packet = 1;
+		add_new_data->total_byte   = current_packet_data->size;
+		add_new_data->replay_problem = 0;
+		add_new_data->invalid_problem = 0;
+		///add_new_data->decision_rule = malloc(512);
+		add_new_data->decision_rule = g_string_new(NULL);
+
+		struct tm *tm;
+                struct timeval tv;
+                struct timezone tz;
+                gettimeofday(&tv, &tz);
+                tm=localtime(&tv.tv_sec);
+		add_new_data->start_timestamp = g_string_new("");
+                g_string_printf(add_new_data->start_timestamp,"%d-%02d-%02d %02d:%02d:%02d.%.6d", (1900+tm->tm_year), (1+tm->tm_mon), tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec, (int)tv.tv_usec);
+		
 
 		/*! insert entry in B-Tree
 		 * (set up a lock to protect the writing)
@@ -262,16 +307,33 @@ int get_current_struct(struct pkt_struct *current_packet_data, struct conn_struc
 
 	} else {
 		/*! The key was found in the B-Tree */
+		int state = (*current_connection_data)->state;
+
 		/*! We lock the structure */
-
-		g_static_rw_lock_writer_lock( &(*current_connection_data)->lock );
-
+		///ROBIN 2009-03-29: deadlock occurred between here and line 676 (setup_redirection())
+		//g_static_rw_lock_writer_lock( &(*current_connection_data)->lock );
+		/*
+		#ifdef DEBUG
+		g_print("get_current_struct()\tTrying to unlock connection_data for connection id %d\n", (*current_connection_data)->id);
+		#endif
+		while (!g_static_rw_lock_writer_trylock( &(*current_connection_data)->lock )) {
+			g_usleep(1);
+			//g_static_rw_lock_writer_unlock( &(*current_connection_data)->lock );
+		}
+		*/
+		/*! statistics */
+		(*current_connection_data)->stat_time[   state ]  = microtime;
+		(*current_connection_data)->stat_packet[ state ] += 1;
+		(*current_connection_data)->stat_byte[   state ] += current_packet_data->size;
+		(*current_connection_data)->total_packet += 1;
+		(*current_connection_data)->total_byte   += current_packet_data->size;
 		/*! We update the current connection access time */
 		(*current_connection_data)->access_time = curtime;
 		if(current_packet_data->origin == EXT)
 			(*current_connection_data)->count_data_pkt_from_intruder += current_packet_data->packet.tcp->psh;
+
 		/*! We unlock the structure */
-		g_static_rw_lock_writer_unlock( &(*current_connection_data)->lock );
+		///g_static_rw_lock_writer_unlock( &(*current_connection_data)->lock );
 
 	}
 	current_packet_data->connection_data = *current_connection_data;
@@ -303,7 +365,7 @@ int addr2int(char *address) {
 /*! test_honeypot_addr
  *
  * \brief compare an IP with a list of honeypot addresses
- * \param[in] the key of the host we want to test in the list
+ * \param[in] the key ip:port of the host we want to test in the list
  * \param[in] the list we want to look into, either Low or High
  *
  * \return 0 if the key is found in the list, anything else if not
@@ -315,16 +377,41 @@ int test_honeypot_addr( char *key, int list ) {
 	/*! We extract the IP from the key */
 	addr = g_strsplit( testkey->str, ":", 0);
 
+	/*! small hack to be able to define matching pattern for multiple IP at once
+         */
+        gchar **byte;
+        byte = g_strsplit (addr[0], ".", 0);
+        GString *classA, *classB, *classC;
+        classA = g_string_new("");
+        classB = g_string_new("");
+        classC = g_string_new("");
+	g_string_printf(classA,"%s.0.0.0",byte[0]);
+        g_string_printf(classB,"%s.%s.0.0",byte[0],byte[1]);
+        g_string_printf(classC,"%s.%s.%s.0",byte[0],byte[1],byte[2]);
+
 	/*! We convert the IP from char to int */
 	int intaddr = addr2int( addr[0] );
+	int intaddrA = addr2int( classA->str );
+	int intaddrB = addr2int( classB->str );
+	int intaddrC = addr2int( classC->str );
+
 	g_strfreev(addr);
+	g_strfreev(byte);
 	g_string_free(testkey,TRUE);
 	
 	/*! We test which list we want to search */
 	if ( list == LIH && g_hash_table_lookup(low_honeypot_addr, &intaddr) != NULL) 
 	/*! if the IP is detected in the list of low honeypot addresses */
 		return OK;
-	else if( list == HIH && g_hash_table_lookup(high_honeypot_addr, &intaddr) != NULL)
+	/*! We then test by increasing the size of the network progressively: */
+	if ( list == LIH && g_hash_table_lookup(low_honeypot_addr, &intaddrC) != NULL) 
+		return OK;
+	if ( list == LIH && g_hash_table_lookup(low_honeypot_addr, &intaddrB) != NULL) 
+		return OK;
+	if ( list == LIH && g_hash_table_lookup(low_honeypot_addr, &intaddrA) != NULL) 
+		return OK;
+
+	if( list == HIH && g_hash_table_lookup(high_honeypot_addr, &intaddr) != NULL)
 	/*! if the IP is detected in the list of high honeypot addresses */
 		return OK;
 	return NOK;
@@ -336,24 +423,57 @@ int test_honeypot_addr( char *key, int list ) {
  * \param[in] the key of the honeypot, or honeypot+external host, we want to lookup in the redirection table
  * \param[in] the list we want to look into, either Low or High
  *
- * \return The honeypot IP found, NOK if nothing is found
+ * \return The honeypot IP found, NULL if nothing is found
  */
 char * lookup_honeypot_addr( gchar *testkey, int list ) {
+
+	char *logbuf = malloc(128);
+	sprintf(logbuf,"lookup_honeypot_addr():\tLooking up %s in list %d (LIH == 1, HIH == 2)\n", testkey, list);
+	L(NULL,logbuf,4,5);
 	
 	/*! We test which list we want to search */
 	if ( list == LIH ) {
+		/*! ROBIN 2009-02-25: small hack to include full network definition */
+		gchar **addr;
+		addr = g_strsplit( testkey, ":", 0);
+
+		gchar **byte;
+	        byte = g_strsplit (testkey, ".", 0);
+	        GString *classA, *classB, *classC;
+	        classA = g_string_new("");
+	        classB = g_string_new("");
+	        classC = g_string_new("");
+	        g_string_printf(classA,"%s.0.0.0:%s",byte[0],addr[1]);
+	        g_string_printf(classB,"%s.%s.0.0:%s",byte[0],byte[1],addr[1]);
+	        g_string_printf(classC,"%s.%s.%s.0:%s",byte[0],byte[1],byte[2],addr[1]);
+
 	        /*! get the corresponding hih destination from the low interaction hash table */
 	        char *hihdest;
 	        hihdest = g_strdup((char *)g_hash_table_lookup(low_redirection_table, testkey));
 
 	        if(!hihdest)
+	        	hihdest = g_strdup((char *)g_hash_table_lookup(low_redirection_table, classC->str));
+	        if(!hihdest)
+	        	hihdest = g_strdup((char *)g_hash_table_lookup(low_redirection_table, classB->str));
+	        if(!hihdest)
+	        	hihdest = g_strdup((char *)g_hash_table_lookup(low_redirection_table, classA->str));
+	        if(!hihdest) {
+			logbuf = malloc(128);
+			sprintf(logbuf,"lookup_honeypot_addr():\tTested also %s, %s and %s but nothing matched\n", classC->str, classB->str, classA->str);
+			L(NULL,logbuf,4,5);
 	                return NULL;
+		}
+
+		logbuf = malloc(128);
+		sprintf(logbuf,"lookup_honeypot_addr():\tFound %s!\n", hihdest);
+		L(NULL,logbuf,4,5);
+
 	        return hihdest;
 
 	} else {
                 /*! get the corresponding lih destination from the high interaction hash table */
 
-		/*! Check first if the high_reciredtion_table is not null */
+		/*! Check first if the high_redirection_table is not null */
 		if (high_redirection_table == NULL)
 			return NULL;
 
@@ -362,6 +482,11 @@ char * lookup_honeypot_addr( gchar *testkey, int list ) {
 
                 if(!lihdest)
                         return NULL;
+
+		logbuf = malloc(128);
+		sprintf(logbuf,"lookup_honeypot_addr():\tFound %s!\n", lihdest);
+		L(NULL,logbuf,4,5);
+
                 return lihdest;
 	}
 	return NULL;
@@ -379,7 +504,7 @@ int store_packet(struct conn_struct *current_connection_data, struct pkt_struct 
 {
 	current_packet_data->position = -1;
 	/*! Lock the structure */
-	g_static_rw_lock_writer_lock (&current_connection_data->lock);
+	///g_static_rw_lock_writer_lock (&current_connection_data->lock);
 
 	/*! Append current_packet_data to the singly-linked list of current_connection_data */
         current_connection_data->BUFFER = g_slist_append(current_connection_data->BUFFER, current_packet_data);
@@ -388,7 +513,7 @@ int store_packet(struct conn_struct *current_connection_data, struct pkt_struct 
         current_packet_data->position = (g_slist_length(current_connection_data->BUFFER) - 1);
 
 	/*! Unlock the structure */
-        g_static_rw_lock_writer_unlock (&current_connection_data->lock);	
+        ///g_static_rw_lock_writer_unlock (&current_connection_data->lock);	
 	
 	char *logbuf = malloc(128);
 	sprintf(logbuf,"store_packet():\tPacket stored in memory for connection %s\n", current_connection_data->key);
@@ -399,37 +524,53 @@ int store_packet(struct conn_struct *current_connection_data, struct pkt_struct 
 
 
 /*! match_old_value
- \brief called for each entry in the B-Tree, if a time value is upper to 121 sec and the connection is not marked as redirected, entry is deleted
+ \brief called for each entry in the B-Tree, if a time value is upper to "expiration_delay" (default is 120 sec) and the connection is not marked as redirected, entry is deleted
  \param[in] key, a pointer to the current B-Tree key value
  \param[in] cur_conn, a pointer to the current B-Tree associated value
- \param[in] trash, user data, unused
+ \param[in] expiration_delay
  \return FALSE, to continue to traverse the tree (if TRUE is returned, traversal is stopped)
  */
-int match_old_value(gpointer key, struct conn_struct *cur_conn, gpointer trash)
+int match_old_value(gpointer key, struct conn_struct *cur_conn, gint *expiration_delay)
 {
 	GTimeVal t;
 	g_get_current_time(&t);
 	gint curtime = (t.tv_sec);
+
 	GSList *current;
 	struct pkt_struct* tmp;
-	if(((curtime - cur_conn->access_time) > 120) || (cur_conn->state < INIT))
+
+	int delay = *expiration_delay;
+
+	char *log = malloc(192);
+        sprintf(log,"match_old_value():\tcalled with expiration delay: %d\n", delay);
+        L(NULL,log,5,8);
+
+	if(((curtime - cur_conn->access_time) > delay) || (cur_conn->state < INIT))
 	{
+		/*! output final statistics about the connection */
+		connection_stat(cur_conn);
+
 		char *log = malloc(192);
 		sprintf(log,"match_old_value():\tSingly linked list freed - tuple = %s\n", (char*)key);
 		L(NULL,log,2,cur_conn->id);
+
 		/*! lock the structure, this will never be unlocked */
 		g_static_rw_lock_writer_lock (&cur_conn->lock);
-		/*! remove the singly linked lists */
 
+		/*! remove the singly linked lists */
 		current = cur_conn->BUFFER;
 		do{
 			tmp = (struct pkt_struct*) g_slist_nth_data ( current, 0 );
 			free_packet_struct(tmp);
 		}while((current = g_slist_next(current)) != NULL);
+
 		g_slist_free(cur_conn->BUFFER);
 		free(cur_conn->key_ext);
 		free(cur_conn->key_lih);
 		free(cur_conn->key_hih);
+		///free(cur_conn->decision_rule);
+		g_string_free(cur_conn->decision_rule, TRUE);
+
 		/*! list the entry for later removal */
 		g_ptr_array_add(entrytoclean, key);
 	}
@@ -446,6 +587,7 @@ void remove_old_value(gpointer key, gpointer trash)
 	char *log = malloc(192);
 	sprintf(log,"remove_old_value():\tentry removed - tuple = %s\n", (char*)key);
 	L(NULL,log,3,8);
+
 	g_static_rw_lock_writer_lock (&rwlock);
 
 	if (TRUE != g_tree_remove(conn_tree,key))
@@ -463,9 +605,22 @@ void remove_old_value(gpointer key, gpointer trash)
  */
 void clean()
 {
-	while (1)
+
+	char *expiration_delay = g_hash_table_lookup(config,"expiration_delay");
+	if( expiration_delay == NULL ) {
+		expiration_delay = "120";
+	}
+	int delay = atoi(expiration_delay);
+
+	/*! DEBUG
+	char *log = malloc(192);
+        sprintf(log,"clean():\texpiration delay set to %d seconds\n", delay);
+        L(NULL,log,3,8);
+	*/
+
+	while ( threading == OK )
 	{
-		/*! wake up every 121s (tcp timeout is 120s)*/
+		/*! wake up every second */
 		g_usleep(999999);
 		L("clean():\t\tcleaning\n",NULL,5,8);
 
@@ -473,7 +628,7 @@ void clean()
 		entrytoclean = g_ptr_array_new();
 
 		/*! call the clean function for each value, delete the value if TRUE is returned */
-		g_tree_traverse( conn_tree,(GHRFunc) match_old_value, G_IN_ORDER, NULL );
+		g_tree_traverse( conn_tree,(GHRFunc) match_old_value, G_IN_ORDER, &delay );
 
 		/*! remove each key listed from the btree */
 		g_ptr_array_foreach(entrytoclean,(GFunc) remove_old_value, NULL);
@@ -494,6 +649,8 @@ void clean()
  */
 int setup_redirection(struct conn_struct *connection_data)
 {
+	L("setup_redirection():\t[** Starting... **]\n",NULL, 2,connection_data->id);
+
 	char* hihaddr = lookup_honeypot_addr( connection_data->key_lih, LIH );
 
 	if ( hihaddr != NULL )
@@ -517,24 +674,46 @@ int setup_redirection(struct conn_struct *connection_data)
 
 			g_hash_table_insert (high_redirection_table, key_hih_ext->str, connection_data->key_lih );
 
-			/*! We update the connection structure with the high interaction honeypot found */
-			g_static_rw_lock_writer_lock (&connection_data->lock);
+	 		L("setup_redirection():\t[** high_redirection_table updated **]\n",NULL, 2,connection_data->id);
 
-			connection_data->key_hih = hihaddr;
+			GTimeVal t;
+		        g_get_current_time(&t);
+		        gdouble microtime = 0.0;
+		        microtime +=  ((gdouble)t.tv_sec);
+		        microtime += (((gdouble)t.tv_usec)/1000000.0);
+
 			gchar **tmp_ = g_strsplit( hihaddr, ":", 0);
-			connection_data->hih.addr = htonl(addr2int( *tmp_ ));
-			connection_data->hih.lih_addr = htonl(addr2int( connection_data->key_lih ));
+
 			int tmp_port;
 			sscanf(tmp_[1],"%i",&tmp_port);
-			g_strfreev(tmp_);
-			connection_data->hih.port = htons( (short)tmp_port );
-			g_string_free(key_hih_ext,0);
 
+			/*! We update the connection structure with the high interaction honeypot found */
+			///ROBIN 2009-03-29: deadlock occurred between here and line 312 (get_current_struct())
+			///g_static_rw_lock_writer_lock (&connection_data->lock);
+			/*
+			#ifdef DEBUG
+			g_print("setup_redirection()\tTrying to unlock connection_data for connection id %d\n", connection_data->id);
+			#endif
+			while (!g_static_rw_lock_writer_trylock( &connection_data->lock )) {
+				g_usleep(1);
+				//g_static_rw_lock_writer_unlock( &connection_data->lock );
+			}
+			*/
+			connection_data->key_hih = hihaddr;
+			connection_data->hih.addr = htonl(addr2int( *tmp_ ));
+			connection_data->hih.lih_addr = htonl(addr2int( connection_data->key_lih ));
+			connection_data->hih.port = htons( (short)tmp_port );
 			/*! We then update the status of the connection structure
 			 */
+			connection_data->stat_time[ DECISION ] = microtime;
 			connection_data->state = REPLAY;
+
+			///g_static_rw_lock_writer_unlock (&connection_data->lock);
+
 			L("setup_redirection():\tState updated to REPLAY\n",NULL, 2,connection_data->id);
-			g_static_rw_lock_writer_unlock (&connection_data->lock);
+
+			g_strfreev(tmp_);
+			g_string_free(key_hih_ext,0);
 
 			/*! We reset the LIH */
 			reset_lih( connection_data );
@@ -542,21 +721,35 @@ int setup_redirection(struct conn_struct *connection_data)
 			/*! We replay the first packets */
 			struct pkt_struct* current;
 			current = (struct pkt_struct*) g_slist_nth_data ( connection_data->BUFFER, connection_data->replay_id );
+
+			L("setup_redirection():\t[** starting the forwarding loop... **]\n",NULL, 2,connection_data->id);
+			// Does not correctly replay when MIN_DATA_DECISION is 0...
 			while(current->origin == EXT)
 			{
 				forward(current);
 				if(g_slist_next(g_slist_nth( connection_data->BUFFER, connection_data->replay_id )) == NULL)
 				{
+					///g_static_rw_lock_writer_lock (&connection_data->lock);
 					connection_data->state = FORWARD;
+					///g_static_rw_lock_writer_unlock (&connection_data->lock);
 					L("setup_redirection():\tState updated to FORWARD\n",NULL, 4, connection_data->id);
+					g_string_free(key_hih_ext, TRUE);
 					return OK;
 				}
+				///g_static_rw_lock_writer_lock (&connection_data->lock);
 				connection_data->replay_id++;
+				///g_static_rw_lock_writer_unlock (&connection_data->lock);
 				current = (struct pkt_struct*) g_slist_nth_data ( connection_data->BUFFER, connection_data->replay_id );
 			}
+			L("setup_redirection():\t[** ...done with the forwarding loop **]\n",NULL, 2,connection_data->id);
+			L("setup_redirection():\t[** defining expected data **]\n",NULL, 2,connection_data->id);
 			/*! then define the next expected data */
 			define_expected_data(current);
+			///g_static_rw_lock_writer_lock (&connection_data->lock);
 			connection_data->replay_id++;
+			///g_static_rw_lock_writer_unlock (&connection_data->lock);
+		} else {
+			g_string_free(key_hih_ext, TRUE);
 		}
 	}
 	else

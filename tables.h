@@ -30,6 +30,14 @@
  */
 long int mainpid;
 
+/*!
+ \def threading
+ * Init value: OK
+ * Set to NOK when honeybrid stops, used to terminate threads
+ */
+int threading;
+
+
 /*! \brief security writing lock for the Binary Tree
 */
 GStaticRWLock rwlock;
@@ -87,6 +95,9 @@ void clean();
 
 int setup_redirection(struct conn_struct *connection_data);
 
+int match_old_value(gpointer key, struct conn_struct *cur_conn, gint *expiration_delay);
+
+void remove_old_value(gpointer key, gpointer trash);
 
 /*! \brief constants to define the origin of a packet
  */
@@ -101,6 +112,8 @@ int setup_redirection(struct conn_struct *connection_data);
 #define DECISION 	2
 #define REPLAY 		3
 #define FORWARD 	4
+#define PROXY		5
+#define DROP		6
 
 /*!
   \def OK

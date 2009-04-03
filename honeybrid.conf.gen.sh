@@ -29,7 +29,7 @@ echo "#*************************************************************************
 #
 # 1 = syslog
 # 2 = stdout (do not daemonize)
-# 3 = log file in exec directory
+# 3 = log files
 #
 
 output = 3
@@ -64,12 +64,40 @@ exec_directory = $RUNDIR
 
 log_directory = $LOGDIR
 
+## log file for connections
+#
+
+log_file = $LOGFILE
+
+## log file hourly rotation
+#  sending the signal USR1 to Honeybrid will force the logs to rotate
+#
+
+log_rotation = 1
+
+## log format
+#  if you need connections to be logged in csv format, just uncomment the following line
+#
+
+#log_format = csv
+
+## debug file for internal process
+#  (this one is never rotated)
+#
+
+debug_file = $DEBUGFILE
+
 
 ## static redirect table
 #
 
 redirect_table = $CONFDIR/$RULE
 
+
+## delay in second to expire connections
+#
+
+expiration_delay = 120
 
 ## enable pcap recording
 #
@@ -84,6 +112,10 @@ record = 1
 
 conn_record = $LOGDIR/honeybrid_pcap_
 
+## Source Module table file
+#
+
+sourcetable = $CONFDIR/source.tb
 
 ## SHA1 Module table file
 #

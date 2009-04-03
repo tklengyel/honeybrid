@@ -47,7 +47,7 @@
 struct node *DE_build_subtree(const gchar *expr)
 {
 	struct node *node;
-	node = (struct node *) malloc(sizeof( struct node));
+	node = (struct node *) malloc(sizeof( struct node)); /// TODO: to be freed when destroying DE_rules
 	node->module = NULL;
 
 	/*! test presence of AND operator */
@@ -57,6 +57,11 @@ struct node *DE_build_subtree(const gchar *expr)
 	/*! composed expression: separate the left part */
 	if(NULL != op_pos_AND)
 	{
+
+		#ifdef DEBUG
+       		g_print("\tDE_build_subtree():\tFound the AND operator, splitting...\n");
+	        #endif
+
 		/*! split on "AND" operator */
 		GRegex *regex;
 		regex = g_regex_new ("AND\\s", 0, 0, NULL);
@@ -73,10 +78,16 @@ struct node *DE_build_subtree(const gchar *expr)
 		/*! call function with right side of expr */
 		node->true = DE_build_subtree(and[1]);
 		node->false = NULL;
+		g_regex_unref(regex);
 	}
 	/*! single module in expression, just add the leaf */
 	else
 	{
+
+		#ifdef DEBUG
+       		g_print("\tDE_build_subtree():\tNo operator found in '%s'\n", expr);
+	        #endif
+
 		GRegex *regex;
 		regex = g_regex_new ("(\\S+)(\\(\\S+\\))", 0, 0, NULL);
 		gchar **right_side = g_regex_split(regex, expr, 0);
@@ -89,12 +100,17 @@ struct node *DE_build_subtree(const gchar *expr)
 		node->false = NULL;
 		g_strfreev(right_side);
 		free(arg);
+		g_regex_unref(regex);
 	}
 
 	/*! get module structure from DE_mod
 	 */
 	node->module = get_module(modname);
-///	g_print("\tDE_build_subtree(): module = '%s' -> %p\n",modname,node->module);//toto
+	node->module_name = g_string_new(NULL);
+	g_string_printf(node->module_name, "%s",modname);
+	//#ifdef DEBUG_
+	g_print("\tDE_build_subtree(): module = '%s' -> %p\n",modname,node->module);
+	//#endif
 	
 	free(modname);
 	/*! return pointer to this leaf
@@ -113,8 +129,8 @@ struct node *DE_build_subtree(const gchar *expr)
  */
 void *DE_create_tree(const gchar *equation)
 {
-	#ifdef DEBUG_
-	g_print("\t|DE_create_tree(): creating tree for equation -> %s\n", equation);
+	#ifdef DEBUG
+	g_print("\tDE_create_tree():\tcreating tree for equation -> %s\n", equation);
 	#endif
 
 	/*! create a glib table to store the equation
@@ -124,11 +140,18 @@ void *DE_create_tree(const gchar *equation)
 	subgroups = g_strsplit (equation, " OR ",0);
 
 	tree.globalresult = -1;
+	tree.proxy = 0;
+	tree.drop = 0;
+	///tree.decision = g_string_new(NULL);
+
 	g_static_rw_lock_init( &tree.lock );
 
 	/*! first subgroup
 	 */
 	tree.node = DE_build_subtree(subgroups[0]);
+	
+	///tree.node->expr = malloc(512); ///TODO: seems to be incorrectly freed...	
+	///sprintf( tree.node->expr, "%s", equation);
 
 	/*! store address of the root
 	 */
@@ -141,6 +164,9 @@ void *DE_create_tree(const gchar *equation)
 	int n=1;
 	for (n=1;subgroups[n] != NULL; n++)
 	{
+		#ifdef DEBUG
+		g_print("\tDE_create_tree():\tAnalyzing subgroup %i: '%s'\n", n, subgroups[n]);
+		#endif
 		/*! get the pointer to the beginning of the new subtree
 		 */
 		struct node *headsubgroup;
@@ -184,7 +210,10 @@ void *DE_create_tree(const gchar *equation)
 
 int decide(struct pkt_struct *pkt)
 {
-	struct mod_pool_args args;
+
+	L("decide():\tCalled\n",NULL,4,pkt->connection_data->id);
+
+	struct mod_args args;
 	args.pkt = pkt;
 
 	tree.globalresult = -1;
@@ -193,11 +222,33 @@ int decide(struct pkt_struct *pkt)
  	{
  		/*! init result value */
  		tree.node->result = -1;
+ 		tree.node->info_result = 0;
 		args.node = tree.node;
   		/*! call module */
+
+		if (tree.node->module == NULL) {
+			L("decide():\tERROR! tree.node->module is NULL\n",NULL,4,pkt->connection_data->id);
+			return -1;
+		}
+
  		tree.node->module(args);
- 			/*! if result is true, forward to true node or exit with 1 */
- 		if(tree.node->result == 1)
+ 		/*! if result is true, forward to true node or exit with 1 */
+ 		if(tree.node->result >= 1) {
+			/*! update decision_rule */
+			///g_static_rw_lock_writer_lock (&pkt->connection_data->lock);
+			if (tree.node->info_result != 0) {
+				g_string_append_printf(pkt->connection_data->decision_rule, "+%s@%s:%d;", tree.node->module_name->str, args.node->arg, tree.node->info_result);
+			} else {
+				g_string_append_printf(pkt->connection_data->decision_rule, "+%s@%s;", tree.node->module_name->str, args.node->arg);
+			}
+			///g_static_rw_lock_writer_unlock (&pkt->connection_data->lock);
+
+			/*! result == 2 indicates that it's accepted but we should proxy, not replay */
+			if (tree.node->result == 2) {
+				tree.proxy = 1;
+			}
+
+
  			if(tree.node->true != NULL)
  				/*! go to next node */
  				tree.node = tree.node->true;
@@ -205,13 +256,27 @@ int decide(struct pkt_struct *pkt)
  			else
  				tree.globalresult = 1;
  		/*! result is false, forward to false node or exit with 0 */
- 		else
+ 		} else {
+			/*! result == -1 indicates that we have to drop this connection forever */
+			if (tree.node->result == -1) {
+				tree.drop = 1;
+			}
+
+			///g_static_rw_lock_writer_lock (&pkt->connection_data->lock);
+			if (tree.node->info_result != 0) {
+				g_string_append_printf(pkt->connection_data->decision_rule, "-%s@%s:%d;", tree.node->module_name->str, args.node->arg, tree.node->info_result);
+			} else {
+				g_string_append_printf(pkt->connection_data->decision_rule, "-%s@%s;", tree.node->module_name->str, args.node->arg);
+			}
+			///g_static_rw_lock_writer_unlock (&pkt->connection_data->lock);
+
  			/*! go to the next subgroup */
  			if(tree.node->false != NULL)
  				tree.node = tree.node->false;
  			/*! end of the tree, exit */
  			else
  				tree.globalresult = 0;
+		}
  	}
 	int res = tree.globalresult;
 	return res;
@@ -224,50 +289,93 @@ int decide(struct pkt_struct *pkt)
 void DE_submit_packet()
 {
 	struct pkt_struct* pkt;
-	while(1)
+    while( threading == OK ) 
+    {
 	if(DE_queue == NULL) {
 		g_usleep(1);
 	} 
 	else
 	{
-		/* ROBIN DEBUG L("DE_submit_packet():\tCheking DE_queue: not null... Processing\n",NULL, 4,999);	*/
 		pkt = (struct pkt_struct*) g_slist_nth_data ( DE_queue, 0 );
-		char *logbuf=malloc(128);
+
+		char *logbuf=malloc(256);
 		sprintf(logbuf,"DE_submit_packet():\tPacket pushed to DE: %s\n",pkt->connection_data->key);
 		L(NULL,logbuf,3,pkt->connection_data->id);
 
 		/*! search for the matching rule, if no matching rule exist for
 		 * that connection, we do nothing */
 		gchar **tuple;
-		tuple = g_strsplit (pkt->connection_data->key, ":",0);
+		tuple = g_strsplit (pkt->connection_data->key, ":", 0);
 		GString *ruleid;
 		ruleid = g_string_new("");
 
+		/*! small hack to be able to define rule for multiple IP at once
+		 */
+		gchar **dbyte, **sbyte;
+		sbyte = g_strsplit (tuple[0], ".", 0);
+		dbyte = g_strsplit (tuple[2], ".", 0);
+		GString *classA, *classB, *classC;
+		classA = g_string_new("");
+		classB = g_string_new("");
+		classC = g_string_new("");
+
 		/*! in 99% of the cases, the second part of the tuple will be the rule ID
-		 * (because most connections are initiated from the outside) */
+		 * (because most connections are initiated from outside) 
+		 * tuple[2] is destination ip (should be honeyd ip)
+		 * tuple[3] is destination port (should be port attacked)
+		 */
 		g_string_printf(ruleid,"%s:%s",tuple[2],tuple[3]);
+		g_string_printf(classA,"%s.0.0.0:%s",dbyte[0],tuple[3]);
+		g_string_printf(classB,"%s.%s.0.0:%s",dbyte[0],dbyte[1],tuple[3]);
+		g_string_printf(classC,"%s.%s.%s.0:%s",dbyte[0],dbyte[1],dbyte[2],tuple[3]);
 
 		/*! hash table lookup return the root */
 		tree.node =(struct node *) g_hash_table_lookup(DE_rules, ruleid->str);
+
+		/*! we then try by increasing the range of IP: */
+		if ( tree.node == NULL)
+			 tree.node =(struct node *) g_hash_table_lookup(DE_rules, classC->str);
+		if ( tree.node == NULL)
+			 tree.node =(struct node *) g_hash_table_lookup(DE_rules, classB->str);
+		if ( tree.node == NULL)
+			 tree.node =(struct node *) g_hash_table_lookup(DE_rules, classA->str);
+
 		if ( tree.node == NULL )
 		{
 			///ROBIN - 2009-02-17 - debug
-			logbuf=malloc(128);	
+			logbuf=malloc(256);
 			sprintf(logbuf,"DE_submit_packet():\tNo rule found using %s\n", ruleid->str);
 			L(NULL, logbuf, 4, pkt->connection_data->id);
 
 			/*! if rule not found with that ID, try with
-			 * the other part of the tuple */
+			 * the other part of the tuple 
+			 * tuple[0] is source IP
+			 * tuple[1] is source port
+			 */
 			ruleid = g_string_new("");
+			classA = g_string_new("");
+			classB = g_string_new("");
+			classC = g_string_new("");
 			g_string_printf(ruleid,"%s:%s", tuple[0], tuple[1]);
+			g_string_printf(classA,"%s.0.0.0:%s",sbyte[0],tuple[3]);
+			g_string_printf(classB,"%s.%s.0.0:%s",sbyte[0],sbyte[1],tuple[3]);
+			g_string_printf(classC,"%s.%s.%s.0:%s",sbyte[0],sbyte[1],sbyte[2],tuple[3]);
 	
 			/*! if no rule for that connection, do nothing */
 			tree.node =(struct node *) g_hash_table_lookup(DE_rules, ruleid->str);
 
+			/*! we then try by increasing the range of IP: */
+			if ( tree.node == NULL)
+				 tree.node =(struct node *) g_hash_table_lookup(DE_rules, classC->str);
+			if ( tree.node == NULL)
+				 tree.node =(struct node *) g_hash_table_lookup(DE_rules, classB->str);
+			if ( tree.node == NULL)
+				 tree.node =(struct node *) g_hash_table_lookup(DE_rules, classA->str);
+
 			///ROBIN - 2009-02-17 - debug
 			if ( tree.node == NULL ) 
 			{
-				logbuf=malloc(128);
+				logbuf=malloc(256);
 				sprintf(logbuf,"DE_submit_packet():\tNo rule found using %s\n",ruleid->str);
 				L(NULL, logbuf, 4, pkt->connection_data->id);
 			}
@@ -275,49 +383,110 @@ void DE_submit_packet()
 
 		/*! we don't need that anymore */
 		g_string_free(ruleid, TRUE);
+		g_string_free(classA, TRUE);
+		g_string_free(classB, TRUE);
+		g_string_free(classC, TRUE);
 		g_strfreev(tuple);
+		g_strfreev(dbyte);
+		g_strfreev(sbyte);
+
 		int decision = -1;
 		int res;
  		if (tree.node != NULL)
 	 	{
-			logbuf=malloc(128);
+			logbuf=malloc(256);
 			sprintf(logbuf,"DE_submit_packet():\tRule available for this connection -> %s\n",pkt->connection_data->key);
 			L(NULL,logbuf,3,pkt->connection_data->id);
 			
-			if( (pkt->origin == EXT) && (pkt->data > 0) )
+			///ROBIN - TODO: this condition will be revised soon to include packets from LIH and packets without payload (2009-03-27 19:50)
+			///if( (pkt->origin == EXT) && (pkt->data > 0) )
+			if( (pkt->origin == EXT) && (pkt->data >= MIN_DECISION_DATA ) )
 			{
 				L("DE_submit_packet():\tDeciding\n",NULL,4,pkt->connection_data->id);
 				decision = decide(pkt);
 				if(decision == 1)
 				{
-					logbuf=malloc(128);
-					sprintf(logbuf,"DE_submit_packet():\tDecision is REDIRECT - tuple = %s\n",pkt->connection_data->key);
-					L(NULL,logbuf,2,pkt->connection_data->id);
-					res = setup_redirection(pkt->connection_data);
-					if(res != OK)
-						L("DE_submit_packet():\t setup_redirection() failed",NULL, 1,pkt->connection_data->id);
+					/*! We lock the structure because we will modify it */
+					///g_static_rw_lock_writer_lock (&pkt->connection_data->lock);
+
+					if (tree.proxy == 0) {
+						logbuf=malloc(256);
+						sprintf(logbuf,"DE_submit_packet():\tDecision is REDIRECT - tuple = %s\n",pkt->connection_data->key);
+						L(NULL,logbuf,2,pkt->connection_data->id);
+
+						/*! we update connection statistics */	
+						pkt->connection_data->decision_packet_id = pkt->connection_data->total_packet;
+						///sprintf(pkt->connection_data->decision_rule, "(+)%s", tree.node->expr);
+						///sprintf(pkt->connection_data->decision_rule, "(+)%s", tree.node->expr);
+
+						/*! we do not release the packet, but we start the replay process */
+						res = setup_redirection(pkt->connection_data);
+						if(res != OK) {
+							L("DE_submit_packet():\t setup_redirection() failed\n",NULL, 1,pkt->connection_data->id);
+						}
+					} else {
+						logbuf=malloc(256);
+                                                sprintf(logbuf,"DE_submit_packet():\tDecision is PROXY - tuple = %s\n",pkt->connection_data->key);
+                                                L(NULL,logbuf,2,pkt->connection_data->id);
+
+						/*! we update connection statistics */
+                                                pkt->connection_data->decision_packet_id = pkt->connection_data->total_packet;
+                                                ///sprintf(pkt->connection_data->decision_rule, "(+)%s", tree.node->expr);	///Problem: only the last inspected node is parsed!
+                                                ///sprintf(pkt->connection_data->decision_rule, "(+)proxy()");	///Problem: only the last inspected node is parsed!
+
+						/*! we update the state of the connection to PROXY */
+						pkt->connection_data->state = PROXY;
+
+						/*! we release the packet */
+						send_raw(pkt->packet.ip);
+					}
+
+					///g_static_rw_lock_writer_unlock (&pkt->connection_data->lock);
+
 				}
 				else
 				{
-					send_raw(pkt->packet.ip);
-					logbuf=malloc(128);
-					sprintf(logbuf,"DE_submit_packet():\tDecision is NOT REDIRECT - tuple = %s\n",pkt->connection_data->key);
-					L(NULL,logbuf,2,pkt->connection_data->id);
+					if (tree.drop == 1) {
+						logbuf=malloc(256);
+                                                sprintf(logbuf,"DE_submit_packet():\tDecision is DROP - tuple = %s\n",pkt->connection_data->key);
+                                                L(NULL,logbuf,2,pkt->connection_data->id);
+
+						/*! We lock the structure because we will modify it */
+	                                        ///g_static_rw_lock_writer_lock (&pkt->connection_data->lock);	
+						pkt->connection_data->state = DROP;
+						///g_static_rw_lock_writer_unlock (&pkt->connection_data->lock);
+					} else {
+						/*! we release the packet */
+						send_raw(pkt->packet.ip);
+						///g_static_rw_lock_writer_lock (&pkt->connection_data->lock);
+						///sprintf(pkt->connection_data->decision_rule, "(-)%s", tree.node->expr);
+						///g_static_rw_lock_writer_unlock (&pkt->connection_data->lock);
+	
+						logbuf=malloc(256);
+						sprintf(logbuf,"DE_submit_packet():\tDecision is NOT REDIRECT - tuple = %s\n",pkt->connection_data->key);
+						L(NULL,logbuf,2,pkt->connection_data->id);
+					}
 				}
 			}
-			else
+			else {
+				L("DE_submit_packet():\tPacket is not from EXT or does not carry enough data... nothing to do\n",NULL,3,pkt->connection_data->id);
+				/*! We release the packet */
 				send_raw(pkt->packet.ip);
+			}
 		}
-		///ROBIN - 2009-02-17 - debug
 		else {
 			L("DE_submit_packet():\tNo rule could be found for this connection... nothing to do\n",NULL,3,pkt->connection_data->id);
+			///g_static_rw_lock_writer_lock (&pkt->connection_data->lock);
+			g_string_assign(pkt->connection_data->decision_rule, "NoRule;");
+			///g_static_rw_lock_writer_unlock (&pkt->connection_data->lock);
 		}
 
-
-		g_static_rw_lock_writer_lock ( &DE_queue_lock );
+		/*! Now that this entry was processed, we can remove it from the DE queue */
+		///g_static_rw_lock_writer_lock ( &DE_queue_lock );
 		DE_queue = g_slist_delete_link(DE_queue, DE_queue);
-		g_static_rw_lock_writer_unlock ( &DE_queue_lock );
+		///g_static_rw_lock_writer_unlock ( &DE_queue_lock );
 	}
+    }
 }
 
 

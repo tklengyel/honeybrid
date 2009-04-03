@@ -26,27 +26,30 @@
 
 CC?=gcc# Compilator name
 INSTALL=/usr/bin/install
-CPPFLAGS+=# Preprocessor options
 # For all the output to be print on STDOUT, use "-D DEBUG"
+CPPFLAGS+=# Preprocessor options
 
-CFLAGS+=-Wall -D RST_EXT -O2 `pkg-config --cflags glib-2.0 gthread-2.0`# compilator options
-#CFLAGS+=-Wall -g -ggdb
+#CFLAGS+=-Wall -D RST_EXT -O2 `pkg-config --cflags glib-2.0 gthread-2.0`# compilator options
+CFLAGS+=-Wall -D RST_EXT -O0 `pkg-config --cflags glib-2.0 gthread-2.0`# compilator options
+CFLAGS+=-Wall -g -ggdb -D DEBUG
 LDFLAGS+=-lnetfilter_queue -lpcap `pkg-config --libs gthread-2.0 glib-2.0` -lcrypto# link editor options -lnetfilter_conntrack
 
 BIN=honeybrid# main binary
 BINDIR?=/usr/local/sbin# installation prefix
 CONFDIR?=/etc/$(BIN)# configuration files prefix
 LOGDIR?=/var/log/$(BIN)
+LOGFILE?=$(BIN).log
+DEBUGFILE?=$(BIN).debug
 RUNDIR?=/var/run
 SCRIPTDIR?=/etc/init.d
 DIRS=$(BINDIR) $(CONFDIR) $(LOGDIR) $(SCRIPTDIR) $(RUNDIR)
 
-export BINDIR CONFDIR LOGDIR RUNDIR SCRIPTDIR
+export BINDIR CONFDIR LOGDIR RUNDIR SCRIPTDIR LOGFILE DEBUGFILE
 
 CONF=$(BIN).conf
 RULE=rules.conf
 SCRIPT=$(BIN).sh# startup scripts
-SRC=main.c netcode.c tables.c log.c decision_engine.c modules.c sha1_mod.c incpsh_mod.c yesno_mod.c# source files
+SRC=main.c netcode.c tables.c log.c decision_engine.c modules.c sha1_mod.c incpsh_mod.c yesno_mod.c source_mod.c random_mod.c proxy_mod.c# source files
 OBJ=$(subst .c,.o,$(SRC))# object files
 
 export BIN CONF RULE SCRIPT
@@ -110,7 +113,7 @@ uninstall:
 
 #### Additionnal dependencies ####
 
-main.o: netcode.h tables.h log.h decision_engine.h modules.h incpsh_mod.h sha1_mod.h types.h yesno_mod.h
+main.o: netcode.h tables.h log.h decision_engine.h modules.h incpsh_mod.h sha1_mod.h types.h yesno_mod.h source_mod.h random_mod.h proxy_mod.h
 netcode.o: tables.h log.h types.h
 #pcap_tool.o: tables.h log.h netcode.h types.h
 tables.o: log.h netcode.h types.h
@@ -120,5 +123,8 @@ modules.o: log.h
 sha1_mod.o: log.h netcode.h tables.h modules.h types.h
 incpsh_mod.o: log.h tables.h modules.h types.h
 yesno_mod.o: log.h tables.h modules.h types.h
+source_mod.o: log.h tables.h modules.h types.h
+random_mod.o: log.h tables.h modules.h types.h
+proxy_mod.o: log.h tables.h modules.h types.h
 
 .PHONY: all clean install uninstall config

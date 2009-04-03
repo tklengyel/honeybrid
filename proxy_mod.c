@@ -18,7 +18,7 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-/*! \file incpsh_mod.c
+/*! \file proxy_mod.c
  * \brief Packet counter Module for honeybrid Decision Engine
  *
  * This module returns the position of a packet in the connection
@@ -28,52 +28,39 @@
  \author Thomas Coquelin, 2008
  */
 
-#include <string.h>
+#include <stdlib.h>
 
 #include "modules.h"
-#include "log.h"
+#include "tables.h"
+#include "proxy_mod.h"
 
-/*! mod_table_init
- \brief setup modules that need to be initialized
+/*! mod_proxy
+ \param[in] args, struct that contain the node and the datas to process
+ *
+ \param[out] set result to 1 packet position match arg, 0 otherwise
  */
-
-void mod_table_init()
+void mod_proxy(struct mod_args args)
 {
-	L("mod_table_init(): Initiate module\n",NULL, 2, 6);
-	/*! init sha module
-	 */
-	init_mod_sha1();
-	init_mod_source();
-	init_mod_random();
-}
-
-
-/*! get_module
- \brief return the module function pointer from name
- \param[in] modname: module name
- \return function pointer to the module
- */
-void (*get_module(char *modname))(struct mod_args)
-{
-	
-	if(!strncmp(modname,"sha1",6))
-		return mod_sha1;
-	else if(!strncmp(modname,"incpsh",6))
-		return mod_incpsh;
-	else if(!strncmp(modname,"yesno",6))
-		return mod_yesno;
-	else if(!strncmp(modname,"source",6))
-		return mod_source;
-	else if(!strncmp(modname,"random",6))
-		return mod_random;
-	else if(!strncmp(modname,"proxy",6))
-		return mod_proxy;
-	
 	char *logbuf;
-	logbuf = malloc(256);
-	sprintf(logbuf, "get_module(): ERROR! No module could be found with the name: %s\n", modname);
-	L(NULL, logbuf, 2, 6);
-	
-	return NULL;
+	L("mod_proxy():\tModule called\n", NULL, 3,args.pkt->connection_data->id);
+	int pktval = atoi(args.node->arg);
+
+	if(pktval <= args.pkt->connection_data->count_data_pkt_from_intruder)
+	{
+		/*! we introduce a new return value, meaning that we can skip the replay part and go
+		    directly in PROXY mode, which is like FORWARD but without NATing */
+		//args.node->result = 1; 	/* This one would go to the replay process */
+		args.node->result = 2;		/* This one goes directly to the proxy mode */
+		logbuf = malloc(128);
+		sprintf(logbuf,"mod_proxy():\tPACKET MATCH RULE for proxy(%d)\n", pktval);
+		L(NULL, logbuf, 2, args.pkt->connection_data->id);
+	}
+	else
+	{
+		args.node->result = 0;
+		logbuf = malloc(128);
+                sprintf(logbuf,"mod_proxy():\tPACKET DOES NOT MATCH RULE for proxy(%d)\n", pktval);
+                L(NULL, logbuf, 2, args.pkt->connection_data->id);
+	}
 }
 

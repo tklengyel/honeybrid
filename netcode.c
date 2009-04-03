@@ -29,7 +29,13 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+//#include <netinet/tcp.h>
+//#include <netinet/ip.h>
+//#include <netinet/udp.h>
+#include <arpa/inet.h>
+
 #include <stdlib.h>
+#include <stdio.h>
 
 #include "log.h"
 #include "tables.h"
@@ -80,11 +86,24 @@ unsigned short in_cksum(unsigned short *addr,int len)
 
 int send_raw(struct iphdr *p)
 {
+	/*
+	#ifdef DEBUG
+	g_print("send_raw()\tCalled...\n");
+	#endif
+	*/
 	struct sockaddr_in dst;
 	int bytes_sent;
 	dst.sin_addr.s_addr = p->daddr;
 	dst.sin_family = AF_INET;
-	L("send_raw():\tSending raw packet\n",NULL,4,4);
+
+	char * logbuf;
+	logbuf = malloc(128);
+	/// This line seg fault...
+	///sprintf(logbuf, "send_raw():\tSending raw packet from %s to %s\n", inet_ntoa(*(struct in_addr*)p->saddr), inet_ntoa(*(struct in_addr*)p->daddr));
+	sprintf(logbuf, "send_raw():\t\tSending raw packet to %s\n", inet_ntoa(dst.sin_addr));
+	L(NULL, logbuf , 4, 4);
+	//L("send_raw():\tSending raw packet\n",NULL,4,4);
+
 	/*!If TCP, use the TCP raw socket*/
 	if(p->protocol==0x06)
 	{
@@ -305,7 +324,10 @@ int replay(struct conn_struct* connection_data, struct pkt_struct* pkt)
 				forward(current);
 			if(g_slist_next(g_slist_nth( connection_data->BUFFER, connection_data->replay_id )) == NULL)
 			{
+				g_static_rw_lock_writer_lock( &connection_data->lock );
 				connection_data->state = FORWARD;
+				g_static_rw_lock_writer_unlock( &connection_data->lock );
+
 				L("replay():\tState updated to FORWARD\n",NULL, 2, connection_data->id);
 				free_packet_struct(pkt);
 				return OK;
@@ -317,7 +339,9 @@ int replay(struct conn_struct* connection_data, struct pkt_struct* pkt)
 		}
 		/*!Then we define expected data according to that packet*/
 		define_expected_data(current);
+		g_static_rw_lock_writer_lock( &connection_data->lock );
 		connection_data->replay_id++;
+		g_static_rw_lock_writer_unlock( &connection_data->lock );
 	}
 	else
 	{
@@ -361,6 +385,7 @@ int udp_checksum(struct udp_packet* hdr)
  */
 int define_expected_data(struct pkt_struct* pkt)
 {
+	g_static_rw_lock_writer_lock( &pkt->connection_data->lock );
 	pkt->connection_data->expected_data.ip_proto = pkt->packet.ip->protocol;
 	if(pkt->packet.ip->protocol==0x06)
 	{
@@ -369,6 +394,7 @@ int define_expected_data(struct pkt_struct* pkt)
 		
 	}
 	pkt->connection_data->expected_data.payload = pkt->packet.payload;
+	g_static_rw_lock_writer_unlock( &pkt->connection_data->lock );
 	return OK;
 }
 
@@ -379,6 +405,7 @@ int define_expected_data(struct pkt_struct* pkt)
 int test_expected(struct conn_struct* connection_data, struct pkt_struct* pkt)
 {
 	int flag= NOK;
+	char *logbuf;
 	/*! lock the structure
 	 */
 	g_static_rw_lock_writer_lock( &connection_data->lock );
@@ -386,27 +413,35 @@ int test_expected(struct conn_struct* connection_data, struct pkt_struct* pkt)
 	if(pkt->packet.ip->protocol != connection_data->expected_data.ip_proto)
 	{
 		flag=NOK;
-		L("test_expected():\tUnexpected protocol\n",NULL, 2, connection_data->id);
+		//L("test_expected():\tUnexpected protocol\n",NULL, 2, connection_data->id);
+		logbuf = malloc(128);
+		sprintf(logbuf, "test_expected():\tUnexpected protocol: %d\n", pkt->packet.ip->protocol);
+		L(NULL, logbuf, 2, connection_data->id);
+
+		connection_data->replay_problem =  connection_data->replay_problem | 8;
 	}
 	else if( (pkt->packet.ip->protocol == 0x06) && (pkt->packet.tcp->syn == 0) && (ntohl(pkt->packet.tcp->seq) != connection_data->expected_data.tcp_seq))
 	{
 		flag=NOK;
 		L("test_expected():\tUnexpected TCP seq. number\n",NULL, 2, connection_data->id);
+		connection_data->replay_problem =  connection_data->replay_problem | 4;
 	}
 	else if( (pkt->packet.ip->protocol == 0x06) && (ntohl(pkt->packet.tcp->ack_seq) != connection_data->expected_data.tcp_ack_seq))
 	{
 		flag=NOK;
 		L("test_expected():\tUnexpected TCP ack. number\n",NULL, 2, connection_data->id);
+		connection_data->replay_problem =  connection_data->replay_problem | 2;
 	}
 	else if( (pkt->packet.ip->protocol == 0x06) && (!strncmp( pkt->packet.payload, connection_data->expected_data.payload,pkt->data) == 0))
 	{
 		flag=OK;
 		L("test_expected():\tUnexpected payload\n",NULL, 2, connection_data->id);
+		connection_data->replay_problem =  connection_data->replay_problem | 1;
 	}
 	else
 	{
 		flag=OK;
-		L("test_expected():\tExpected data ok\n",NULL, 3, connection_data->id);
+		L("test_expected():\tExpected data OK\n",NULL, 3, connection_data->id);
 	}
 
 	/*! free the lock

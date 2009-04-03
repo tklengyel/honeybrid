@@ -25,19 +25,11 @@
 #include "tables.h"
 
 /*!
- \def DE_pool
+ \def MIN_DECISION_DATA
  *
- \brief the global pointer to the decision engine pool of threads
+ * minimum number of byte to submit a packet to the Decision Engine
  */
-GThreadPool *DE_pool;
-
-/*!
- \def redirection_table
- *
- \brief global hash table that contain the correspondance between LIH services et HIH services
- */
-GHashTable *DE_mod;
-
+#define MIN_DECISION_DATA 1
 
 /*!
  \def DE_rules
@@ -55,6 +47,9 @@ struct tree
 {
 	struct node *node;
 	int globalresult;
+	int proxy;
+	int drop;
+	///GString *decision;
 	GStaticRWLock lock;
 };
 

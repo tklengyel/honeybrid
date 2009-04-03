@@ -18,39 +18,20 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-/*! \file yesno_mod.c
- * \brief Yesno Module for honeybrid Decision Engine
+/*! \file source_mod.h
+ * \brief header for Source Module for honeybrid Decision Engine
  *
- * This module always decides to redirect or not according to the "yes" or "no" value of its argument
- *
- *
- \author Thomas Coquelin, 2008
+ \author Robin Berthier, 2009
  */
 
-#include <string.h>
-
-#include "modules.h"
-#include "tables.h"
-
-/*! mod_yesno
- \param[in] args, struct that contain the node and the datas to process
- *
- \param[out] set result to 1 when 'arg' is "yes", 0 otherwise
+/*!
+ \def source_info
+ \brief Structure that carries meta information about IP addresses stored by the source module
  */
-void mod_yesno(struct mod_args args)
+
+struct source_info
 {
-	L("mod_yesno():\tModule called\n", NULL, 4,args.pkt->connection_data->id);
-
-	/*! strncmp returns 0 if the two arguments are equal */
-	if(0 == strncmp(args.node->arg,"yes",3))
-	{
-		args.node->result = 1;
-		L("mod_yesno():\tPACKET MATCH RULE for yesno(yes)\n", NULL, 2, args.pkt->connection_data->id);
-	}
-	else
-	{
-		args.node->result = 0;
-		L("mod_yesno():\tPACKET DOES NOT MATCH RULE for yesno(no)\n", NULL, 2, args.pkt->connection_data->id);
-	}
-}
-
+	gint counter;
+	gint first_seen;	
+	gint last_seen;	
+};

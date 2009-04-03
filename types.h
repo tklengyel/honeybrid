@@ -26,7 +26,6 @@
 #include <netinet/ip.h>
 
 
-
 /*!
  \def packet
  *
@@ -133,6 +132,8 @@ struct conn_struct
 	char *key_lih;
 	char *key_hih;
 	int protocol;
+	GString *start_timestamp;
+	gdouble start_microtime;
 	gint access_time;
 	int state;
 	unsigned id;
@@ -143,6 +144,18 @@ struct conn_struct
 	struct expected_data_struct expected_data;
 	GStaticRWLock lock;
 	struct hih_struct hih;
+
+	/* statistics */
+	gdouble  stat_time[7]; // = {0,0,0,0,0,0,0};
+	int   stat_packet[7]; // = {0,0,0,0,0,0,0};
+	int   stat_byte[7]; // = {0,0,0,0,0,0,0};
+	int   total_packet;
+	int   total_byte;
+	int   decision_packet_id;
+	///char* decision_rule;
+	GString *decision_rule;
+	int   replay_problem;
+	int   invalid_problem; //unused
 };
 
 /*! pkt_struct
@@ -168,7 +181,7 @@ struct pkt_struct
 };
 
 
-/*! \brief Structure to pass arguments to the DE_pool
+/*! \brief Structure to pass arguments to the Decision Engine
  \param connection_data, pointer to the refered conn_struct
  \param packetposition, position of the packet to process in the Singly Linked List
  */

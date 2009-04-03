@@ -18,31 +18,62 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-/*
- * id values
- 1 -> main
- 2 -> signal handlers
- 3 -> config parse
- 4 -> unkown connection
- 5 -> pcap tools
- 6 -> modules
- 7 -> 
- 8 -> clean engine
- 9 -> honeypot queries
- */
 
 #ifndef _LOG_H_
 #define _LOG_H_
 
 #include <glib.h>
 
+/*! 
+ \Def verbosity channel
+  1 errors only
+  2 minimal redirection information
+  3 full redirection information
+  4 internal processing events
+  5 permanent internal processing events
+ */
+#define LOG_MIN    1
+#define LOG_LOW    2
+#define LOG_MED    3
+#define LOG_HIGH   4
+#define LOG_ALL    5
+
+
+/*!
+ \Def log identifiers
+ * log id values:
+ 1 -> main
+ 2 -> signal handlers
+ 3 -> config parse
+ 4 -> unkown connection
+ 5 -> pcap tools
+ 6 -> modules
+ 7 -> log
+ 8 -> clean engine
+ 9 -> honeypot queries
+ */
+#define LOG_OTHER    0
+#define LOG_MAIN     1
+#define LOG_SIGNAL   2
+#define LOG_CONFIG   3
+#define LOG_UNKNOWN  4
+#define LOG_PCAP     5
+#define LOG_MODULES  6
+#define LOG_LOG      7
+#define LOG_CLEAN    8
+#define LOG_HONEYPOT 9
+
+/*!
+ \Def log level
+ */
+
+int LOG_LEVEL;
+
 /*!
  \def log_list
- *
  \brief global singly linked list that contain the log entries to write
  */
 GSList *log_list;
-
 
 /*!
 \def loglock
@@ -70,6 +101,16 @@ GHashTable *log_table;
 int honeylog(char *sdata, char *ddata, int level, unsigned id);
 
 void write_log();
+
+int close_log_file(void);
+
+int open_log_file(void);
+
+//void rotate_log(int signal_nb, void *siginfo, void *context);
+void rotate_log(int signal_nb);
+
+//void connection_stat(struct conn_struct *conn);
+void connection_stat();
 
 #endif ///_LOG_H_
 

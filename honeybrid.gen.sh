@@ -31,8 +31,13 @@ echo "#!/bin/sh
 BIN=$BINDIR/$BIN
 CONFIG=$CONFDIR/$CONF
 LOGDIR=$LOGDIR
+LOGFILE=$LOGFILE
+DEBUGFILE=$DEBUGFILE
 RUNDIR=$RUNDIR
-LOGFILE=\`echo \$LOGDIR\"/$BIN.log\"\`
+SHA1FILE=$CONFDIR/sha1_bdd.tb
+SOURCEFILE=$CONFDIR/source.tb
+LOGFILE=\`echo \$LOGDIR\"/\$LOGFILE\"\`
+DEBUGFILE=\`echo \$LOGDIR\"/\$DEBUGFILE\"\`
 PID=\`echo \$RUNDIR\"/honeybrid.pid\"\`
 
 # /etc/init.d/$BIN: start and stop the daemon
@@ -59,9 +64,31 @@ case \"\$1\" in
                 mv \$LOGFILE \$BACKUP
 		echo \"\$LOGFILE backed up to \$BACKUP\"
         fi
+        if test -f \$DEBUGFILE
+        then
+                DATE=\`date +%Y%m%d_%H%M\`
+                BACKUP=\`echo \"\$DEBUGFILE\".\"\$DATE\"\`
+                mv \$DEBUGFILE \$BACKUP
+		echo \"\$DEBUGFILE backed up to \$BACKUP\"
+        fi
+	if test -f \$SHA1FILE
+	then
+		DATE=\`date +%Y%m%d_%H%M\`
+                BACKUP=\`echo \"\$SHA1FILE\".\"\$DATE\"\`
+                cp \$SHA1FILE \$BACKUP
+                echo \"\$SHA1FILE backed up to \$BACKUP\"
+        fi
+        if test -f \$SOURCEFILE
+        then
+                DATE=\`date +%Y%m%d_%H%M\`
+                BACKUP=\`echo \"\$SOURCEFILE\".\"\$DATE\"\`
+                cp \$SOURCEFILE \$BACKUP
+                echo \"\$SOURCEFILE backed up to \$BACKUP\"
+        fi
 
 
-        if start-stop-daemon --start --quiet --oknodo --pidfile \$PID --exec \$BIN -- -c \$CONFIG; then
+
+        if /sbin/start-stop-daemon --start --quiet --oknodo --pidfile \$PID --exec \$BIN -- -c \$CONFIG; then
             exit 0
         else
             exit 1
@@ -69,7 +96,7 @@ case \"\$1\" in
         ;;
   stop)
         echo \"Stopping \$BIN\" 
-        if start-stop-daemon --stop --quiet --oknodo --pidfile \$PID --exec \$BIN -- -x \`cat \$PID\`; then
+        if /sbin/start-stop-daemon --stop --quiet --oknodo --pidfile \$PID --exec \$BIN -- -x \`cat \$PID\`; then
                 #echo \"killing TCPDUMP recording\"
                 #kill -9 \`ps -edf | grep tcpdump |awk {'print \$2'}\`
                 if test -f \$PID; then

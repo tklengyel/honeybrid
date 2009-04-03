@@ -22,41 +22,23 @@
 #define _MODULES_H_
 
 #include <glib.h>
+
+//#ifndef _NO_SSL_
 #include <openssl/evp.h>
+//#endif
 
 #include "log.h"
 #include "tables.h"
 
-
 /*!
- \def DE_mod
- *
- \brief hash table that contain the pointers to the modules pools of threads
- */
-GHashTable *DE_mod;
-
-/*!
- \def mod
- *
- \brief structure of a module (like sha1, expr, pos, ...)
- */
-struct mod
-{
-	char *name;
-	GThreadPool *pool;
-};
-
-
-/*!
- \def pool_args
+ \def mod_args
  *
  \brief arguments sent to a module while processing the tree
  */
-struct mod_pool_args
+struct mod_args
 {
 	struct node *node;
 	struct pkt_struct *pkt;
-	gpointer *ptr_to_poolargs;
 };
 
 
@@ -67,25 +49,26 @@ struct mod_pool_args
  */
 struct node
 {
-	void (*module)(struct mod_pool_args);
+	void (*module)(struct mod_args);
 	char *arg;
+	GString *module_name;
 	struct node *true;
 	struct node *false;
 	int result;
-
+	int info_result;
 };
 
 
 void mod_table_init();
 
-void (*get_module(char *modname))(struct mod_pool_args);
+void (*get_module(char *modname))(struct mod_args);
 
 /*!*************** YESNO FUNCTIONS AND VARIABLES ***********************************************/
 
 /*! mod_yesno
  \brief replies as asked 
  */
-void mod_yesno(struct mod_pool_args args);
+void mod_yesno(struct mod_args args);
 
 
 /*!*************** PACKET POSITION COUNTER FUNCTIONS AND VARIABLES *****************************/
@@ -93,24 +76,45 @@ void mod_yesno(struct mod_pool_args args);
 /*! mod_incpsh
  \brief count push packets from the attacker
  */
-void mod_incpsh(struct mod_pool_args args);
+void mod_incpsh(struct mod_args args);
 
 
 /*!*************** SHA-1 FUNCTIONS AND VARIABLES ***********************************************/
 
 
+//#ifndef _NO_SSL_
 /*! message digest function
  */
 const EVP_MD *md;
+//#endif
 
 /*!
  \def SHA1 BDD HASH TABLES
  */
-GHashTable **bdd;
+GHashTable **sha1_bdd;
 
 int init_mod_sha1();
 
-void mod_sha1(struct mod_pool_args args);
+void mod_sha1(struct mod_args args);
 
+/*!
+ \def Source bdd hash table
+ */
+GHashTable **source_bdd;
+
+int init_mod_source();
+
+void mod_source(struct mod_args args);
+
+/*! module RANDOM
+ */
+
+int init_mod_random();
+
+void mod_random(struct mod_args args);
+
+/*! module PROXY
+ */
+void mod_proxy(struct mod_args args);
 
 #endif //_MODULES_H_
