@@ -18,7 +18,7 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-/*! \file source_mod.c
+/*! \file mod_source.c
  * \brief Source IP based filtering Module for honeybrid Decision Engine
  *
  * This module is called by a boolean decision tree to filter attacker based on their IP address
@@ -36,10 +36,10 @@
 #include "modules.h"
 #include "netcode.h"
 
-#include "source_mod.h"
+#include "mod_source.h"
 
 /*!
- \Def sourcedb_max, maximum number of databases
+ \def sourcedb_max, maximum number of databases
  */
 int sourcedb_max = 32;
 int expiration = 24*3600;
@@ -67,7 +67,7 @@ void print_info (gpointer key, gpointer value, FILE *fd)
 	fprintf(fd,"%s\t%d\t%d\t%d\n",(char *)key, info->counter, info->first_seen, info->last_seen);
 }
 
-/*! sha1_print
+/*! source_print
  \brief browse the research tables and print the fingerprint to a file
  */
 void source_print()
@@ -208,7 +208,7 @@ int init_mod_source()
  */
 void mod_source(struct mod_args args)
 {
-	L("mod_source():\tModule called\n", NULL, 3, args.pkt->connection_data->id);
+	L("mod_source():\tModule called\n", NULL, 3, args.pkt->conn->id);
 
 	char *logbuf;
 	struct source_info * info;
@@ -226,16 +226,16 @@ void mod_source(struct mod_args args)
 
 	logbuf = malloc(256);
 	sprintf(logbuf,"mod_source():\tsource IP is %s\n", key_src[0]);
-	L(NULL, logbuf, 4, args.pkt->connection_data->id);
+	L(NULL, logbuf, 4, args.pkt->conn->id);
 
-	L("mod_source():\tSearching for the attacker IP in the table\n", NULL, 4, args.pkt->connection_data->id);
+	L("mod_source():\tSearching for the attacker IP in the table\n", NULL, 4, args.pkt->conn->id);
 
 	/*! select the hash table for the research */
 	type = malloc(64);
 	check = sscanf(args.node->arg,"bdd%d,%s", &i, type);
 
 	if (check != 2) {
-		L("mod_source():\tError: module argument malformed!\n", NULL, 3, args.pkt->connection_data->id);
+		L("mod_source():\tError: module argument malformed!\n", NULL, 3, args.pkt->conn->id);
 		args.node->result = 0;
 		free(key_src);
 		return;
@@ -261,7 +261,7 @@ void mod_source(struct mod_args args)
 
 		logbuf = malloc(256);
 		sprintf(logbuf,"mod_source():\tCreating a new entry for %s in bdd%d with counter: %d and time: %d\n",key_src[0], i, info->counter, info->first_seen);
-		L(NULL, logbuf, 2, args.pkt->connection_data->id);
+		L(NULL, logbuf, 2, args.pkt->conn->id);
 
 		g_hash_table_insert(source_bdd[i], key_src[0], info);
 		db_updated = 1;
@@ -276,19 +276,19 @@ void mod_source(struct mod_args args)
 
 		logbuf = malloc(256);
 		sprintf(logbuf,"mod_source():\tUpdating an existing entry for %s in bdd%d with counter: %d and time: %d\n",key_src[0], i, info->counter, info->last_seen);
-		L(NULL, logbuf, 2, args.pkt->connection_data->id);
+		L(NULL, logbuf, 2, args.pkt->conn->id);
 	}
 
 	if(args.node->result == 1)
 	{
 		logbuf = malloc(256);
 		sprintf(logbuf,"mod_source():\tPACKET MATCH RULE for source(bdd%d)\n",i);
-		L(NULL, logbuf, 2, args.pkt->connection_data->id);
+		L(NULL, logbuf, 2, args.pkt->conn->id);
 	}
 	else {
 		logbuf = malloc(256);
 		sprintf(logbuf,"mod_source():\tPACKET DOES NOT MATCH RULE for source(bdd%d)\n",i);
-		L(NULL, logbuf, 2, args.pkt->connection_data->id);
+		L(NULL, logbuf, 2, args.pkt->conn->id);
 	}
 
 	/*! clean and exit */

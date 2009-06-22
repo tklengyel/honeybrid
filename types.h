@@ -146,9 +146,9 @@ struct conn_struct
 	struct hih_struct hih;
 
 	/* statistics */
-	gdouble  stat_time[7]; // = {0,0,0,0,0,0,0};
-	int   stat_packet[7]; // = {0,0,0,0,0,0,0};
-	int   stat_byte[7]; // = {0,0,0,0,0,0,0};
+	gdouble  stat_time[8]; // = {0,0,0,0,0,0,0};
+	int   stat_packet[8]; // = {0,0,0,0,0,0,0};
+	int   stat_byte[8]; // = {0,0,0,0,0,0,0};
 	int   total_packet;
 	int   total_byte;
 	int   decision_packet_id;
@@ -173,7 +173,7 @@ struct pkt_struct
 	int data;
 	int size;
 	int DE;
-	struct conn_struct * connection_data;
+	struct conn_struct * conn;
 	char *key_src;
 	char *key_dst;
 	char *key;
@@ -182,12 +182,12 @@ struct pkt_struct
 
 
 /*! \brief Structure to pass arguments to the Decision Engine
- \param connection_data, pointer to the refered conn_struct
+ \param conn, pointer to the refered conn_struct
  \param packetposition, position of the packet to process in the Singly Linked List
  */
 struct DE_submit_args
 {
-	struct conn_struct *connection_data;
+	struct conn_struct *conn;
 	int packetposition;
 };
 

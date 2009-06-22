@@ -112,12 +112,17 @@ record = 1
 
 conn_record = $LOGDIR/honeybrid_pcap_
 
+## Control Engine table file
+#
+
+controltable = $CONFDIR/control.tb
+
 ## Source Module table file
 #
 
 sourcetable = $CONFDIR/source.tb
 
-## SHA1 Module table file
+## Hash Module table file
 #
 
-sha1table = $CONFDIR/sha1_bdd.tb">$CONF
+hashtable = $CONFDIR/hash_bdd.tb">$CONF

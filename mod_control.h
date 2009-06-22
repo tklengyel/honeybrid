@@ -18,60 +18,32 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __DECISION_ENGINE_H__
-#define __DECISION_ENGINE_H__
-
-#include <glib.h>
-#include "tables.h"
-
-/*!
- \def MIN_DECISION_DATA
+/*! \file mod_control.h
+ * \brief header for control engine 
  *
- * minimum number of byte to submit a packet to the Decision Engine
- */
-#define MIN_DECISION_DATA 0
-
-/*!
- \def decision types (for later user)
-#define DROP		0	//Already defined!!!
-#define CONTINUE	1
-#define ACCEPT		2
-#define REDIRECT	3
+ \author Robin Berthier, 2009
  */
 
 /*!
- \def DE_rules
- *
- \brief hash table to select a rule for a connection, key is the rule, value is the boolean decision tree root
+ \def control_info
+ \brief Structure that carries meta information about IP addresses stored by the control engine
  */
-GHashTable *DE_rules;
 
-/*!
- \def tree
- *
- \brief a binary execution tree
- */
-struct tree
+struct control_info
 {
-	struct node *node;
-	int globalresult;
-	int proxy;
-	int drop;
-	///GString *decision;
-	GStaticRWLock lock;
+	gint counter;
+	gint first_seen;	
+	gint last_seen;	
 };
 
-struct tree tree;
+/*!
+ \def control bdd hash table
+ */
+GHashTable *control_bdd;
 
-GStaticRWLock DE_queue_lock;
+int expire_control (gpointer key, gpointer value, gint *now);
+void print_control_info (gpointer key, gpointer value, FILE *fd);
+void control_print();
+int init_control();
+int control(struct pkt_struct *pkt);
 
-GSList *DE_queue;
-
-void *DE_create_tree(const gchar *equation);
-
-void DE_submit_packet();
-
-void DE_push_pkt(struct pkt_struct *pkt);
-void DE_process_packet(struct pkt_struct *pkt);
-
-#endif

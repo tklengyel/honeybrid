@@ -34,6 +34,7 @@
 #include <glib.h>
 #include <time.h>
 #include <sys/time.h>
+#include <err.h>
 
 #include "tables.h"
 #include "log.h"
@@ -50,6 +51,40 @@ unsigned long last_rotation;
 
 static FILE *logfd;
 
+/*! log_header
+ *
+ *\brief return a header for debug log messages, including
+ * the timestamp and the name of the function
+ */
+char* 
+log_header(const char* function_name, int id)
+{
+	static char header[200];
+	sprintf(header, "%s;%6u;%s:\t", now(), id, function_name);
+	return header;
+}
+
+/*! now
+ *
+ *\brief return the current timestamp as a string
+ */
+char*
+now(void)
+{
+	static char now[30];
+	struct tm *tm;
+	struct timeval tv;
+	struct timezone tz;
+	gettimeofday(&tv, &tz);
+	tm=localtime(&tv.tv_sec);
+	if (tm == NULL) {
+		perror("localtime");
+		return '\0';
+	}
+	sprintf(now,"%d-%02d-%02d %02d:%02d:%02d.%.6d", (1900+tm->tm_year), (1+tm->tm_mon), tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec, (int)tv.tv_usec);
+	return now;
+}
+
 /*! honeylog
  *
  \brief add a log entry in the singly linked list
@@ -64,20 +99,10 @@ static FILE *logfd;
 int honeylog(char *sdata, char *ddata, int level, unsigned id)
 {
 	/*!filter events upon their log level*/
-
-	/*
-	char* log_level = g_hash_table_lookup(config,"log_level");
-	if(log_level == NULL)
-		log_level = "3";
-	if(level> atoi(log_level))
-	*/
-	if(level > LOG_LEVEL)
-	{
+	if(level > LOG_LEVEL) {
 		if(ddata != NULL)
 			free(ddata);
-	}
-	else
-	{
+	} else 	{
 		struct tm *tm;
 		struct timeval tv;
 		struct timezone tz;
@@ -93,129 +118,76 @@ int honeylog(char *sdata, char *ddata, int level, unsigned id)
 		event->level = level;
 		event->id = id;
 		event->curtime = malloc(30);
-		//strftime(event->curtime, sizeof(curtime), "%F %T", tm);
 		sprintf(event->curtime,"%d-%02d-%02d %02d:%02d:%02d.%.6d", (1900+tm->tm_year), (1+tm->tm_mon), tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec, (int)tv.tv_usec);
 
-	/*! store the address of the payload as a new entry of the list
-	 *
-	 * (set up a lock to protect the writing)
-	 */
-		g_static_rw_lock_writer_lock (&loglock);
-		log_list = g_slist_append(log_list, event);
-		g_static_rw_lock_writer_unlock (&loglock);
+		if(event->sdata != NULL && event->ddata == NULL) {
+			g_print("%s;id:%5u;%s",event->curtime, event->id, event->sdata);
+		} else if(event->sdata == NULL && event->ddata != NULL) {
+			g_print("%s;id:%5u;%s",event->curtime, event->id, event->ddata);
+			g_free(event->ddata);
+		} else {
+			g_print("%s;id:%5u;honeylog(): Incorrect event!!\n", event->curtime, event->id);
+		}
+		g_free(event->curtime);
+		g_free(event);
 	}
 	return OK;
 }
 
-/*! write_log
- *
- \brief wake up every 10s from a thread, check the singly linked list and write the new entries to syslog
- *
- */
-void write_log()
+int
+open_debug_log(void)
 {
-	struct log_event *event;
-	int syslog_enabled = 0;
-	if ( NULL != strstr(g_hash_table_lookup(config,"output"),"1") )
-		syslog_enabled = 1;
-
-	/*! infinite loop that check new entries in the list and write them
-	 */
-	while( threading == OK ){
-	/*! check for new log events every 1 ms
-	 */
-	 g_usleep(1000);
-	 //g_usleep(100);
-
- 	 while ( g_slist_length(log_list) > 0 )
-	 {
-		/*! get the value */
-		/*! process it
-		 *
-		 * log pattern is :
-		 * <timestamp>;<id>;<log string>;
-		 */
-		event = g_slist_nth_data (log_list, 0);
-		if(event->sdata != NULL && event->ddata == NULL)
-		{
-			//if ( NULL != strstr(g_hash_table_lookup(config,"output"),"1") )
-			if ( syslog_enabled == 1)
-				/*! log to syslog */
-				syslog(LOG_INFO | LOG_USER, "%s id:%5u %s",event->curtime, event->id, event->sdata);
-			else
-				/*! or log to stdout */
-				g_print("%s;id:%5u;%s",event->curtime, event->id, event->sdata);
-		}
-		else if(event->sdata == NULL && event->ddata != NULL)
-		{
-			//if ( NULL != strstr(g_hash_table_lookup(config,"output"),"1") )
-			if ( syslog_enabled == 1)
-				/*! log to syslog */
-				syslog(LOG_INFO | LOG_USER, "%s id:%5u %s",event->curtime, event->id, event->ddata);
-			else
-				/*! or log to stdout */
-				g_print("%s;id:%5u;%s",event->curtime, event->id, event->ddata);
-			free(event->ddata);
-		}
-		else
-			g_print("write_log(): Incorrect event\n");
-		/*! free the memory */
-		free(event->curtime);
-		g_static_rw_lock_writer_lock (&loglock);
-		log_list = g_slist_delete_link(log_list, log_list);
-		g_static_rw_lock_writer_unlock (&loglock);
-		free(event);
-	 }
-	}
+	int fd;
+	if (0 != chdir(g_hash_table_lookup(config,"log_directory"))) 
+                errx(1,"%s: can't change directory",__func__);
+	if (NULL == g_hash_table_lookup(config,"debug_file")) 
+                errx(1,"%s: no log file specified in the config",__func__);
+	if ((fd = open( g_hash_table_lookup(config,"debug_file"), O_CREAT | O_RDWR, 0744)) == -1)
+		err(1,"%s: open", __func__);
+	if (0 != chdir(g_hash_table_lookup(config,"exec_directory"))) 
+		warnx("%s: can't change directory",__func__);
+	return fd;
 }
 
-int close_log_file(void)
+int 
+close_connection_log(void)
 {
 	return fclose(logfd);
 }
 
+
 /*! open log file
  \brief open the file honeybrid.log
  */
-int open_log_file(void)
+void 
+open_connection_log(void)
 {
-	char *logbuf;
-	if (0 != chdir(g_hash_table_lookup(config,"log_directory")))
-        {
-		logbuf = malloc(256);
-		sprintf(logbuf, "open_log_file()\tError! Unable to move to log directory -> %s\n", (char *) g_hash_table_lookup(config,"log_directory"));
-		L(NULL, logbuf, LOG_ALL, LOG_LOG);
-                return -1;
+	if (0 != chdir(g_hash_table_lookup(config,"log_directory"))) {
+                errx(1,"%s: can't change directory",__func__);
         }
 
 	if (NULL == g_hash_table_lookup(config,"log_file")) {
-		L("open_log_file()\tError! No log file specified in the config\n", NULL, LOG_ALL, LOG_LOG);
-                return -1;
+                errx(1,"%s: no log file specified in the config",__func__);
         }
 	if (NULL == (logfd = fopen(g_hash_table_lookup(config,"log_file"),(char *) "a"))) {
-		return -1;
+		err(1,"fopen");
 	} 
 
 	/*! Enable line buffer */
 	setlinebuf(logfd);
 
-	if (0 != chdir(g_hash_table_lookup(config,"exec_directory")))
-        {
-		logbuf = malloc(256);
-		sprintf(logbuf, "open_log_file()\tError! Unable to move to exec directory -> %s\n", (char *) g_hash_table_lookup(config,"exec_directory"));
-		L(NULL, logbuf, LOG_ALL, LOG_LOG);
+	if (0 != chdir(g_hash_table_lookup(config,"exec_directory"))) {
+		warnx("%s: can't change directory",__func__);
         }
-
-	return 0;
 }
 
-/*! rotate_log_file
+/*! rotate_connection_log
  *\brief rotate the file honeybrid.log every hour
  */
-//void rotate_log(int signal_nb, void *siginfo, void *context)
-void rotate_log(int signal_nb)
+//void rotate_connection_log(int signal_nb, void *siginfo, void *context)
+void rotate_connection_log(int signal_nb)
 {
-	L("rotate_log()\tCalled\n", NULL, LOG_ALL, LOG_LOG);
+	L("rotate_connection_log()\tCalled\n", NULL, LOG_ALL, LOG_LOG);
 
 	unsigned long timestamp;
 	//char *logfile_name;
@@ -244,7 +216,7 @@ void rotate_log(int signal_nb)
 		last_rotation = timestamp;
 
 		logbuf = malloc(256);
-		sprintf(logbuf,"rotate_log()\tlast_rotation initialized to %lu\n", last_rotation);
+		sprintf(logbuf,"rotate_connection_log()\tlast_rotation initialized to %lu\n", last_rotation);
 		L(NULL, logbuf, 4, LOG_LOG);
 
 		return;
@@ -253,9 +225,9 @@ void rotate_log(int signal_nb)
 	if (timestamp > last_rotation || signal_nb > 0)
 	{
 		if (signal_nb > 0) {
-			L("rotate_log()\tSIGUSR1 received, rotating log...\n", NULL, LOG_MED, LOG_LOG);
+			L("rotate_connection_log()\tSIGUSR1 received, rotating log...\n", NULL, LOG_MED, LOG_LOG);
 		} else {
-			L("rotate_log()\tTime to rotate the log...\n", NULL, LOG_MED, LOG_LOG);
+			L("rotate_connection_log()\tTime to rotate the log...\n", NULL, LOG_MED, LOG_LOG);
 		}
 
 		fclose(logfd);
@@ -268,20 +240,20 @@ void rotate_log(int signal_nb)
 	        ///sprintf(new_name,"%s.%d%02d%02d_%02d%02d", logfile_name, (1900+tm->tm_year), (1+tm->tm_mon), tm->tm_mday, tm->tm_hour, tm->tm_min);
 		logfile_name = g_string_new( g_hash_table_lookup(config,"log_file") );
 		#ifdef DEBUG
-		g_print("rotate_log()\tlogfile_name is %s\n", logfile_name->str);
+		g_print("rotate_connection_log()\tlogfile_name is %s\n", logfile_name->str);
 		#endif
 
 		new_name = g_string_new("");
 		g_string_printf( new_name, "%s.%d%02d%02d_%02d%02d", logfile_name->str, (1900+tm->tm_year), (1+tm->tm_mon), tm->tm_mday, tm->tm_hour, tm->tm_min);
 
 		logbuf = malloc(512);
-		sprintf(logbuf, "rotate_log()\tRotating log file from %s to %s\n", logfile_name->str, new_name->str);
+		sprintf(logbuf, "rotate_connection_log()\tRotating log file from %s to %s\n", logfile_name->str, new_name->str);
 		L(NULL, logbuf, LOG_HIGH, LOG_LOG);
 
 		chdir(g_hash_table_lookup(config,"log_directory"));
 		
 		if (rename(logfile_name->str, new_name->str)) {
-			L("rotate_log()\tERROR: can't rename log file!\n", NULL, LOG_MED, LOG_LOG);
+			L("rotate_connection_log()\tERROR: can't rename log file!\n", NULL, LOG_MED, LOG_LOG);
 		}
 
 		//i = open(logfile_name, O_RDWR | O_CREAT, 0640);
@@ -299,7 +271,7 @@ void rotate_log(int signal_nb)
 		last_rotation = timestamp;
 
 		logbuf = malloc(256);
-		sprintf(logbuf,"rotate_log()\tLog file re-opened. last_rotation updated to %lu\n", last_rotation);
+		sprintf(logbuf,"rotate_connection_log()\tLog file re-opened. last_rotation updated to %lu\n", last_rotation);
 		L(NULL, logbuf, LOG_HIGH, LOG_LOG);
 
 
@@ -318,14 +290,13 @@ void rotate_log(int signal_nb)
  * FORWARD information: duration, packet, byte
  */
 
-void connection_stat(struct conn_struct *conn)
+void connection_log(struct conn_struct *conn)
 {
 
-	/*! if log rotation is configured, then we call rotate_log()
+	/*! if log rotation is configured, then we call rotate_connection_log()
 	 */
 	if ( NULL != strstr(g_hash_table_lookup(config,"log_rotation"),"1") ) {
-		//rotate_log(0, NULL, NULL);
-		rotate_log(0);
+		rotate_connection_log(0);
 	}
 
 	gchar **tuple;
@@ -363,6 +334,9 @@ void connection_stat(struct conn_struct *conn)
 			break;
 		case DROP:
 			g_string_printf(status,"DROP");
+			break;
+		case CONTROL:
+			g_string_printf(status,"CONTROL");
 			break;
 		default:
 			g_string_printf(status,"INVALID");
@@ -410,7 +384,7 @@ void connection_stat(struct conn_struct *conn)
 	char *logbuf = malloc(1024);	//1024 might be too short!
 
 	/*! Output according to the format configured */
-	if ( NULL != strstr(g_hash_table_lookup(config,"log_format"),"csv") ) {
+	if ( NULL != g_hash_table_lookup(config,"log_format") && NULL != strstr(g_hash_table_lookup(config,"log_format"),"csv") ) {
 		sprintf(logbuf,"%s,%.3f,%s,%s,%s,%s,%s,%d,%d,%s,%d,%s,%s,%s,%s,%s\n", conn->start_timestamp->str, total_duration, proto->str, tuple[0], tuple[1], tuple[2], tuple[3], conn->total_packet, conn->total_byte, status->str, conn->id, 
 		//status_info[INVALID]->str,
 		status_info[INIT]->str,

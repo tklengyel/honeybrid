@@ -18,60 +18,39 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __DECISION_ENGINE_H__
-#define __DECISION_ENGINE_H__
+/*! \file yesno_mod.c
+ * \brief Yesno Module for honeybrid Decision Engine
+ *
+ * This module always decides to redirect or not according to the "yes" or "no" value of its argument
+ *
+ *
+ \author Thomas Coquelin, 2008
+ */
 
-#include <glib.h>
+#include <string.h>
+
+#include "modules.h"
 #include "tables.h"
 
-/*!
- \def MIN_DECISION_DATA
+/*! mod_yesno
+ \param[in] args, struct that contain the node and the datas to process
  *
- * minimum number of byte to submit a packet to the Decision Engine
+ \param[out] set result to 1 when 'arg' is "yes", 0 otherwise
  */
-#define MIN_DECISION_DATA 0
-
-/*!
- \def decision types (for later user)
-#define DROP		0	//Already defined!!!
-#define CONTINUE	1
-#define ACCEPT		2
-#define REDIRECT	3
- */
-
-/*!
- \def DE_rules
- *
- \brief hash table to select a rule for a connection, key is the rule, value is the boolean decision tree root
- */
-GHashTable *DE_rules;
-
-/*!
- \def tree
- *
- \brief a binary execution tree
- */
-struct tree
+void mod_yesno(struct mod_args args)
 {
-	struct node *node;
-	int globalresult;
-	int proxy;
-	int drop;
-	///GString *decision;
-	GStaticRWLock lock;
-};
+	L("mod_yesno():\tModule called\n", NULL, 4,args.pkt->conn->id);
 
-struct tree tree;
+	/*! strncmp returns 0 if the two arguments are equal */
+	if(0 == strncmp(args.node->arg,"yes",3))
+	{
+		args.node->result = 1;
+		L("mod_yesno():\tPACKET MATCH RULE for yesno(yes)\n", NULL, 2, args.pkt->conn->id);
+	}
+	else
+	{
+		args.node->result = 0;
+		L("mod_yesno():\tPACKET DOES NOT MATCH RULE for yesno(no)\n", NULL, 2, args.pkt->conn->id);
+	}
+}
 
-GStaticRWLock DE_queue_lock;
-
-GSList *DE_queue;
-
-void *DE_create_tree(const gchar *equation);
-
-void DE_submit_packet();
-
-void DE_push_pkt(struct pkt_struct *pkt);
-void DE_process_packet(struct pkt_struct *pkt);
-
-#endif

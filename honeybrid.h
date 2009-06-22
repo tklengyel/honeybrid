@@ -18,26 +18,4 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-/*! \file sha1_mod.h
- * \brief header for Source Module for honeybrid Decision Engine
- *
- \author Robin Berthier, 2009
- */
-
-/*!
- \def sha1_info
- \brief Structure that carries meta information about sha1 signatures
- */
-
-struct hash_info
-{
-	gint bdd_id;
-	gint id;
-	gint counter;
-	gint port;
-	gint packet;
-	gint byte;
-	gint first_seen;	
-	gint duration;	
-	gchar *ascii;
-};
+int     daemon(int, int);

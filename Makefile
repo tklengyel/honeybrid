@@ -32,7 +32,8 @@ CPPFLAGS+=# Preprocessor options
 #CFLAGS+=-Wall -D RST_EXT -O2 `pkg-config --cflags glib-2.0 gthread-2.0`# compilator options
 CFLAGS+=-Wall -D RST_EXT -O0 `pkg-config --cflags glib-2.0 gthread-2.0`# compilator options
 CFLAGS+=-Wall -g -ggdb -D DEBUG
-LDFLAGS+=-lnetfilter_queue -lpcap `pkg-config --libs gthread-2.0 glib-2.0` -lcrypto# link editor options -lnetfilter_conntrack
+LDFLAGS+=-lnetfilter_queue -lpcap -lev `pkg-config --libs gthread-2.0 glib-2.0` -lcrypto# link editor options -lnetfilter_conntrack
+#LDFLAGS+=-lnetfilter_queue -lpcap `pkg-config --libs gthread-2.0 glib-2.0` -lcrypto# link editor options -lnetfilter_conntrack
 
 BIN=honeybrid# main binary
 BINDIR?=/usr/local/sbin# installation prefix
@@ -49,7 +50,7 @@ export BINDIR CONFDIR LOGDIR RUNDIR SCRIPTDIR LOGFILE DEBUGFILE
 CONF=$(BIN).conf
 RULE=rules.conf
 SCRIPT=$(BIN).sh# startup scripts
-SRC=main.c netcode.c tables.c log.c decision_engine.c modules.c sha1_mod.c incpsh_mod.c yesno_mod.c source_mod.c random_mod.c proxy_mod.c# source files
+SRC=honeybrid.c daemon.c err.c netcode.c tables.c log.c decision_engine.c modules.c mod_control.c mod_hash.c mod_counter.c mod_yesno.c mod_source.c mod_random.c mod_proxy.c# source files
 OBJ=$(subst .c,.o,$(SRC))# object files
 
 export BIN CONF RULE SCRIPT
@@ -113,18 +114,19 @@ uninstall:
 
 #### Additionnal dependencies ####
 
-main.o: netcode.h tables.h log.h decision_engine.h modules.h incpsh_mod.h sha1_mod.h types.h yesno_mod.h source_mod.h random_mod.h proxy_mod.h
+honeybrid.o: honeybrid.h netcode.h tables.h log.h decision_engine.h modules.h mod_control.h mod_counter.h mod_hash.h types.h mod_yesno.h mod_source.h mod_random.h mod_proxy.h
 netcode.o: tables.h log.h types.h
 #pcap_tool.o: tables.h log.h netcode.h types.h
 tables.o: log.h netcode.h types.h
 log.o: tables.h types.h
 decision_engine.o: log.h tables.h modules.h netcode.h types.h
 modules.o: log.h 
-sha1_mod.o: log.h netcode.h tables.h modules.h types.h
-incpsh_mod.o: log.h tables.h modules.h types.h
-yesno_mod.o: log.h tables.h modules.h types.h
-source_mod.o: log.h tables.h modules.h types.h
-random_mod.o: log.h tables.h modules.h types.h
-proxy_mod.o: log.h tables.h modules.h types.h
+mod_control.o: log.h tables.h modules.h types.h
+mod_hash.o: log.h netcode.h tables.h modules.h types.h
+mod_counter.o: log.h tables.h modules.h types.h
+mod_yesno.o: log.h tables.h modules.h types.h
+mod_source.o: log.h tables.h modules.h types.h
+mod_random.o: log.h tables.h modules.h types.h
+mod_proxy.o: log.h tables.h modules.h types.h
 
 .PHONY: all clean install uninstall config

@@ -47,9 +47,10 @@ Honeybrid is dependent on the following public domain packages:
 	libpcap0.8
 	libpcap0.8-dev
 	libssl-dev
+	libev
 
 For Debian Lenny, running the following command will take care of all the dependencies:
-	% sudo apt-get install make binutils gcc libnetfilter-conntrack-dev libnetfilter-conntrack1 libnetfilter-queue-dev libnetfilter-queue1 libnfnetlink-dev libnfnetlink0 pkg-config libc6-dev libglib2.0-0 libglib2.0-dev linux-libc-dev libpcap0.8-dev libpcap0.8 openssl libssl-dev
+	% sudo apt-get install make binutils gcc libnetfilter-conntrack-dev libnetfilter-conntrack1 libnetfilter-queue-dev libnetfilter-queue1 libnfnetlink-dev libnfnetlink0 pkg-config libc6-dev libglib2.0-0 libglib2.0-dev linux-libc-dev libpcap0.8-dev libpcap0.8 openssl libssl-dev libev-dev
 
 
 CONFIGURE

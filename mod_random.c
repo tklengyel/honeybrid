@@ -18,7 +18,7 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-/*! \file random_mod.c
+/*! \file mod_random.c
  * \brief RANDOM module for honeybrid Decision Engine
  *
  * This module is called by a boolean decision tree to filter attacker randomly
@@ -37,7 +37,7 @@
 #include "modules.h"
 #include "netcode.h"
 
-#include "random_mod.h"
+#include "mod_random.h"
 
 /*! init_mod_random
  \brief init the random module, fill up the databases */
@@ -55,7 +55,7 @@ int init_mod_random()
  */
 void mod_random(struct mod_args args)
 {
-	L("mod_random():\tModule called\n", NULL, 3, args.pkt->connection_data->id);
+	L("mod_random():\tModule called\n", NULL, 3, args.pkt->conn->id);
 
 	unsigned int value;
 	unsigned int proba;
@@ -75,7 +75,7 @@ void mod_random(struct mod_args args)
         check = sscanf(args.node->arg,"%d,%s", &value, type);
 
         if (check != 2) {
-                L("mod_random():\tError: module argument malformed!\n", NULL, 3, args.pkt->connection_data->id);
+                L("mod_random():\tError: module argument malformed!\n", NULL, 3, args.pkt->conn->id);
                 return;
         }
 
@@ -89,7 +89,7 @@ void mod_random(struct mod_args args)
 	if (value < selector) {
 		logbuf = malloc(256);
 		sprintf(logbuf, "mod_random():\tIncorrect value given in argument: %d\n", value);
-		L(NULL, logbuf, 3, args.pkt->connection_data->id);
+		L(NULL, logbuf, 3, args.pkt->conn->id);
 		return;
 	}
 
@@ -101,12 +101,12 @@ void mod_random(struct mod_args args)
 		args.node->result = 1;
 		logbuf = malloc(256);
                 sprintf(logbuf,"mod_random():\tPACKET MATCH RULE for random(%d)\n", value);
-                L(NULL, logbuf, 2, args.pkt->connection_data->id);
+                L(NULL, logbuf, 2, args.pkt->conn->id);
 	} else {
 		args.node->result = drop;
 		logbuf = malloc(256);
                 sprintf(logbuf,"mod_random():\tPACKET DOES NOT MATCH RULE for random(%d)\n", value);
-                L(NULL, logbuf, 2, args.pkt->connection_data->id);
+                L(NULL, logbuf, 2, args.pkt->conn->id);
 	}
 
 	return;

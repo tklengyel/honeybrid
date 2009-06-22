@@ -50,151 +50,154 @@
  */
 #define CONCALLSIZE 2048
 
-/*! init_packet_struct
+/*! init_pkt
  \brief init the current packet structure with meta-information such as the origin and the number of bytes of data
  \param[in] nf_packet: The raw packet from the queue
- \param[in] new_packet_data: The packet metadata structure for this packet
+ \param[in] pkt: The packet metadata structure for this packet
  \return the origin of the packet
  */
-int init_packet_struct( char *nf_packet, struct pkt_struct *new_packet_data)
+int init_pkt( char *nf_packet, struct pkt_struct *pkt)
 {
-	char *logbuf;
-
 	/* Init a new structure for the current packet */
-	new_packet_data->origin = EXT;
-	new_packet_data->DE = 0;
-	new_packet_data->packet.ip = malloc( ntohs(((struct iphdr*)nf_packet)->tot_len) ); ///TODO: check if it's correctly freed
-	new_packet_data->key = malloc(64);
-	new_packet_data->key_src = malloc(32);
-	new_packet_data->key_dst = malloc(32);
-	new_packet_data->position = 0;
-	new_packet_data->size = ntohs(((struct iphdr*)nf_packet)->tot_len);
+	pkt->origin = EXT;
+	pkt->DE = 0;
+	pkt->packet.ip = malloc( ntohs(((struct iphdr*)nf_packet)->tot_len) ); ///TODO: check if it's correctly freed
+	pkt->key = malloc(64);
+	pkt->key_src = malloc(32);
+	pkt->key_dst = malloc(32);
+	pkt->position = 0;
+	pkt->size = ntohs(((struct iphdr*)nf_packet)->tot_len);
 
-	if(new_packet_data->size > 1500 || new_packet_data->size <40)
+	if(pkt->size > 1500 || pkt->size <40)
 	{
-		L("init_packet_struct():\tInvalid packet size: dropped\n",NULL,2,4);
+		g_printerr("%s Invalid packet size: dropped\n", H(4));
 		return NOK;
 	}
 	
 	/*! Add the packet IP header and payload to the packet structure */
-	memcpy( new_packet_data->packet.ip, nf_packet, new_packet_data->size );///THOMAS:Let's save memory !
-	if( new_packet_data->packet.ip->ihl < 0x5 || new_packet_data->packet.ip->ihl > 0x08 )
+	memcpy( pkt->packet.ip, nf_packet, pkt->size );///THOMAS:Let's save memory !
+	if( pkt->packet.ip->ihl < 0x5 || pkt->packet.ip->ihl > 0x08 )
 	{
-		L("init_packet_struct():\tInvalid IP header length: dropped\n",NULL,2,4);
+		g_printerr("%s Invalid IP header length: dropped\n", H(4));
 		return NOK;
 	}
 	
-	new_packet_data->packet.tcp = (struct tcphdr*)(((char *)new_packet_data->packet.ip) + (new_packet_data->packet.ip->ihl<<2));
-	new_packet_data->packet.udp = (struct udphdr*)new_packet_data->packet.tcp;
-	if( new_packet_data->packet.ip->protocol == 0x06 )
+	pkt->packet.tcp = (struct tcphdr*)(((char *)pkt->packet.ip) + (pkt->packet.ip->ihl<<2));
+	pkt->packet.udp = (struct udphdr*)pkt->packet.tcp;
+	if( pkt->packet.ip->protocol == 0x06 )
 	{
 		/*! Process TCP packets */
-		if(new_packet_data->packet.tcp->doff < 0x05 || new_packet_data->packet.tcp->doff > 0xFF)
+		if(pkt->packet.tcp->doff < 0x05 || pkt->packet.tcp->doff > 0xFF)
 		{
-			L("init_packet_struct():\tInvalid TCP header length: dropped\n",NULL,2,4);
+			g_printerr("%s Invalid TCP header length: dropped\n",  H(4));
 			return NOK;
 		}
-		if(new_packet_data->packet.tcp->source == 0 || new_packet_data->packet.tcp->dest == 0)
+		if(pkt->packet.tcp->source == 0 || pkt->packet.tcp->dest == 0)
 		{
-			L("init_packet_struct():\tInvalid TCP ports: dropped\n",NULL,2,4);
+			g_printerr("%s Invalid TCP ports: dropped\n", H(4));
 			return NOK;
 		}
-		new_packet_data->packet.payload = (char*)new_packet_data->packet.tcp + (new_packet_data->packet.tcp->doff<<2);
+		pkt->packet.payload = (char*)pkt->packet.tcp + (pkt->packet.tcp->doff<<2);
 		
 		/*! key_src is the tuple with the source information
 		 * {Source IP}:{Source Port} */
-		sprintf( new_packet_data->key_src,"%s:%d",inet_ntoa(*(struct in_addr*)&new_packet_data->packet.ip->saddr),ntohs(new_packet_data->packet.tcp->source) );
+		sprintf( pkt->key_src,"%s:%d",inet_ntoa(*(struct in_addr*)&pkt->packet.ip->saddr),ntohs(pkt->packet.tcp->source) );
 		
 		/*! key_dst is the one with the destination information
 		 * {Dest IP}:{Dest Port} */
-		sprintf( new_packet_data->key_dst,"%s:%d",inet_ntoa(*(struct in_addr*)&new_packet_data->packet.ip->daddr),ntohs(new_packet_data->packet.tcp->dest) );
+		sprintf( pkt->key_dst,"%s:%d",inet_ntoa(*(struct in_addr*)&pkt->packet.ip->daddr),ntohs(pkt->packet.tcp->dest) );
 		
 		/* The volume of data is the total size of the packet minus the size of the IP and TCP headers */
-		new_packet_data->data = ntohs(new_packet_data->packet.ip->tot_len) - (new_packet_data->packet.ip->ihl << 2) - (new_packet_data->packet.tcp->doff << 2);
-	}
-	else if( new_packet_data->packet.ip->protocol == 0x11 )	/* 0x11 == 17 */
+		pkt->data = ntohs(pkt->packet.ip->tot_len) - (pkt->packet.ip->ihl << 2) - (pkt->packet.tcp->doff << 2);
+	} else if( pkt->packet.ip->protocol == 0x11 ) 	/* 0x11 == 17 */
 	{
-		new_packet_data->packet.payload = (char*)new_packet_data->packet.udp + 8;
+		pkt->packet.payload = (char*)pkt->packet.udp + 8;
 		/*! Process UDP packet */
 		/*! key_src */
-		sprintf( new_packet_data->key_src,"%s:%u",inet_ntoa(*(struct in_addr*)&new_packet_data->packet.ip->saddr),ntohs(new_packet_data->packet.udp->source) );
+		sprintf( pkt->key_src,"%s:%u",inet_ntoa(*(struct in_addr*)&pkt->packet.ip->saddr),ntohs(pkt->packet.udp->source) );
 		/*! key_dst */
-		sprintf( new_packet_data->key_dst,"%s:%u",inet_ntoa(*(struct in_addr*)&new_packet_data->packet.ip->daddr),ntohs(new_packet_data->packet.udp->dest) );
+		sprintf( pkt->key_dst,"%s:%u",inet_ntoa(*(struct in_addr*)&pkt->packet.ip->daddr),ntohs(pkt->packet.udp->dest) );
 		/* The volume of data is the value of udp->ulen minus the size of the UPD header (always 8 bytes) */
-		new_packet_data->data = new_packet_data->packet.udp->len - 8; 
-	}
-	else
+		pkt->data = pkt->packet.udp->len - 8; 
+	} else 
 	{
 		/*! Every other packets are ignored */
-		logbuf = malloc(128);
-		sprintf(logbuf, "init_packet_struct():\tInvalid protocol: %d, packet dropped\n", new_packet_data->packet.ip->protocol);
-		L(NULL, logbuf, 2, 4);
-		//L("init_packet_struct():\tInvalid protocol: dropped\n",NULL,2,4);
+		g_printerr("%s Invalid protocol: %d, packet dropped\n", H(4), pkt->packet.ip->protocol);
+		//L("init_pkt():\tInvalid protocol: dropped\n",NULL,2,4);
 		return NOK;
 	}
 
 	/* Use key_src and key_dst to find the origin of the packet */
-	if ( test_honeypot_addr( new_packet_data->key_src, LIH ) == OK) 
-	{
-		/* The source is matching the IP of a low interaction honeypot
-		 * We update origin accordingly */
-		new_packet_data->origin = LIH;
-
-		/* We also update the key to be key_dst:key_src */
-		sprintf( new_packet_data->key, "%s:%s", new_packet_data->key_dst, new_packet_data->key_src );
-	}
-	else if ( test_honeypot_addr( new_packet_data->key_src, HIH ) == OK )
+	/*! It's important to check HIH first! In case a HIH is in the same network of the LIH */
+	if ( test_honeypot_addr( pkt->key_src, HIH ) == OK )
 	{
 		/* The source is matching the IP of a high interaction honeypot
 		 * We update origin accordingly	 */
-		new_packet_data->origin = HIH;
+		pkt->origin = HIH;
 
 		/* We create a key HIH:EXT to check the high interaction dynamic table of IPs and find the associated low interaction honeypot */
 		char *double_key = malloc(64);
-		sprintf(double_key, "%s:%s", new_packet_data->key_src, new_packet_data->key_dst );
+		sprintf(double_key, "%s:%s", pkt->key_src, pkt->key_dst );
 		char *key_lih = lookup_honeypot_addr( double_key, HIH );
 
-		if ( (key_lih) )
+		if ( (key_lih) ) {
 			/* We also update the key to be key_dst:key_lih */
-			sprintf( new_packet_data->key, "%s:%s", new_packet_data->key_dst, key_lih);
-		else 
+			sprintf( pkt->key, "%s:%s", pkt->key_dst, key_lih);
+		}
+		else {
 			/* if we did not find any LIH, we then invalidate key with the null value */
-			new_packet_data->key = NULL;
+			///ROBIN - 2009-04-13: No longer, we want connections initiated by HIH to be handled
+			///pkt->key = NULL;
+			/*!!! 	We invert the orientation of the connection, otherwise it won't be recognized.
+				Problem to be solved !!!*/
+			sprintf( pkt->key, "%s:%s", pkt->key_dst, pkt->key_src );
+		}
 		free(key_lih);
 		free(double_key);
 	}
+	else if ( test_honeypot_addr( pkt->key_src, LIH ) == OK) 
+	{
+		/* The source is matching the IP of a low interaction honeypot
+		 * We update origin accordingly */
+		pkt->origin = LIH;
+
+		/* We also update the key to be key_dst:key_src */
+		sprintf( pkt->key, "%s:%s", pkt->key_dst, pkt->key_src );
+	}
 	else
+	{
 		/* We did not find the IP in the list of low/high interaction honeypot, then the IP is external */
-		sprintf( new_packet_data->key, "%s:%s", new_packet_data->key_src, new_packet_data->key_dst );
+		sprintf( pkt->key, "%s:%s", pkt->key_src, pkt->key_dst );
+	}
 	return OK;
 }
 
-/*! free_packet_struct
+/*! free_pkt
  \brief free the current packet structure
  \param[in] pkt: struct pkt_struct to free
  \return OK
  */
-int free_packet_struct( struct pkt_struct *pkt )
+int free_pkt( struct pkt_struct *pkt )
 {
-///	L("free_packet_struct():\tfreeing NULL !\n",NULL, 3, pkt->connection_data->id);
+///	L("free_pkt():\tfreeing NULL !\n",NULL, 3, pkt->conn->id);
 	if(pkt == NULL)
 		return NOK;
-	free(pkt->packet.ip);
-	free(pkt->key);
-	free(pkt->key_src);
-	free(pkt->key_dst);
-	free(pkt);
+	g_free(pkt->packet.ip);
+	g_free(pkt->key);
+	g_free(pkt->key_src);
+	g_free(pkt->key_dst);
+	g_free(pkt);
 	return OK;
 }
 
 
-/*! get_current_struct
+/*! init_conn
  \brief init the current context using the tuples
- \param[in] current_packet_data: struct pkt_struct to work with
- \param[in] current_connection_data: struct conn_struct to work with
+ \param[in] pkt: struct pkt_struct to work with
+ \param[in] conn: struct conn_struct to work with
  \return 0 if success, anything else otherwise
  */
-int get_current_struct(struct pkt_struct *current_packet_data, struct conn_struct **current_connection_data)
+int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 {
 	/*! Get current time to update or create the structure
 	 */
@@ -206,85 +209,73 @@ int get_current_struct(struct pkt_struct *current_packet_data, struct conn_struc
 	microtime +=  ((gdouble)t.tv_sec);
 	microtime += (((gdouble)t.tv_usec)/1000000.0);
 
-	/*! debug 
-        char* logbuf = malloc(128);
-        sprintf(logbuf,"get_current_struct():\tmicrotime set to %f [tv_sec:%u and tv_usec:%u]\n",microtime, (unsigned int)t.tv_sec, (unsigned int)t.tv_usec);
-        L(NULL,logbuf,2,4);
-	*/
-
-	/*! g_tree_lookup_extended - lookup for a key in the B-Tree
-	 *
-	\param[in] conn_tree:  name of the b-tree
-	\param[in] key->str:  key value
-	\param[in] NULL:  unused options
-	\param[in] (gpointer *) &current_connection_data:  pointer to the value
-	 *
-	\return TRUE if value exist
-	 */
-	
 	/*! if key->str is null, then we have a seg fault! And it can happen if no LIH was found from a HIH->EXT packet...
 	 */
-	if ( current_packet_data->key == NULL )
+	if ( pkt->key == NULL ) {
+		g_printerr("%s key is NULL, no valid connection attached\n", H(4));
 		/*! We return the Invalid state */
 		return NOK;
+	}
 
-	if (TRUE != g_tree_lookup_extended(conn_tree, current_packet_data->key, NULL,(gpointer *) current_connection_data))
+	if (TRUE != g_tree_lookup_extended(conn_tree, pkt->key, NULL,(gpointer *) conn))
 	{
 		/*! The key could not be found, then we make sure that the packet is from an external IP
 		 */
-		if ( current_packet_data->origin != EXT )
+		///We now accept packets from HIH or LIH because we can then control them
+		///if ( pkt->origin != EXT )
 			/*! The source is not external, then we invalidate the state */
-			return NOK;
-		else if(current_packet_data->packet.ip->protocol == 0x06 && current_packet_data->packet.tcp->syn == 0 )
+		///	return NOK;
+		///else if(pkt->packet.ip->protocol == 0x06 && pkt->packet.tcp->syn == 0 )
+		if(pkt->packet.ip->protocol == 0x06 && pkt->packet.tcp->syn == 0 )
 			return NOK;
 
 		/*! Update state to be INIT */
 
 		/*! Init new connection structure */
-		struct conn_struct *add_new_data = (struct conn_struct *) malloc( sizeof(struct conn_struct) );
+		struct conn_struct *conn_init = (struct conn_struct *) malloc( sizeof(struct conn_struct) );
 
 		/*! fill the structure */
-		add_new_data->key				= g_strdup(current_packet_data->key);
-		add_new_data->key_ext				= g_strdup(current_packet_data->key_src);
-		add_new_data->key_lih				= g_strdup(current_packet_data->key_dst);
-		add_new_data->key_hih				= NULL;
-		add_new_data->protocol				= current_packet_data->packet.ip->protocol;
-		add_new_data->access_time			= curtime;
-		add_new_data->state		 		= INIT;
-		add_new_data->count_data_pkt_from_lih 		= 0;
-		add_new_data->count_data_pkt_from_intruder 	= 0;
-		add_new_data->BUFFER				= NULL;
-		add_new_data->hih.lih_syn_seq			= 0;
-		add_new_data->hih.delta				= 0;
-		add_new_data->id				= c_id++;
-		add_new_data->replay_id				= 0;
-		g_static_rw_lock_init( &add_new_data->lock );
+		conn_init->key				= g_strdup(pkt->key);
+		conn_init->key_ext				= g_strdup(pkt->key_src);
+		conn_init->key_lih				= g_strdup(pkt->key_dst);
+		conn_init->key_hih				= NULL;
+		conn_init->protocol				= pkt->packet.ip->protocol;
+		conn_init->access_time			= curtime;
+		conn_init->state		 		= INIT;
+		conn_init->count_data_pkt_from_lih 		= 0;
+		conn_init->count_data_pkt_from_intruder 	= 0;
+		conn_init->BUFFER				= NULL;
+		conn_init->hih.lih_syn_seq			= 0;
+		conn_init->hih.delta				= 0;
+		conn_init->id				= c_id++;
+		conn_init->replay_id				= 0;
+		g_static_rw_lock_init( &conn_init->lock );
 		int j;
-		for (j = INVALID; j<= DROP; j++) {
-			add_new_data->stat_time[j]   = 0.0;
-			add_new_data->stat_packet[j] = 0;
-			add_new_data->stat_byte[j]   = 0;	
+		for (j = INVALID; j<= CONTROL; j++) {
+			conn_init->stat_time[j]   = 0.0;
+			conn_init->stat_packet[j] = 0;
+			conn_init->stat_byte[j]   = 0;	
 		}	
 
 		/*! statistics */
-		add_new_data->start_microtime = microtime;
-		add_new_data->stat_time[   INIT ] = microtime;
-		add_new_data->stat_packet[ INIT ] = 1;
-		add_new_data->stat_byte[   INIT ] = current_packet_data->size;
-		add_new_data->total_packet = 1;
-		add_new_data->total_byte   = current_packet_data->size;
-		add_new_data->replay_problem = 0;
-		add_new_data->invalid_problem = 0;
-		///add_new_data->decision_rule = malloc(512);
-		add_new_data->decision_rule = g_string_new(NULL);
+		conn_init->start_microtime = microtime;
+		conn_init->stat_time[   INIT ] = microtime;
+		conn_init->stat_packet[ INIT ] = 1;
+		conn_init->stat_byte[   INIT ] = pkt->size;
+		conn_init->total_packet = 1;
+		conn_init->total_byte   = pkt->size;
+		conn_init->replay_problem = 0;
+		conn_init->invalid_problem = 0;
+		///conn_init->decision_rule = malloc(512);
+		conn_init->decision_rule = g_string_new(NULL);
 
 		struct tm *tm;
                 struct timeval tv;
                 struct timezone tz;
                 gettimeofday(&tv, &tz);
                 tm=localtime(&tv.tv_sec);
-		add_new_data->start_timestamp = g_string_new("");
-                g_string_printf(add_new_data->start_timestamp,"%d-%02d-%02d %02d:%02d:%02d.%.6d", (1900+tm->tm_year), (1+tm->tm_mon), tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec, (int)tv.tv_usec);
+		conn_init->start_timestamp = g_string_new("");
+                g_string_printf(conn_init->start_timestamp,"%d-%02d-%02d %02d:%02d:%02d.%.6d", (1900+tm->tm_year), (1+tm->tm_mon), tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec, (int)tv.tv_usec);
 		
 
 		/*! insert entry in B-Tree
@@ -292,51 +283,55 @@ int get_current_struct(struct pkt_struct *current_packet_data, struct conn_struc
 		 */
 		g_static_rw_lock_writer_lock (&rwlock);
 
-		g_tree_insert(conn_tree, add_new_data->key, add_new_data);
+		g_tree_insert(conn_tree, conn_init->key, conn_init);
 
 		/*! free the lock */
 		g_static_rw_lock_writer_unlock (&rwlock);
-		char* logbuf = malloc(128);
-		sprintf(logbuf,"get_current_struct():\tNew entry created in B-Tree for connection %s\n",add_new_data->key);
-		L(NULL,logbuf,2,add_new_data->id);
+
+		g_printerr("%s New entry created in B-Tree for connection %s\n", H(conn_init->id), conn_init->key);
 
 		/*! store new entry in current struct */
 
-		if (TRUE != g_tree_lookup_extended(conn_tree, current_packet_data->key, NULL,(gpointer *) current_connection_data))
+		if (TRUE != g_tree_lookup_extended(conn_tree, pkt->key, NULL,(gpointer *) conn))
 			return NOK;
 
 	} else {
 		/*! The key was found in the B-Tree */
-		int state = (*current_connection_data)->state;
+		int state = (*conn)->state;
+
+		/*! We store control statistics in the proxy mode */
+		if (state == CONTROL) {
+			state = PROXY;
+		}
 
 		/*! We lock the structure */
 		///ROBIN 2009-03-29: deadlock occurred between here and line 676 (setup_redirection())
-		//g_static_rw_lock_writer_lock( &(*current_connection_data)->lock );
+		//g_static_rw_lock_writer_lock( &(*conn)->lock );
 		/*
 		#ifdef DEBUG
-		g_print("get_current_struct()\tTrying to unlock connection_data for connection id %d\n", (*current_connection_data)->id);
+		g_print("init_conn()\tTrying to unlock conn for connection id %d\n", (*conn)->id);
 		#endif
-		while (!g_static_rw_lock_writer_trylock( &(*current_connection_data)->lock )) {
+		while (!g_static_rw_lock_writer_trylock( &(*conn)->lock )) {
 			g_usleep(1);
-			//g_static_rw_lock_writer_unlock( &(*current_connection_data)->lock );
+			//g_static_rw_lock_writer_unlock( &(*conn)->lock );
 		}
 		*/
 		/*! statistics */
-		(*current_connection_data)->stat_time[   state ]  = microtime;
-		(*current_connection_data)->stat_packet[ state ] += 1;
-		(*current_connection_data)->stat_byte[   state ] += current_packet_data->size;
-		(*current_connection_data)->total_packet += 1;
-		(*current_connection_data)->total_byte   += current_packet_data->size;
+		(*conn)->stat_time[   state ]  = microtime;
+		(*conn)->stat_packet[ state ] += 1;
+		(*conn)->stat_byte[   state ] += pkt->size;
+		(*conn)->total_packet += 1;
+		(*conn)->total_byte   += pkt->size;
 		/*! We update the current connection access time */
-		(*current_connection_data)->access_time = curtime;
-		if(current_packet_data->origin == EXT)
-			(*current_connection_data)->count_data_pkt_from_intruder += current_packet_data->packet.tcp->psh;
+		(*conn)->access_time = curtime;
+		if(pkt->origin == EXT)
+			(*conn)->count_data_pkt_from_intruder += pkt->packet.tcp->psh;
 
 		/*! We unlock the structure */
-		///g_static_rw_lock_writer_unlock( &(*current_connection_data)->lock );
+		///g_static_rw_lock_writer_unlock( &(*conn)->lock );
 
 	}
-	current_packet_data->connection_data = *current_connection_data;
+	pkt->conn = *conn;
 	return OK;
 }
 
@@ -427,9 +422,7 @@ int test_honeypot_addr( char *key, int list ) {
  */
 char * lookup_honeypot_addr( gchar *testkey, int list ) {
 
-	char *logbuf = malloc(128);
-	sprintf(logbuf,"lookup_honeypot_addr():\tLooking up %s in list %d (LIH == 1, HIH == 2)\n", testkey, list);
-	L(NULL,logbuf,4,5);
+	g_printerr("%s Looking up %s in list %d (LIH == 1, HIH == 2)\n", H(5), testkey, list);
 	
 	/*! We test which list we want to search */
 	if ( list == LIH ) {
@@ -458,15 +451,11 @@ char * lookup_honeypot_addr( gchar *testkey, int list ) {
 	        if(!hihdest)
 	        	hihdest = g_strdup((char *)g_hash_table_lookup(low_redirection_table, classA->str));
 	        if(!hihdest) {
-			logbuf = malloc(128);
-			sprintf(logbuf,"lookup_honeypot_addr():\tTested also %s, %s and %s but nothing matched\n", classC->str, classB->str, classA->str);
-			L(NULL,logbuf,4,5);
+			g_printerr("%s Tested also %s, %s and %s but nothing matched\n", H(5), classC->str, classB->str, classA->str);
 	                return NULL;
 		}
 
-		logbuf = malloc(128);
-		sprintf(logbuf,"lookup_honeypot_addr():\tFound %s!\n", hihdest);
-		L(NULL,logbuf,4,5);
+		g_printerr("%s Found %s!\n", H(5), hihdest);
 
 	        return hihdest;
 
@@ -483,54 +472,50 @@ char * lookup_honeypot_addr( gchar *testkey, int list ) {
                 if(!lihdest)
                         return NULL;
 
-		logbuf = malloc(128);
-		sprintf(logbuf,"lookup_honeypot_addr():\tFound %s!\n", lihdest);
-		L(NULL,logbuf,4,5);
+		g_printerr("%s Found %s!\n", H(5), lihdest);
 
                 return lihdest;
 	}
 	return NULL;
 }
 
-/*! store_packet function
+/*! store_pkt function
  \brief Store the current packet as part of the connection to replay it later. If this is the first packet of a communication, init its structure in the main B-Tree.
  *
- \param[in] current_packet_data: struct pkt_struct to work with
- \param[in] current_connection_data: struct conn_struct to work with
+ \param[in] pkt: struct pkt_struct to work with
+ \param[in] conn: struct conn_struct to work with
  *
  \return the position of the packet in the list in case of success, a negative value if storage has failed
  */
-int store_packet(struct conn_struct *current_connection_data, struct pkt_struct *current_packet_data)
+int store_pkt(struct conn_struct *conn, struct pkt_struct *pkt)
 {
-	current_packet_data->position = -1;
+	pkt->position = -1;
 	/*! Lock the structure */
-	///g_static_rw_lock_writer_lock (&current_connection_data->lock);
+	///g_static_rw_lock_writer_lock (&conn->lock);
 
-	/*! Append current_packet_data to the singly-linked list of current_connection_data */
-        current_connection_data->BUFFER = g_slist_append(current_connection_data->BUFFER, current_packet_data);
+	/*! Append pkt to the singly-linked list of conn */
+        conn->BUFFER = g_slist_append(conn->BUFFER, pkt);
 
 	/*! Get the packet position */
-        current_packet_data->position = (g_slist_length(current_connection_data->BUFFER) - 1);
+        pkt->position = (g_slist_length(conn->BUFFER) - 1);
 
 	/*! Unlock the structure */
-        ///g_static_rw_lock_writer_unlock (&current_connection_data->lock);	
+        ///g_static_rw_lock_writer_unlock (&conn->lock);	
 	
-	char *logbuf = malloc(128);
-	sprintf(logbuf,"store_packet():\tPacket stored in memory for connection %s\n", current_connection_data->key);
-	L(NULL,logbuf,4,current_connection_data->id);
-	/*! Return the position of the packet stored in the singly-linked list */
+	g_printerr("%s Packet stored in memory for connection %s\n", H(conn->id), conn->key);
+
 	return OK;
 }
 
 
-/*! match_old_value
+/*! expire_conn
  \brief called for each entry in the B-Tree, if a time value is upper to "expiration_delay" (default is 120 sec) and the connection is not marked as redirected, entry is deleted
  \param[in] key, a pointer to the current B-Tree key value
- \param[in] cur_conn, a pointer to the current B-Tree associated value
+ \param[in] conn, a pointer to the current B-Tree associated value
  \param[in] expiration_delay
  \return FALSE, to continue to traverse the tree (if TRUE is returned, traversal is stopped)
  */
-int match_old_value(gpointer key, struct conn_struct *cur_conn, gint *expiration_delay)
+int expire_conn(gpointer key, struct conn_struct *conn, gint *expiration_delay)
 {
 	GTimeVal t;
 	g_get_current_time(&t);
@@ -541,35 +526,37 @@ int match_old_value(gpointer key, struct conn_struct *cur_conn, gint *expiration
 
 	int delay = *expiration_delay;
 
-	char *log = malloc(192);
-        sprintf(log,"match_old_value():\tcalled with expiration delay: %d\n", delay);
-        L(NULL,log,5,8);
+	/*
+	#ifdef DEBUG
+	g_printerr("%s called with expiration delay: %d\n", H(8), delay);
+	#endif
+	*/
 
-	if(((curtime - cur_conn->access_time) > delay) || (cur_conn->state < INIT))
+	if(((curtime - conn->access_time) > delay) || (conn->state < INIT))
 	{
 		/*! output final statistics about the connection */
-		connection_stat(cur_conn);
+		connection_log(conn);
 
-		char *log = malloc(192);
-		sprintf(log,"match_old_value():\tSingly linked list freed - tuple = %s\n", (char*)key);
-		L(NULL,log,2,cur_conn->id);
+		g_printerr("%s Singly linked list freed - tuple = %s\n", H(conn->id), (char*)key);
 
 		/*! lock the structure, this will never be unlocked */
-		g_static_rw_lock_writer_lock (&cur_conn->lock);
+		g_static_rw_lock_writer_lock (&conn->lock);
 
 		/*! remove the singly linked lists */
-		current = cur_conn->BUFFER;
-		do{
-			tmp = (struct pkt_struct*) g_slist_nth_data ( current, 0 );
-			free_packet_struct(tmp);
-		}while((current = g_slist_next(current)) != NULL);
+		current = conn->BUFFER;
+		if (current != NULL) {
+			do{
+				tmp = (struct pkt_struct*) g_slist_nth_data ( current, 0 );
+				free_pkt(tmp);
+			}while((current = g_slist_next(current)) != NULL);
+		}
 
-		g_slist_free(cur_conn->BUFFER);
-		free(cur_conn->key_ext);
-		free(cur_conn->key_lih);
-		free(cur_conn->key_hih);
-		///free(cur_conn->decision_rule);
-		g_string_free(cur_conn->decision_rule, TRUE);
+		g_slist_free(conn->BUFFER);
+		g_free(conn->key_ext);
+		g_free(conn->key_lih);
+		g_free(conn->key_hih);
+		///free(conn->decision_rule);
+		g_string_free(conn->decision_rule, TRUE);
 
 		/*! list the entry for later removal */
 		g_ptr_array_add(entrytoclean, key);
@@ -577,24 +564,19 @@ int match_old_value(gpointer key, struct conn_struct *cur_conn, gint *expiration
 	return FALSE;
 }
 
-/*! remove_old_value
+/*! free_conn
  \brief called for each entry in the pointer array, each entry is a key that is deleted from the B-Tree
  \param[in] key, a pointer to the current B-Tree key value stored in the pointer table
  \param[in] trash, user data, unused
  */
-void remove_old_value(gpointer key, gpointer trash)
+void free_conn(gpointer key, gpointer trash)
 {
-	char *log = malloc(192);
-	sprintf(log,"remove_old_value():\tentry removed - tuple = %s\n", (char*)key);
-	L(NULL,log,3,8);
+	g_printerr("%s entry removed - tuple = %s\n", H(8), (char*)key);
 
 	g_static_rw_lock_writer_lock (&rwlock);
 
-	if (TRUE != g_tree_remove(conn_tree,key))
-	{
-		char *logbuf = malloc(64);
-		sprintf("remove_old_value():\tError while removing tuple %s\n", (char*)key);
-		L(NULL,logbuf,1,8);
+	if (TRUE != g_tree_remove(conn_tree,key)) {
+		g_printerr("%s Error while removing tuple %s\n", H(8), (char*)key);
 		free(key);
 	}
 	g_static_rw_lock_writer_unlock (&rwlock);
@@ -622,16 +604,20 @@ void clean()
 	{
 		/*! wake up every second */
 		g_usleep(999999);
-		L("clean():\t\tcleaning\n",NULL,5,8);
+		/*
+		#ifdef DEBUG
+		g_printerr("%s cleaning\n", H(8));
+		#endif
+		*/
 
 		/*! init the table*/
 		entrytoclean = g_ptr_array_new();
 
 		/*! call the clean function for each value, delete the value if TRUE is returned */
-		g_tree_traverse( conn_tree,(GHRFunc) match_old_value, G_IN_ORDER, &delay );
+		g_tree_traverse( conn_tree,(GHRFunc) expire_conn, G_IN_ORDER, &delay );
 
 		/*! remove each key listed from the btree */
-		g_ptr_array_foreach(entrytoclean,(GFunc) remove_old_value, NULL);
+		g_ptr_array_foreach(entrytoclean,(GFunc) free_conn, NULL);
 
 		/*! free the array */
 		g_ptr_array_free(entrytoclean, TRUE);
@@ -644,20 +630,19 @@ void clean()
 
 /*! setup_redirection
  \brief called for each connection being redirected to setup and start the redirection process
- \param[in] connection_data: redirected connection metadata
+ \param[in] conn: redirected connection metadata
  \return OK when done, NOK in case of failure
  */
-int setup_redirection(struct conn_struct *connection_data)
+int setup_redirection(struct conn_struct *conn)
 {
-	L("setup_redirection():\t[** Starting... **]\n",NULL, 2,connection_data->id);
+	g_printerr("%s [** Starting... **]\n", H(conn->id));
 
-	char* hihaddr = lookup_honeypot_addr( connection_data->key_lih, LIH );
+	char* hihaddr = lookup_honeypot_addr( conn->key_lih, LIH );
 
-	if ( hihaddr != NULL )
-	{
+	if ( hihaddr != NULL ) {
 		/*! If a high interaction was found, we then check that it's not currently used by the same external host IP and Port */
 		GString *key_hih_ext = g_string_new( "" );
-		g_string_printf( key_hih_ext, "%s:%s", hihaddr, connection_data->key_ext );
+		g_string_printf( key_hih_ext, "%s:%s", hihaddr, conn->key_ext );
 
 		if ( lookup_honeypot_addr( key_hih_ext->str, HIH ) == NULL )
 		{
@@ -672,9 +657,9 @@ int setup_redirection(struct conn_struct *connection_data)
 				high_redirection_table = g_hash_table_new (g_str_hash, g_str_equal);
 			}
 
-			g_hash_table_insert (high_redirection_table, key_hih_ext->str, connection_data->key_lih );
+			g_hash_table_insert (high_redirection_table, key_hih_ext->str, conn->key_lih );
 
-	 		L("setup_redirection():\t[** high_redirection_table updated **]\n",NULL, 2,connection_data->id);
+			g_printerr("%s [** high_redirection_table updated **]\n", H(conn->id));
 
 			GTimeVal t;
 		        g_get_current_time(&t);
@@ -688,66 +673,66 @@ int setup_redirection(struct conn_struct *connection_data)
 			sscanf(tmp_[1],"%i",&tmp_port);
 
 			/*! We update the connection structure with the high interaction honeypot found */
-			///ROBIN 2009-03-29: deadlock occurred between here and line 312 (get_current_struct())
-			///g_static_rw_lock_writer_lock (&connection_data->lock);
+			///ROBIN 2009-03-29: deadlock occurred between here and line 312 (init_conn())
+			///g_static_rw_lock_writer_lock (&conn->lock);
 			/*
 			#ifdef DEBUG
-			g_print("setup_redirection()\tTrying to unlock connection_data for connection id %d\n", connection_data->id);
+			g_print("setup_redirection()\tTrying to unlock conn for connection id %d\n", conn->id);
 			#endif
-			while (!g_static_rw_lock_writer_trylock( &connection_data->lock )) {
+			while (!g_static_rw_lock_writer_trylock( &conn->lock )) {
 				g_usleep(1);
-				//g_static_rw_lock_writer_unlock( &connection_data->lock );
+				//g_static_rw_lock_writer_unlock( &conn->lock );
 			}
 			*/
-			connection_data->key_hih = hihaddr;
-			connection_data->hih.addr = htonl(addr2int( *tmp_ ));
-			connection_data->hih.lih_addr = htonl(addr2int( connection_data->key_lih ));
-			connection_data->hih.port = htons( (short)tmp_port );
+			conn->key_hih = hihaddr;
+			conn->hih.addr = htonl(addr2int( *tmp_ ));
+			conn->hih.lih_addr = htonl(addr2int( conn->key_lih ));
+			conn->hih.port = htons( (short)tmp_port );
 			/*! We then update the status of the connection structure
 			 */
-			connection_data->stat_time[ DECISION ] = microtime;
-			connection_data->state = REPLAY;
+			conn->stat_time[ DECISION ] = microtime;
+			conn->state = REPLAY;
 
-			///g_static_rw_lock_writer_unlock (&connection_data->lock);
+			///g_static_rw_lock_writer_unlock (&conn->lock);
 
-			L("setup_redirection():\tState updated to REPLAY\n",NULL, 2,connection_data->id);
+			g_printerr("%s State updated to REPLAY\n", H(conn->id));
 
 			g_strfreev(tmp_);
 			g_string_free(key_hih_ext,0);
 
 			/*! We reset the LIH */
-			reset_lih( connection_data );
+			reset_lih( conn );
 
 			/*! We replay the first packets */
 			struct pkt_struct* current;
-			current = (struct pkt_struct*) g_slist_nth_data ( connection_data->BUFFER, connection_data->replay_id );
+			current = (struct pkt_struct*) g_slist_nth_data ( conn->BUFFER, conn->replay_id );
 
-			L("setup_redirection():\t[** starting the forwarding loop... **]\n",NULL, 2,connection_data->id);
+			g_printerr("%s [** starting the forwarding loop... **]\n", H(conn->id));
 			// Does not correctly replay when MIN_DATA_DECISION is 0...
 			while(current->origin == EXT)
 			{
 				forward(current);
-				if(g_slist_next(g_slist_nth( connection_data->BUFFER, connection_data->replay_id )) == NULL)
+				if(g_slist_next(g_slist_nth( conn->BUFFER, conn->replay_id )) == NULL)
 				{
-					///g_static_rw_lock_writer_lock (&connection_data->lock);
-					connection_data->state = FORWARD;
-					///g_static_rw_lock_writer_unlock (&connection_data->lock);
-					L("setup_redirection():\tState updated to FORWARD\n",NULL, 4, connection_data->id);
-					g_string_free(key_hih_ext, TRUE);
+					///g_static_rw_lock_writer_lock (&conn->lock);
+					conn->state = FORWARD;
+					///g_static_rw_lock_writer_unlock (&conn->lock);
+					g_printerr("%s State updated to FORWARD\n", H(conn->id));
+					///g_string_free(key_hih_ext, TRUE);	///Seg fault - ROBIN - 2009-04-09
 					return OK;
 				}
-				///g_static_rw_lock_writer_lock (&connection_data->lock);
-				connection_data->replay_id++;
-				///g_static_rw_lock_writer_unlock (&connection_data->lock);
-				current = (struct pkt_struct*) g_slist_nth_data ( connection_data->BUFFER, connection_data->replay_id );
+				///g_static_rw_lock_writer_lock (&conn->lock);
+				conn->replay_id++;
+				///g_static_rw_lock_writer_unlock (&conn->lock);
+				current = (struct pkt_struct*) g_slist_nth_data ( conn->BUFFER, conn->replay_id );
 			}
-			L("setup_redirection():\t[** ...done with the forwarding loop **]\n",NULL, 2,connection_data->id);
-			L("setup_redirection():\t[** defining expected data **]\n",NULL, 2,connection_data->id);
+			g_printerr("%s [** ...done with the forwarding loop **]\n", H(conn->id));
+			g_printerr("%s [** defining expected data **]\n", H(conn->id));
 			/*! then define the next expected data */
 			define_expected_data(current);
-			///g_static_rw_lock_writer_lock (&connection_data->lock);
-			connection_data->replay_id++;
-			///g_static_rw_lock_writer_unlock (&connection_data->lock);
+			///g_static_rw_lock_writer_lock (&conn->lock);
+			conn->replay_id++;
+			///g_static_rw_lock_writer_unlock (&conn->lock);
 		} else {
 			g_string_free(key_hih_ext, TRUE);
 		}

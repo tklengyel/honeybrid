@@ -96,13 +96,9 @@ int send_raw(struct iphdr *p)
 	dst.sin_addr.s_addr = p->daddr;
 	dst.sin_family = AF_INET;
 
-	char * logbuf;
-	logbuf = malloc(128);
 	/// This line seg fault...
 	///sprintf(logbuf, "send_raw():\tSending raw packet from %s to %s\n", inet_ntoa(*(struct in_addr*)p->saddr), inet_ntoa(*(struct in_addr*)p->daddr));
-	sprintf(logbuf, "send_raw():\t\tSending raw packet to %s\n", inet_ntoa(dst.sin_addr));
-	L(NULL, logbuf , 4, 4);
-	//L("send_raw():\tSending raw packet\n",NULL,4,4);
+	g_printerr("%s Sending raw packet to %s\n", H(4), inet_ntoa(dst.sin_addr));
 
 	/*!If TCP, use the TCP raw socket*/
 	if(p->protocol==0x06)
@@ -129,13 +125,13 @@ int send_raw(struct iphdr *p)
 	}
 	else
 	{
-		L("send_raw():\tIncorrect protocol\n",NULL,2,4);
+		g_printerr("%s Incorrect protocol\n", H(4));
 		return NOK;
 	}
 	
 	if(bytes_sent <= 0) 
 	{
-		L("send_raw():\tPacket not sent\n",NULL,2,4);
+		g_printerr("%s Packet not sent\n", H(4));
 		return NOK;
 	}
 	return OK;
@@ -159,20 +155,20 @@ int forward(struct pkt_struct* pkt)
 	/*!If packet from HIH, we forward if to EXT with LIH source*/
 	if(pkt->origin == HIH)
 	{
-		L("forward():\tforwarding packet to ext\n",NULL,3,pkt->connection_data->id);
+		L("forward():\tforwarding packet to ext\n",NULL,3,pkt->conn->id);
 		/*!We set LIH source IP*/
-		fwd->saddr = pkt->connection_data->hih.lih_addr;
+		fwd->saddr = pkt->conn->hih.lih_addr;
 		/*!If TCP, we update the source port, the sequence number, and the checksum*/
 		if(fwd->protocol==0x06)
 		{
-			((struct tcp_packet*)fwd)->tcp.source = pkt->connection_data->hih.port;
-			((struct tcp_packet *)fwd)->tcp.seq = htonl(ntohl(pkt->packet.tcp->seq) + pkt->connection_data->hih.delta) ;
+			((struct tcp_packet*)fwd)->tcp.source = pkt->conn->hih.port;
+			((struct tcp_packet *)fwd)->tcp.seq = htonl(ntohl(pkt->packet.tcp->seq) + pkt->conn->hih.delta) ;
 			tcp_checksum( (struct tcp_packet*)fwd );
 		}
 		/*!If UDP, we update the source port and the checksum*/
 		else if(fwd->protocol==0x11)//udp
 		{
-			((struct udp_packet*)fwd)->udp.source = pkt->connection_data->hih.port;
+			((struct udp_packet*)fwd)->udp.source = pkt->conn->hih.port;
 			udp_checksum((struct udp_packet*)fwd);
 		}
 
@@ -180,23 +176,23 @@ int forward(struct pkt_struct* pkt)
 	/*!If packet from EXT, we forward if to HIH*/
 	else if(pkt->origin == EXT)
 	{
-		L("forward():\tforwarding packet to HIH\n",NULL,3,pkt->connection_data->id);
+		L("forward():\tforwarding packet to HIH\n",NULL,3,pkt->conn->id);
 		/*!If packet from HIH, we forward if to EXT with LIH source*/
-		fwd->daddr = pkt->connection_data->hih.addr;
+		fwd->daddr = pkt->conn->hih.addr;
 		/*!If TCP, we update the destination port, the acknowledgement number if any, and the checksum*/
 		if(fwd->protocol==0x06)
 		{
-			((struct tcp_packet *)fwd)->tcp.dest = pkt->connection_data->hih.port;
+			((struct tcp_packet *)fwd)->tcp.dest = pkt->conn->hih.port;
 			if(((struct tcp_packet *)fwd)->tcp.ack==1)
 			{
-				((struct tcp_packet *)fwd)->tcp.ack_seq = htonl(ntohl(pkt->packet.tcp->ack_seq) + ~(pkt->connection_data->hih.delta) + 1) ;
+				((struct tcp_packet *)fwd)->tcp.ack_seq = htonl(ntohl(pkt->packet.tcp->ack_seq) + ~(pkt->conn->hih.delta) + 1) ;
 			}
 			tcp_checksum( (struct tcp_packet*)fwd );
 		}
 		/*!If UDP, we update the destination port and the checksum*/
 		else if(fwd->protocol==0x11)
 		{
-			((struct udp_packet*)fwd)->udp.dest = pkt->connection_data->hih.port;
+			((struct udp_packet*)fwd)->udp.dest = pkt->conn->hih.port;
 			udp_checksum((struct udp_packet*)fwd);
 		}
 	}
@@ -268,25 +264,25 @@ int reply_reset(struct packet p)
 /*! reset_lih
  *
  \brief reset the LIH when redirected to HIH
- \param[in] connection_data: the connnection that the LIH reset
+ \param[in] conn: the connnection that the LIH reset
  */
 
-int reset_lih(struct conn_struct* connection_data)
+int reset_lih(struct conn_struct* conn)
 {
 	int res = NOK;
 	struct packet p;
 	p.ip = NULL;
 	struct pkt_struct* tmp;
 	/*! find last packet from LIH*/
-	L("reset_lih():\tReseting LIH\n",NULL, 2, connection_data->id);
-	GSList * current = (GSList *)connection_data->BUFFER;
+	L("reset_lih():\tReseting LIH\n",NULL, 2, conn->id);
+	GSList * current = (GSList *)conn->BUFFER;
 	do{
 		tmp = (struct pkt_struct*) g_slist_nth_data ( current, 0 );
 		if(tmp->origin == LIH)
 			memcpy(&p, &tmp->packet,sizeof(struct packet));
 	}while((current = g_slist_next(current)) != NULL);
 	if(p.ip == NULL){
-		L("reset_lih():\tno packet found from LIH\n",NULL, 2, connection_data->id);
+		L("reset_lih():\tno packet found from LIH\n",NULL, 2, conn->id);
 	}else
 	/*! call reply_reset() with this packet*/
 		res = reply_reset(p);
@@ -296,59 +292,59 @@ int reset_lih(struct conn_struct* connection_data)
 /*! replay
  *
  \brief reset the LIH when redirected to HIH
- \param[in] connection_data: the connnection being replayed
+ \param[in] conn: the connnection being replayed
  \param[in] pkt: the packet from HIH to test
 
  */
 
-int replay(struct conn_struct* connection_data, struct pkt_struct* pkt)
+int replay(struct conn_struct* conn, struct pkt_struct* pkt)
 {
 	int de=0;
 	struct pkt_struct* current;
 
-	L("replay():\tReplay called\n",NULL, 4, connection_data->id);
+	L("replay():\tReplay called\n",NULL, 4, conn->id);
 
 	if(pkt->origin != HIH)
 	{
-		free_packet_struct(pkt);
+		free_pkt(pkt);
 		return NOK;
 	}
 	/*! If packet is from HIH and matches expected data then we replay the following packets from EXT to HIH until we find a packet from LIH*/
-	if(test_expected(connection_data,pkt) == OK)
+	if(test_expected(conn,pkt) == OK)
 	{
-		current = (struct pkt_struct*) g_slist_nth_data ( connection_data->BUFFER, connection_data->replay_id );
+		current = (struct pkt_struct*) g_slist_nth_data ( conn->BUFFER, conn->replay_id );
 		de = current->DE;
 		while(current->origin == EXT || de == 1)
 		{
 			if(current->origin == EXT)
 				forward(current);
-			if(g_slist_next(g_slist_nth( connection_data->BUFFER, connection_data->replay_id )) == NULL)
+			if(g_slist_next(g_slist_nth( conn->BUFFER, conn->replay_id )) == NULL)
 			{
-				g_static_rw_lock_writer_lock( &connection_data->lock );
-				connection_data->state = FORWARD;
-				g_static_rw_lock_writer_unlock( &connection_data->lock );
+				g_static_rw_lock_writer_lock( &conn->lock );
+				conn->state = FORWARD;
+				g_static_rw_lock_writer_unlock( &conn->lock );
 
-				L("replay():\tState updated to FORWARD\n",NULL, 2, connection_data->id);
-				free_packet_struct(pkt);
+				L("replay():\tState updated to FORWARD\n",NULL, 2, conn->id);
+				free_pkt(pkt);
 				return OK;
 			}
-			connection_data->replay_id++;
-			current = (struct pkt_struct*) g_slist_nth_data ( connection_data->BUFFER, connection_data->replay_id );
+			conn->replay_id++;
+			current = (struct pkt_struct*) g_slist_nth_data ( conn->BUFFER, conn->replay_id );
 			if(de == 0)
 				de = current->DE;
 		}
 		/*!Then we define expected data according to that packet*/
 		define_expected_data(current);
-		g_static_rw_lock_writer_lock( &connection_data->lock );
-		connection_data->replay_id++;
-		g_static_rw_lock_writer_unlock( &connection_data->lock );
+		g_static_rw_lock_writer_lock( &conn->lock );
+		conn->replay_id++;
+		g_static_rw_lock_writer_unlock( &conn->lock );
 	}
 	else
 	{
-		free_packet_struct(pkt);
+		free_pkt(pkt);
 		return NOK;
 	}
-	free_packet_struct(pkt);
+	free_pkt(pkt);
 	return OK;
 }
 
@@ -385,16 +381,16 @@ int udp_checksum(struct udp_packet* hdr)
  */
 int define_expected_data(struct pkt_struct* pkt)
 {
-	g_static_rw_lock_writer_lock( &pkt->connection_data->lock );
-	pkt->connection_data->expected_data.ip_proto = pkt->packet.ip->protocol;
+	g_static_rw_lock_writer_lock( &pkt->conn->lock );
+	pkt->conn->expected_data.ip_proto = pkt->packet.ip->protocol;
 	if(pkt->packet.ip->protocol==0x06)
 	{
-		pkt->connection_data->expected_data.tcp_seq = ntohl(pkt->packet.tcp->seq) + ~pkt->connection_data->hih.delta + 1;
-		pkt->connection_data->expected_data.tcp_ack_seq = ntohl(pkt->packet.tcp->ack_seq);
+		pkt->conn->expected_data.tcp_seq = ntohl(pkt->packet.tcp->seq) + ~pkt->conn->hih.delta + 1;
+		pkt->conn->expected_data.tcp_ack_seq = ntohl(pkt->packet.tcp->ack_seq);
 		
 	}
-	pkt->connection_data->expected_data.payload = pkt->packet.payload;
-	g_static_rw_lock_writer_unlock( &pkt->connection_data->lock );
+	pkt->conn->expected_data.payload = pkt->packet.payload;
+	g_static_rw_lock_writer_unlock( &pkt->conn->lock );
 	return OK;
 }
 
@@ -402,62 +398,62 @@ int define_expected_data(struct pkt_struct* pkt)
  *
  \brief get the packet from HIH, compare it to expected data, drop it and return the comparison result
  */
-int test_expected(struct conn_struct* connection_data, struct pkt_struct* pkt)
+int test_expected(struct conn_struct* conn, struct pkt_struct* pkt)
 {
 	int flag= NOK;
 	char *logbuf;
 	/*! lock the structure
 	 */
-	g_static_rw_lock_writer_lock( &connection_data->lock );
+	g_static_rw_lock_writer_lock( &conn->lock );
 
-	if(pkt->packet.ip->protocol != connection_data->expected_data.ip_proto)
+	if(pkt->packet.ip->protocol != conn->expected_data.ip_proto)
 	{
 		flag=NOK;
-		//L("test_expected():\tUnexpected protocol\n",NULL, 2, connection_data->id);
+		//L("test_expected():\tUnexpected protocol\n",NULL, 2, conn->id);
 		logbuf = malloc(128);
 		sprintf(logbuf, "test_expected():\tUnexpected protocol: %d\n", pkt->packet.ip->protocol);
-		L(NULL, logbuf, 2, connection_data->id);
+		L(NULL, logbuf, 2, conn->id);
 
-		connection_data->replay_problem =  connection_data->replay_problem | 8;
+		conn->replay_problem =  conn->replay_problem | 8;
 	}
-	else if( (pkt->packet.ip->protocol == 0x06) && (pkt->packet.tcp->syn == 0) && (ntohl(pkt->packet.tcp->seq) != connection_data->expected_data.tcp_seq))
+	else if( (pkt->packet.ip->protocol == 0x06) && (pkt->packet.tcp->syn == 0) && (ntohl(pkt->packet.tcp->seq) != conn->expected_data.tcp_seq))
 	{
 		flag=NOK;
-		L("test_expected():\tUnexpected TCP seq. number\n",NULL, 2, connection_data->id);
-		connection_data->replay_problem =  connection_data->replay_problem | 4;
+		L("test_expected():\tUnexpected TCP seq. number\n",NULL, 2, conn->id);
+		conn->replay_problem =  conn->replay_problem | 4;
 	}
-	else if( (pkt->packet.ip->protocol == 0x06) && (ntohl(pkt->packet.tcp->ack_seq) != connection_data->expected_data.tcp_ack_seq))
+	else if( (pkt->packet.ip->protocol == 0x06) && (ntohl(pkt->packet.tcp->ack_seq) != conn->expected_data.tcp_ack_seq))
 	{
 		flag=NOK;
-		L("test_expected():\tUnexpected TCP ack. number\n",NULL, 2, connection_data->id);
-		connection_data->replay_problem =  connection_data->replay_problem | 2;
+		L("test_expected():\tUnexpected TCP ack. number\n",NULL, 2, conn->id);
+		conn->replay_problem =  conn->replay_problem | 2;
 	}
-	else if( (pkt->packet.ip->protocol == 0x06) && (!strncmp( pkt->packet.payload, connection_data->expected_data.payload,pkt->data) == 0))
+	else if( (pkt->packet.ip->protocol == 0x06) && (!strncmp( pkt->packet.payload, conn->expected_data.payload,pkt->data) == 0))
 	{
 		flag=OK;
-		L("test_expected():\tUnexpected payload\n",NULL, 2, connection_data->id);
-		connection_data->replay_problem =  connection_data->replay_problem | 1;
+		L("test_expected():\tUnexpected payload\n",NULL, 2, conn->id);
+		conn->replay_problem =  conn->replay_problem | 1;
 	}
 	else
 	{
 		flag=OK;
-		L("test_expected():\tExpected data OK\n",NULL, 3, connection_data->id);
+		L("test_expected():\tExpected data OK\n",NULL, 3, conn->id);
 	}
 
 	/*! free the lock
 	 */
-	g_static_rw_lock_writer_unlock( &connection_data->lock );
+	g_static_rw_lock_writer_unlock( &conn->lock );
 
 	return flag;
 }
 
-/*! create_raw_sockets
+/*! init_raw_sockets
  \brief create the two raw sockets for UDP/IP and TCP/IP
  *
  \return OK
  */
 
-int create_raw_sockets()
+int init_raw_sockets()
 {
 	int opt=1;
 	/*! create the two raw sockets for UDP/IP and TCP/IP

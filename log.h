@@ -25,7 +25,7 @@
 #include <glib.h>
 
 /*! 
- \Def verbosity channel
+ \def verbosity channel
   1 errors only
   2 minimal redirection information
   3 full redirection information
@@ -40,7 +40,7 @@
 
 
 /*!
- \Def log identifiers
+ \def log identifiers
  * log id values:
  1 -> main
  2 -> signal handlers
@@ -64,7 +64,7 @@
 #define LOG_HONEYPOT 9
 
 /*!
- \Def log level
+ \def log level
  */
 
 int LOG_LEVEL;
@@ -96,21 +96,25 @@ struct log_event
  */
 GHashTable *log_table;
 
-#define L(sdata,ddata,level,id) if (0 != honeylog(sdata,ddata,level,id)){g_print("******LOG ENGINE ERROR******\n");}
+#define L(sdata,ddata,level,id) 	if (0 != honeylog(sdata,ddata,level,id)){g_print("******LOG ENGINE ERROR******\n");}
+#define H(id) 				log_header(__func__, id)
+
+char* log_header(const char* function_name, int id);
+char* now(void);
 
 int honeylog(char *sdata, char *ddata, int level, unsigned id);
 
-void write_log();
+int open_debug_log(void);
 
-int close_log_file(void);
+int close_connection_log(void);
 
-int open_log_file(void);
+void open_connection_log(void);
 
 //void rotate_log(int signal_nb, void *siginfo, void *context);
-void rotate_log(int signal_nb);
+void rotate_connection_log(int signal_nb);
 
 //void connection_stat(struct conn_struct *conn);
-void connection_stat();
+void connection_log();
 
 #endif ///_LOG_H_
 

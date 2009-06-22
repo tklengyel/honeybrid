@@ -18,7 +18,7 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-/*! \file sha1_mod.c
+/*! \file mod_hash.c
  * \brief SHA 1 Module for honeybrid Decision Engine
  *
  * This module is called by a boolean decision tree to process a message digest and try to find it in a search table
@@ -38,15 +38,15 @@
 #include "modules.h"
 #include "netcode.h"
 
-#include "sha1_mod.h"
+#include "mod_hash.h"
 
 /*!
- \Def sigdb_max
+ \def sigdb_max
  */
 int sigdb_max = 32;
 
 /*!
- \Def hash_id
+ \def hash_id
  */
 int hash_id;
 
@@ -62,10 +62,10 @@ void print_md (gpointer key, gpointer value, FILE *fd)
         fprintf(fd,"%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%s\t%s\n", info->bdd_id, info->port, info->id, info->counter, info->first_seen, info->duration, info->packet, info->byte, (char *)key, info->ascii);
 }
 
-/*! sha1_print
+/*! hash_print
  \brief browse the research tables and print the fingerprint to a file
  */
-void sha1_print()
+void hash_print()
 {
 
 	FILE *fd;
@@ -79,11 +79,11 @@ void sha1_print()
 
 		if (db_updated > 0) {
 
-			L("sha1_print():\tsaving database\n",NULL,5,6);
+			L("hash_print():\tsaving database\n",NULL,5,6);
 
 			/*! open file in writing mode */
-			if (NULL == (fd = fopen(g_hash_table_lookup(config, "sha1table"), "w"))) {
-				L("sha1_print():\terr... nowhere to save! Please configure sha1table correctly.\n",NULL,5,6);
+			if (NULL == (fd = fopen(g_hash_table_lookup(config, "hashtable"), "w"))) {
+				L("hash_print():\terr... nowhere to save! Please configure hashtable correctly.\n",NULL,5,6);
 				continue;
 			}
 			/*! print the header */
@@ -93,20 +93,20 @@ void sha1_print()
 			for(i=0; i<sigdb_max; i++)
 			{
 				fprintf(fd,"#~~~BDD%d~~~\n",i);
-				g_hash_table_foreach(sha1_bdd[i],(GHFunc) print_md, fd);
+				g_hash_table_foreach(hash_bdd[i],(GHFunc) print_md, fd);
 			}
 			fclose(fd);
 		} else {
-			 L("sha1_print():\tNo need to save the source database\n",NULL,5,6);
+			 L("hash_print():\tNo need to save the source database\n",NULL,5,6);
 		}
 	}
 }
 
-/*! init_mod_sha1
- \brief init the sha1 message digest module, fill up the databases */
-int init_mod_sha1()
+/*! init_mod_hash
+ \brief init the hash message digest module, fill up the databases */
+int init_mod_hash()
 {
-	L("init_mod_sha1():\tInitializing SHA-1 Module\n",NULL,3,6);
+	L("init_mod_hash():\tInitializing Hash Module\n",NULL,3,6);
 
 	hash_id = 1;
 
@@ -115,19 +115,19 @@ int init_mod_sha1()
 	md = EVP_get_digestbyname("sha1");
 	int i,res;
 	int ascii_len = 64;
-	int sha1_len = 41;
+	int hash_len = 41;
 	int info_len = sizeof(struct hash_info);
 
 	db_updated = 1;
 
 	/*! init the signatures databases */
-	sha1_bdd = malloc(sigdb_max * sizeof(GHashTable *));
+	hash_bdd = malloc(sigdb_max * sizeof(GHashTable *));
 
 	for(i=0; i<sigdb_max; i++)
 	{
-		if (NULL == (sha1_bdd[i] = g_hash_table_new(g_str_hash, g_str_equal)) )
+		if (NULL == (hash_bdd[i] = g_hash_table_new(g_str_hash, g_str_equal)) )
 		{
-			L("init_mod_sha1():\tError while creating hash table...EXIT\n",NULL,2,6);
+			L("init_mod_hash():\tError while creating hash table...EXIT\n",NULL,2,6);
 			return -1;
 		}
 	}
@@ -142,33 +142,33 @@ int init_mod_sha1()
 	char *key;
 	struct hash_info * info;
 
-	if (NULL != (fd = fopen(g_hash_table_lookup(config, "sha1table"), "r")))
+	if (NULL != (fd = fopen(g_hash_table_lookup(config, "hashtable"), "r")))
 	{
 		/*! for each database */
-		key   = malloc(sha1_len);
+		key   = malloc(hash_len);
 		info = malloc(info_len);
 		info->ascii = malloc(ascii_len);
 		while(fgets(buf, BUFSIZ, fd))
 		{
 			/*! select the hash table to load it */
 			sscanf(buf,"#~~~BDD%i~~~",&i);
-			if(i < 0 || i >= sigdb_max || strlen(buf) < sha1_len || strlen(buf) > (sha1_len + info_len + ascii_len + 10) || buf[0] == '#') {
+			if(i < 0 || i >= sigdb_max || strlen(buf) < hash_len || strlen(buf) > (hash_len + info_len + ascii_len + 10) || buf[0] == '#') {
 				continue;
 			}
 			//res = sscanf(buf,"%[0-9a-f] %[^\n]",tmp_key, tmp_value);
 			res = sscanf(buf, "%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%[0-9a-f]\t%[^\n]", &info->bdd_id, &info->port, &info->id, &info->counter, &info->first_seen, &info->duration, &info->packet, &info->byte, key, info->ascii);
 
-			if(res != 10 || strlen(key) !=(sha1_len - 1) || NULL != g_hash_table_lookup(sha1_bdd[i], key)) {
+			if(res != 10 || strlen(key) !=(hash_len - 1) || NULL != g_hash_table_lookup(hash_bdd[i], key)) {
 				sigerror++;
 				continue;
 			}
-			g_hash_table_insert (sha1_bdd[i], key, info);
+			g_hash_table_insert (hash_bdd[i], key, info);
 
 			if (info->id > hash_id) {
 				hash_id = (info->id + 1);
 			}
 
-			key = malloc(sha1_len);
+			key = malloc(hash_len);
 			info = malloc(info_len);
 			info->ascii = malloc(ascii_len);
 			signcpt++;
@@ -179,35 +179,35 @@ int init_mod_sha1()
 		fclose(fd);
 	}
 	logbuf = malloc(64);
-	sprintf(logbuf,"init_mod_sha1():\t%d signature(s) loaded\n",signcpt);
+	sprintf(logbuf,"init_mod_hash():\t%d signature(s) loaded\n",signcpt);
 	L(NULL, logbuf, 2, 6);
 	if (sigerror > 0) {
 		logbuf = malloc(64);
-		sprintf(logbuf,"init_mod_sha1():\tERROR! %d signature(s) could not be parsed\n",sigerror);
+		sprintf(logbuf,"init_mod_hash():\tERROR! %d signature(s) could not be parsed\n",sigerror);
 		L(NULL, logbuf, 2, 6);
 	}
 
 	/*! create a thread that will print the fingerprint to a file every minute */
-	if( g_thread_create_full ((void *)sha1_print, NULL, 0, FALSE, TRUE,G_THREAD_PRIORITY_LOW, NULL) == NULL)
+	if( g_thread_create_full ((void *)hash_print, NULL, 0, FALSE, TRUE,G_THREAD_PRIORITY_LOW, NULL) == NULL)
 		return -1;
 	return 0;
 }
 
-/*! mod_sha1
+/*! mod_hash
  \param[in] args, struct that contain the node and the datas to process
  \param[in] user_data, not used
  *
  \param[out] set result to 0 if datas's fingerprint is found in search table, 1 if not
  */
-void mod_sha1(struct mod_args args)
+void mod_hash(struct mod_args args)
 {
-	L("mod_sha1():\tModule called\n", NULL, 3, args.pkt->connection_data->id);
+	L("mod_hash():\tModule called\n", NULL, 3, args.pkt->conn->id);
 
 	/*! First, we make sure that we have data to work on */
 	if (args.pkt->data == 0) {
 		args.node->result = 0;
                 args.node->info_result = -1;
-		L("mod_sha1():\tNo data to work on!\n", NULL, 3, args.pkt->connection_data->id);	
+		L("mod_hash():\tNo data to work on!\n", NULL, 3, args.pkt->conn->id);	
 		return;
 	}
 
@@ -240,13 +240,13 @@ void mod_sha1(struct mod_args args)
 	sscanf(key_dst[1], "%d", &port);
 
 	/*! get the payload from the packet */
-	memcpy( payload, args.pkt->packet.payload, args.pkt->data);
+	memcpy( payload, args.pkt->packet.payload, args.pkt->data - 1);
 	payload[args.pkt->data] = '\0';
 
 	if (strlen(key_dst[0]) >= 7) {
 		/*! replacing occurrences of the destination IP by a generic string */
 		while(NULL != (position = strstr(payload, key_dst[0]))) {
-			L("mod_sha1():\tfound the dst ip in the payload! Replacing it...\n", NULL, 4, args.pkt->connection_data->id);
+			L("mod_hash():\tfound the dst ip in the payload! Replacing it...\n", NULL, 4, args.pkt->conn->id);
 
 			pos = (int)(position-payload);	
 
@@ -272,7 +272,7 @@ void mod_sha1(struct mod_args args)
 	}
 	ascii = malloc(ascii_len + 1);
 
-	L("mod_sha1():\tcomputing payload digest\n", NULL, 4, args.pkt->connection_data->id);
+	L("mod_hash():\tcomputing payload digest\n", NULL, 4, args.pkt->conn->id);
 
 	/*! digest the payload */
 	EVP_MD_CTX ctx;
@@ -292,7 +292,7 @@ void mod_sha1(struct mod_args args)
 	for(i = 0; i < md_len; i++)
 		sprintf(submit + (i<<1),"%02x",md_value[i]);
 
-	L("mod_sha1():\tcomputing payload ascii representation\n", NULL, 4, args.pkt->connection_data->id);
+	L("mod_hash():\tcomputing payload ascii representation\n", NULL, 4, args.pkt->conn->id);
 
 	///g_print("=============\n");
 	for(i = 0; i < ascii_len; i++) {
@@ -305,15 +305,15 @@ void mod_sha1(struct mod_args args)
 	ascii[ascii_len] = '\0';
 
 	logbuf = malloc(ascii_len+64);
-	sprintf(logbuf,"mod_sha1():\tASCII of %d char [%s]\n", ascii_len, ascii);
-	L(NULL, logbuf, 4, args.pkt->connection_data->id);
+	sprintf(logbuf,"mod_hash():\tASCII of %d char [%s]\n", ascii_len, ascii);
+	L(NULL, logbuf, 4, args.pkt->conn->id);
 
-	L("mod_sha1():\tSearching for fingerprint\n", NULL, 4, args.pkt->connection_data->id);
+	L("mod_hash():\tSearching for fingerprint\n", NULL, 4, args.pkt->conn->id);
 
 	/*! select the hash table for the research */
 	sscanf(args.node->arg,"bdd%d",&i);
 
-	info = g_hash_table_lookup(sha1_bdd[i],submit);
+	info = g_hash_table_lookup(hash_bdd[i],submit);
 
 	if (NULL == info)
 	{
@@ -328,16 +328,16 @@ void mod_sha1(struct mod_args args)
 		info->first_seen = now;
 		info->duration = 0;
 		info->port = port;
-		info->packet = args.pkt->connection_data->count_data_pkt_from_intruder;
+		info->packet = args.pkt->conn->count_data_pkt_from_intruder;
 		info->byte = args.pkt->data;
 		memcpy( info->ascii, ascii, ascii_len);
 		info->ascii[ascii_len] = '\0';
 
 		logbuf = malloc(256);
-                sprintf(logbuf,"mod_sha1():\tCreating a new entry in bdd%d with id %d and counter: %d and time: %d\n", info->bdd_id, info->id, info->counter, info->first_seen);
-                L(NULL, logbuf, 2, args.pkt->connection_data->id);
+                sprintf(logbuf,"mod_hash():\tCreating a new entry in bdd%d with id %d and counter: %d and time: %d\n", info->bdd_id, info->id, info->counter, info->first_seen);
+                L(NULL, logbuf, 2, args.pkt->conn->id);
 		
-		g_hash_table_insert (sha1_bdd[i], submit, info);
+		g_hash_table_insert (hash_bdd[i], submit, info);
 
 		args.node->info_result = info->id;
 	}
@@ -350,27 +350,28 @@ void mod_sha1(struct mod_args args)
 		info->duration = (now - info->first_seen);
 
 		logbuf = malloc(256);
-                sprintf(logbuf,"mod_sha1():\tUpdating the entry %d in bdd%d with counter: %d and time: %d\n", info->id, info->bdd_id, info->counter, info->duration);
-                L(NULL, logbuf, 2, args.pkt->connection_data->id);
+                sprintf(logbuf,"mod_hash():\tUpdating the entry %d in bdd%d with counter: %d and time: %d\n", info->id, info->bdd_id, info->counter, info->duration);
+                L(NULL, logbuf, 2, args.pkt->conn->id);
 
-		free(submit);
-		free(ascii);
+		g_free(submit);
+		g_free(ascii);
 	}
 
 	if(args.node->result == 1)
 	{
 		logbuf = malloc(256);
-		sprintf(logbuf,"mod_sha1():\tPACKET MATCH RULE for sha1(bdd%d) with hash %d\n",i, info->id);
-		L(NULL, logbuf, 2, args.pkt->connection_data->id);
+		sprintf(logbuf,"mod_hash():\tPACKET MATCH RULE for hash(bdd%d) with hash %d\n",i, info->id);
+		L(NULL, logbuf, 2, args.pkt->conn->id);
 	}
 	else {
 		logbuf = malloc(256);
-		sprintf(logbuf,"mod_sha1():\tPACKET DOES NOT MATCH RULE for sha1(bdd%d)\n",i);
-		L(NULL, logbuf, 2, args.pkt->connection_data->id);
+		sprintf(logbuf,"mod_hash():\tPACKET DOES NOT MATCH RULE for hash(bdd%d)\n",i);
+		L(NULL, logbuf, 2, args.pkt->conn->id);
 	}
 
 	/*! clean and exit */
-	free(payload);
+	g_free(payload);
+	g_free(ascii);
 	return;
 }
 

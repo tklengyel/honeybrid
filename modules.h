@@ -59,7 +59,7 @@ struct node
 };
 
 
-void mod_table_init();
+void init_modules();
 
 void (*get_module(char *modname))(struct mod_args);
 
@@ -73,13 +73,13 @@ void mod_yesno(struct mod_args args);
 
 /*!*************** PACKET POSITION COUNTER FUNCTIONS AND VARIABLES *****************************/
 
-/*! mod_incpsh
+/*! mod_counter
  \brief count push packets from the attacker
  */
-void mod_incpsh(struct mod_args args);
+void mod_counter(struct mod_args args);
 
 
-/*!*************** SHA-1 FUNCTIONS AND VARIABLES ***********************************************/
+/*!*************** HASH FUNCTIONS AND VARIABLES ***********************************************/
 
 
 //#ifndef _NO_SSL_
@@ -91,11 +91,11 @@ const EVP_MD *md;
 /*!
  \def SHA1 BDD HASH TABLES
  */
-GHashTable **sha1_bdd;
+GHashTable **hash_bdd;
 
-int init_mod_sha1();
+int init_mod_hash();
 
-void mod_sha1(struct mod_args args);
+void mod_hash(struct mod_args args);
 
 /*!
  \def Source bdd hash table

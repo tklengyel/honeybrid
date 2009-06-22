@@ -18,7 +18,7 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-/*! \file proxy_mod.c
+/*! \file mod_proxy.c
  * \brief Packet counter Module for honeybrid Decision Engine
  *
  * This module returns the position of a packet in the connection
@@ -32,7 +32,7 @@
 
 #include "modules.h"
 #include "tables.h"
-#include "proxy_mod.h"
+#include "mod_proxy.h"
 
 /*! mod_proxy
  \param[in] args, struct that contain the node and the datas to process
@@ -42,10 +42,10 @@
 void mod_proxy(struct mod_args args)
 {
 	char *logbuf;
-	L("mod_proxy():\tModule called\n", NULL, 3,args.pkt->connection_data->id);
+	L("mod_proxy():\tModule called\n", NULL, 3,args.pkt->conn->id);
 	int pktval = atoi(args.node->arg);
 
-	if(pktval <= args.pkt->connection_data->count_data_pkt_from_intruder)
+	if(pktval <= args.pkt->conn->count_data_pkt_from_intruder)
 	{
 		/*! we introduce a new return value, meaning that we can skip the replay part and go
 		    directly in PROXY mode, which is like FORWARD but without NATing */
@@ -53,14 +53,14 @@ void mod_proxy(struct mod_args args)
 		args.node->result = 2;		/* This one goes directly to the proxy mode */
 		logbuf = malloc(128);
 		sprintf(logbuf,"mod_proxy():\tPACKET MATCH RULE for proxy(%d)\n", pktval);
-		L(NULL, logbuf, 2, args.pkt->connection_data->id);
+		L(NULL, logbuf, 2, args.pkt->conn->id);
 	}
 	else
 	{
 		args.node->result = 0;
 		logbuf = malloc(128);
                 sprintf(logbuf,"mod_proxy():\tPACKET DOES NOT MATCH RULE for proxy(%d)\n", pktval);
-                L(NULL, logbuf, 2, args.pkt->connection_data->id);
+                L(NULL, logbuf, 2, args.pkt->conn->id);
 	}
 }
 

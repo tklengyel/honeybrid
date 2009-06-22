@@ -79,25 +79,25 @@ unsigned c_id;
  */
 GPtrArray *entrytoclean;
 
-int init_packet_struct( char *nf_packet, struct pkt_struct *new_packet_data);
+int init_pkt( char *nf_packet, struct pkt_struct *pkt);
 
-int free_packet_struct( struct pkt_struct *pkt );
+int free_pkt( struct pkt_struct *pkt );
 
-int get_current_struct(struct pkt_struct *current_packet_data, struct conn_struct **current_connection_data);
+int init_conn(struct pkt_struct *pkt, struct conn_struct **conn);
 
 int test_honeypot_addr( char *testkey, int list );
 
 char * lookup_honeypot_addr( gchar *testkey, int list );
 
-int store_packet(struct conn_struct *current_connection_data, struct pkt_struct *current_packet_data);
+int store_pkt(struct conn_struct *conn, struct pkt_struct *pkt);
 
 void clean();
 
-int setup_redirection(struct conn_struct *connection_data);
+int setup_redirection(struct conn_struct *conn);
 
-int match_old_value(gpointer key, struct conn_struct *cur_conn, gint *expiration_delay);
+int expire_conn(gpointer key, struct conn_struct *cur_conn, gint *expiration_delay);
 
-void remove_old_value(gpointer key, gpointer trash);
+void free_conn(gpointer key, gpointer trash);
 
 /*! \brief constants to define the origin of a packet
  */
@@ -114,6 +114,7 @@ void remove_old_value(gpointer key, gpointer trash);
 #define FORWARD 	4
 #define PROXY		5
 #define DROP		6
+#define CONTROL		7
 
 /*!
   \def OK

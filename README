@@ -96,7 +96,7 @@ Adding a new module -- Example with the module RANDOM:
  4. Add the following function declarations in modules.h:
 	int init_mod_random();		[** this is optional, only if you need some initialization **]
 	void mod_random(struct mod_args args);
- 5. Add the following call in the function mod_table_init() in modules.c:
+ 5. Add the following call in the function init_modules() in modules.c:
 	init_mod_random();		[** this is optional, only if you need some initialization **]
  6. Add the following condition in the function get_module() in modules.c:
 	else if(!strncmp(modname,"random",6))
@@ -106,7 +106,7 @@ Now that you completed these 6 steps, your module is defined and hooked to
 the system. The last task is to get it do something! For this you just have
 to fill the function mod_random() with instructions.
 The args structure given in argument of mod_random() has two main variables:
- - args.pkt is a struct_pkt where you can extract args.pkt->connection_data to have
+ - args.pkt is a struct_pkt where you can extract args.pkt->conn to have
    access to the connection structure
  - args.node has two interesting variables: 
 	args.node->arg is the argument configured for this module and this
@@ -118,7 +118,7 @@ To illustrate how everything works together, here is the content of mod_random()
  --8<------------------------------
   void mod_random(struct mod_args args)
   {
-        L("mod_random():\tModule called\n", NULL, 3, args.pkt->connection_data->id);
+        L("mod_random():\tModule called\n", NULL, 3, args.pkt->conn->id);
 
         unsigned int value;
         unsigned int proba;
@@ -135,7 +135,7 @@ To illustrate how everything works together, here is the content of mod_random()
         if (value < selector) {
                 logbuf = malloc(256);
                 sprintf(logbuf, "mod_random():\tIncorrect value given in argument: %d\n", value);
-                L(NULL, logbuf, 3, args.pkt->connection_data->id);
+                L(NULL, logbuf, 3, args.pkt->conn->id);
                 return;
         }
 
@@ -147,12 +147,12 @@ To illustrate how everything works together, here is the content of mod_random()
                 args.node->result = 1;
                 logbuf = malloc(256);
                 sprintf(logbuf,"mod_random():\tPACKET MATCH RULE for random(%d)\n", value);
-                L(NULL, logbuf, 2, args.pkt->connection_data->id);
+                L(NULL, logbuf, 2, args.pkt->conn->id);
         } else {
                 args.node->result = 0;
                 logbuf = malloc(256);
                 sprintf(logbuf,"mod_random():\tPACKET DOES NOT MATCH RULE for random(%d)\n", value);
-                L(NULL, logbuf, 2, args.pkt->connection_data->id);
+                L(NULL, logbuf, 2, args.pkt->conn->id);
         }
 
         return;

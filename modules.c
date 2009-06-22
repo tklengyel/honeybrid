@@ -33,16 +33,16 @@
 #include "modules.h"
 #include "log.h"
 
-/*! mod_table_init
+/*! init_modules
  \brief setup modules that need to be initialized
  */
 
-void mod_table_init()
+void init_modules()
 {
-	L("mod_table_init(): Initiate module\n",NULL, 2, 6);
+	g_printerr("%s Initiate module\n", H(6));
 	/*! init sha module
 	 */
-	init_mod_sha1();
+	init_mod_hash();
 	init_mod_source();
 	init_mod_random();
 }
@@ -56,10 +56,10 @@ void mod_table_init()
 void (*get_module(char *modname))(struct mod_args)
 {
 	
-	if(!strncmp(modname,"sha1",6))
-		return mod_sha1;
-	else if(!strncmp(modname,"incpsh",6))
-		return mod_incpsh;
+	if(!strncmp(modname,"hash",6))
+		return mod_hash;
+	else if(!strncmp(modname,"counter",6))
+		return mod_counter;
 	else if(!strncmp(modname,"yesno",6))
 		return mod_yesno;
 	else if(!strncmp(modname,"source",6))
@@ -69,11 +69,7 @@ void (*get_module(char *modname))(struct mod_args)
 	else if(!strncmp(modname,"proxy",6))
 		return mod_proxy;
 	
-	char *logbuf;
-	logbuf = malloc(256);
-	sprintf(logbuf, "get_module(): ERROR! No module could be found with the name: %s\n", modname);
-	L(NULL, logbuf, 2, 6);
-	
+	g_printerr("%s ERROR! No module could be found with the name: %s\n", H(6), modname);
 	return NULL;
 }
 

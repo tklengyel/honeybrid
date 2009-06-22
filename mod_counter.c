@@ -18,7 +18,7 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-/*! \file incpsh_mod.c
+/*! \file mod_counter.c
  * \brief Packet counter Module for honeybrid Decision Engine
  *
  * This module returns the position of a packet in the connection
@@ -33,32 +33,32 @@
 #include "modules.h"
 #include "tables.h"
 
-/*! mod_incpsh
+/*! mod_counter
  \param[in] args, struct that contain the node and the datas to process
  *
  \param[out] set result to 1 packet position match arg, 0 otherwise
  */
-void mod_incpsh(struct mod_args args)
+void mod_counter(struct mod_args args)
 {
 	char *logbuf;
-	L("mod_incpsh():\tModule called\n", NULL, 3,args.pkt->connection_data->id);
+	L("mod_counter():\tModule called\n", NULL, 3,args.pkt->conn->id);
 	int pktval = atoi(args.node->arg);
 
-	if(pktval <= args.pkt->connection_data->count_data_pkt_from_intruder)
+	if(pktval <= args.pkt->conn->count_data_pkt_from_intruder)
 	{
 		args.node->result = 1;
-		//L("mod_incpsh():\tPACKET MATCH RULE\n", NULL, 2, args.pkt->connection_data->id);
+		//L("mod_counter():\tPACKET MATCH RULE\n", NULL, 2, args.pkt->conn->id);
 		logbuf = malloc(128);
-		sprintf(logbuf,"mod_incpsh():\tPACKET MATCH RULE for incpsh(%d)\n", pktval);
-		L(NULL, logbuf, 2, args.pkt->connection_data->id);
+		sprintf(logbuf,"mod_counter():\tPACKET MATCH RULE for counter(%d)\n", pktval);
+		L(NULL, logbuf, 2, args.pkt->conn->id);
 	}
 	else
 	{
 		args.node->result = 0;
-		//L("mod_incpsh():\tPACKET DOES NOT MATCH RULE\n", NULL, 2, args.pkt->connection_data->id);
+		//L("mod_counter():\tPACKET DOES NOT MATCH RULE\n", NULL, 2, args.pkt->conn->id);
 		logbuf = malloc(128);
-                sprintf(logbuf,"mod_incpsh():\tPACKET DOES NOT MATCH RULE for incpsh(%d)\n", pktval);
-                L(NULL, logbuf, 2, args.pkt->connection_data->id);
+                sprintf(logbuf,"mod_counter():\tPACKET DOES NOT MATCH RULE for counter(%d)\n", pktval);
+                L(NULL, logbuf, 2, args.pkt->conn->id);
 	}
 }
 

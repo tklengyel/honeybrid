@@ -88,6 +88,6 @@ int define_expected_data(struct pkt_struct* pkt);
 
 int test_expected(struct conn_struct* connection_data, struct pkt_struct* pkt);
 
-int create_raw_sockets();
+int init_raw_sockets();
 
 #endif // _NETCODE_H_
