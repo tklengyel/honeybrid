@@ -78,7 +78,7 @@ int reset_lih(struct conn_struct* connection_data);
 
 int replay(struct conn_struct* connection_data, struct pkt_struct* pkt);
 
-int ip_checksum(struct iphdr* hdr);
+int hb_ip_checksum(struct iphdr* hdr);
 
 int tcp_checksum(struct tcp_packet* pkt);
 

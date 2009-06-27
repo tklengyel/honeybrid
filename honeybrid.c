@@ -97,82 +97,15 @@
 
 #include <ev.h>
 
-#include "honeybrid.h"
 #include "tables.h"
+#include "honeybrid.h"
 #include "netcode.h"
 ///#include "pcap_tool.h"
 #include "log.h"
 #include "decision_engine.h"
 #include "modules.h"
 #include "mod_control.h"
-
-
-
-/*! Version (should always be in sync with the content of the VERSION file) */
-#define VERSION "0.9"
-
-/*! File to store PID */
-#define PIDFILE "/var/run/honeybrid.pid"
-
-/*! writing lock initialization */
-#define G_STATIC_RW_LOCK_INIT { G_STATIC_MUTEX_INIT, NULL, NULL, 0, FALSE, 0, 0 }
-
-/*! Multi-thread safe mode */
-#define G_THREADS_ENABLED
-
-/*! Decision Engine thread enabled */
-//#define DE_THREAD
-
-/*! Cleaning Engine thread enabled */
-//#define CLEAN_THREAD
-
-/*! NFQUEUE Loop enabled
-    (when disabled, packets on the queue are processed through libev) */
-//#define NF_LOOP
-
-/*!
-  \def DESTSIZE
- *
- * max size of an IP address (4*3 = 12 + 3 dots = 15) */
-#define DESTSIZE 15
-
-/*!
-  \def CONF_MAX_LINE
- *
- * max size of a line in the configuration file */
-#define CONF_MAX_LINE 1024
-
-/*! 
- \def RESET_HIH
- * use to reset (1) or accept (0) connections initiated by HIH
- */
-#define RESET_HIH 0
-
-/*!
- \def BUFSIZE
- * use by NF_QUEUE to set the data size of received packets
- */
-#define BUFSIZE         2048
-
-/*!
- \def PAYLOADSIZE
- * use by NF_QUEUE to set the data size of received packets
- */
-#define PAYLOADSIZE     0xffff
-
-/*!
- \def running
- *
- * Init value: OK
- * Set to NOK when honeybrid stops
- * It is used to stop processing new data wht NF_QUEUE when honeybrid stops */
-int running;
-
-/*!
- \def thread_clean
- \def thread_log */
-GThread *thread_clean;
-GThread *thread_de;
+//#include "rules.h"
 
 /*! usage function
  \brief print command line informations */
@@ -226,18 +159,24 @@ int free_table(gchar *key, gchar *value, gpointer data)
 
 }
 
+/*! free_hash
+ \brief Function to free memory in the different subhash created */
+int free_hash(gchar *key, GHashTable *value, gpointer data)
+{
+	if (key != NULL && value != NULL) {
+		g_hash_table_foreach_remove(value, (GHRFunc) free_table, NULL);
+                g_hash_table_destroy(value);
+	}
+	return TRUE;
+
+}
+
 /*! close_hash function
  \brief Destroy the different hashes used by honeybrid */
 int close_hash()
 {
 	/*! Destroy hash tables 
 	 */
-	if (config != NULL) {
-		g_printerr("%s: Destroying table config\n", __func__);
-		g_hash_table_foreach_remove(config, (GHRFunc) free_table, NULL);
-		g_hash_table_destroy(config);
-	}
-
 	if (log_table != NULL) {
 		g_printerr("%s: Destroying table log_table\n", __func__);
 		g_hash_table_foreach_remove(log_table, (GHRFunc) free_table, NULL);
@@ -286,6 +225,20 @@ int close_hash()
 		*/
 	}
 
+	if (config != NULL) {
+		g_printerr("%s: Destroying table config\n", __func__);
+		g_hash_table_foreach_remove(config, (GHRFunc) free_table, NULL);
+		g_hash_table_destroy(config);
+	}
+
+	if (module != NULL) {
+		g_printerr("%s: Destroying table module\n", __func__);
+		g_hash_table_foreach(module, (GHFunc) free_hash, NULL);
+		//g_hash_table_foreach_remove(module, (GHRFunc) free_table, NULL);
+		g_hash_table_destroy(module);
+	}
+
+
 	return 0;
 }
 
@@ -323,7 +276,7 @@ void
 close_all(void)
 {
 	/*! delete lock file (only if the process ran as a daemon) */
-	if ( NULL == strstr(g_hash_table_lookup(config,"output"),"2") )
+	if ( ICONFIG("output") != 2 )
         {
 		if (unlink(PIDFILE) < 0) 
 			g_printerr("%s: Error when removing lock file\n", __func__);
@@ -336,6 +289,9 @@ close_all(void)
 	/*! delete hashes */
 	if (close_hash() < 0) 
 		g_printerr("%s: Error when closing hashes\n", __func__);
+
+	g_ptr_array_free(targets, TRUE);
+	/*! \todo: remove each element one by one and free the associated data structure */
 
 	/*! delete conn_tree */
 	if (close_conn_tree() < 0) 
@@ -400,7 +356,28 @@ init_syslog(int argc, char *argv[])
         syslog(LOG_NOTICE, "started with %s", buf);
 }
 
-/*! init_config
+/*! parse_config
+ \brief Configuration parsing function, read the configuration from a specific file 
+  and parse it into a hash table or other tree data structures using Bison/Flex
+*/
+void
+init_parser(char *filename)
+{
+	FILE *fp = fopen(filename, "r");
+	if (!fp)
+		err(1,"fopen");
+
+	//extern int yydebug;
+	//yydebug = 1;
+	yyin=fp;
+	yyparse();	
+
+	fclose(fp);
+
+	g_printerr("Parsing done\n");
+}
+
+/*! init_config	DEPRECATED
  \brief Config_parse function, read the configuration from a config file and parse it into a hash table */
 void 
 init_config (char *config_file_name)
@@ -464,19 +441,19 @@ init_config (char *config_file_name)
 	fclose(fd);
 
 	/*! DEPRECATED Initialize log_level: */
-	char* log_level_buffer = g_hash_table_lookup(config,"log_level");
+	char* log_level_buffer = CONFIG("log_level");
         if(log_level_buffer == NULL)
                 LOG_LEVEL = 3;
 	else
         	LOG_LEVEL = atoi(log_level_buffer);
 
 	/*! feed the redirection table with the configuration file */
-	if( NULL == g_hash_table_lookup(config,"redirect_table")) {
+	if( NULL == CONFIG("redirect_table")) {
 		g_hash_table_destroy(config);
 		errx(1, "%s: No redirection table defined", __func__);
 	} else {
 		/*! open the file */
-		if (NULL == (rt = fopen(g_hash_table_lookup(config,"redirect_table"), "r"))) {
+		if (NULL == (rt = fopen(CONFIG("redirect_table"), "r"))) {
 			err(1,"fopen");
 		}
 		/*! process each line */
@@ -563,6 +540,14 @@ init_variables()
 	/*! create the hash table to store the config */
 	if (NULL == (config = g_hash_table_new(g_str_hash, g_str_equal))) 
 		errx(1,"%s: Fatal error while creating config hash table.\n", __func__);
+
+	/*! create the array of pointer to store the target information */
+	if (NULL == (targets = g_ptr_array_new()))
+		errx(1,"%s: Fatal error while creating targets pointer of array.\n", __func__);
+
+	/*! create the hash table to store module information */
+	if (NULL == (module = g_hash_table_new(g_str_hash, g_str_equal))) 
+		errx(1,"%s: Fatal error while creating module hash table.\n", __func__);
 
 	/*! create the hash table for the log engine */
 	if (NULL == (log_table = g_hash_table_new(g_str_hash, g_str_equal))) 
@@ -1174,6 +1159,9 @@ main(int argc, char *argv[])
 	struct nfq_q_handle *qh;
 	int my_nfq_fd;
 
+	#ifdef DEBUG
+	g_printerr("\n\n");
+	#endif
         g_printerr("Honeybrid V%s Copyright (c) 2007-2009 University of Maryland\n", 
 		VERSION);
 
@@ -1261,8 +1249,10 @@ main(int argc, char *argv[])
 	init_syslog(argc, argv);
 	/*! initialize data structures */
 	init_variables();
+
 	/*! parse the configuration files and store values in memory */
-	init_config(config_file_name);
+	init_parser(config_file_name);
+	//init_config(config_file_name);
 
 	/*! Create PID file, we might not be able to remove it */
         unlink(PIDFILE);
@@ -1271,7 +1261,7 @@ main(int argc, char *argv[])
 	}
 
         /* Start Honeybrid in the background if necessary */
-        if (strstr(g_hash_table_lookup(config,"output"),"2") == NULL) {
+        if (ICONFIG("output") != 2) {
                 setlogmask(LOG_UPTO(LOG_INFO));
 
                 g_printerr("Honeybrid starting as background process\n");

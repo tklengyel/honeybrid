@@ -22,6 +22,7 @@
 #define __TABLE_H__
 
 #include <glib.h>
+#include <err.h>
 
 //#include "netcode.h"
 #include "types.h"
@@ -37,6 +38,8 @@ long int mainpid;
  */
 int threading;
 
+/*! \brief global array of pointers to hold target structures */
+GPtrArray* targets;
 
 /*! \brief security writing lock for the Binary Tree
 */
@@ -46,37 +49,35 @@ GStaticRWLock rwlock;
 */
 GStaticRWLock hihlock;
 
-/*! \brief global hash table that contain the values of the configuration file
- */
+/*! \brief global hash table that contain the values of the configuration file  */
 GHashTable *config;
+#define CONFIG(parameter)		config_lookup(parameter)
+#define ICONFIG(parameter)		atoi(config_lookup(parameter))
 
-/*! \brief global hash table that contain the static correspondance between LIH services et HIH services
- */
+/*! \brief global hash table to hold module paramaters */
+GHashTable *module;
+
+/*! \brief global hash table that contain the static correspondance between LIH services et HIH services  */
 GHashTable *low_redirection_table;
 
-/*! \brief global hash table that contain the dynamic correspondance between HIH services et LIH services
- */
+/*! \brief global hash table that contain the dynamic correspondance between HIH services et LIH services  */
 GHashTable *high_redirection_table;
 
-/*! \brief global integer table that contains the addresses of the low_interaction honeypots (integer version)
- */
+/*! \brief global integer table that contains the addresses of the low_interaction honeypots (integer version)  */
 GHashTable *low_honeypot_addr;
 
-/*! \brief global integer table that contains the addresses of the high_interaction honeypots (integer version)
- */
+/*! \brief global integer table that contains the addresses of the high_interaction honeypots (integer version)  */
 GHashTable *high_honeypot_addr;
 
 /*! \brief Balanced Binary Tree that keep meta informations about active connections
  *
  \param key, each entry is represented by the tuple of the connection (sourceIP+sourcePort+destIP+destPort)
- \param value, the associated value of an entry is a conn_struct structure
- */
+ \param value, the associated value of an entry is a conn_struct structure  */
 GTree * conn_tree;
 
 unsigned c_id;
 
-/*! \brief pointer table for btree cleaning
- */
+/*! \brief pointer table for btree cleaning */
 GPtrArray *entrytoclean;
 
 int init_pkt( char *nf_packet, struct pkt_struct *pkt);
@@ -98,6 +99,8 @@ int setup_redirection(struct conn_struct *conn);
 int expire_conn(gpointer key, struct conn_struct *cur_conn, gint *expiration_delay);
 
 void free_conn(gpointer key, gpointer trash);
+
+char * config_lookup(char * parameter);
 
 /*! \brief constants to define the origin of a packet
  */

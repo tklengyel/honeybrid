@@ -24,7 +24,25 @@
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
 #include <netinet/ip.h>
+#include <pcap.h>
+#include <dumbnet.h>
+#include "modules.h"
 
+
+/*!
+ \def target
+ \brief structure to hold target information: PCAP filter and rules to accept/forward/redirect/control packets
+ */
+
+struct target
+{
+	struct bpf_program *filter;	/* PCAP compiled filter to select packets for this target */
+	struct addr *front_handler;	/* Honeypot IP address(es) handling the first response (front end) */
+	struct node *front_rule;	/* Rules of decision modules to accept packet to be handled by the frontend */
+	struct addr *back_handler;		/* Honeypot IP address(es) handling the second response (back end) */
+	struct node *back_rule;		/* Rules of decision modules to accept packets to be transited from front to back end */
+	struct node *control_rule;	/* Rules of decision modules to limit outbound packets from honeypots */
+};
 
 /*!
  \def packet
@@ -144,6 +162,8 @@ struct conn_struct
 	struct expected_data_struct expected_data;
 	GStaticRWLock lock;
 	struct hih_struct hih;
+
+	struct target *target;
 
 	/* statistics */
 	gdouble  stat_time[8]; // = {0,0,0,0,0,0,0};

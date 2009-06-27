@@ -198,7 +198,7 @@ int forward(struct pkt_struct* pkt)
 	}
 
 	/*!we update the IP checksum and send the packect*/
-	ip_checksum(fwd);
+	hb_ip_checksum(fwd);
 	send_raw(fwd);
 	free(fwd);
 	return OK;
@@ -233,7 +233,7 @@ int reply_reset(struct packet p)
 	rst->ip.check	= 0x00;
 	rst->ip.saddr	= p.ip->daddr;
 	rst->ip.daddr	= p.ip->saddr;
-	ip_checksum((struct iphdr*)rst);
+	hb_ip_checksum((struct iphdr*)rst);
 
 	/*! fill up the TCP header */
 	rst->tcp.source		= p.tcp->dest;
@@ -349,12 +349,12 @@ int replay(struct conn_struct* conn, struct pkt_struct* pkt)
 }
 
 
-/*! ip_checksum
+/*! hb_ip_checksum
  *
  \brief update the checksum in the IP header
 
  */
-int ip_checksum(struct iphdr* hdr)
+int hb_ip_checksum(struct iphdr* hdr)
 {
 	hdr->check	= (unsigned short)in_cksum((unsigned short *)hdr, sizeof(struct iphdr));
 	return OK;

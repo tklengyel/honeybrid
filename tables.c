@@ -32,6 +32,7 @@
 #include <netinet/ip.h>
 #include <netinet/udp.h>
 #include <arpa/inet.h>
+#include <pcap.h>
 
 #include <time.h>
 #include <sys/time.h>
@@ -75,9 +76,8 @@ int init_pkt( char *nf_packet, struct pkt_struct *pkt)
 	}
 	
 	/*! Add the packet IP header and payload to the packet structure */
-	memcpy( pkt->packet.ip, nf_packet, pkt->size );///THOMAS:Let's save memory !
-	if( pkt->packet.ip->ihl < 0x5 || pkt->packet.ip->ihl > 0x08 )
-	{
+	memcpy( pkt->packet.ip, nf_packet, pkt->size );///THOMAS:Let's save memory!
+	if( pkt->packet.ip->ihl < 0x5 || pkt->packet.ip->ihl > 0x08 ) {
 		g_printerr("%s Invalid IP header length: dropped\n", H(4));
 		return NOK;
 	}
@@ -127,48 +127,6 @@ int init_pkt( char *nf_packet, struct pkt_struct *pkt)
 		return NOK;
 	}
 
-	/* Use key_src and key_dst to find the origin of the packet */
-	/*! It's important to check HIH first! In case a HIH is in the same network of the LIH */
-	if ( test_honeypot_addr( pkt->key_src, HIH ) == OK )
-	{
-		/* The source is matching the IP of a high interaction honeypot
-		 * We update origin accordingly	 */
-		pkt->origin = HIH;
-
-		/* We create a key HIH:EXT to check the high interaction dynamic table of IPs and find the associated low interaction honeypot */
-		char *double_key = malloc(64);
-		sprintf(double_key, "%s:%s", pkt->key_src, pkt->key_dst );
-		char *key_lih = lookup_honeypot_addr( double_key, HIH );
-
-		if ( (key_lih) ) {
-			/* We also update the key to be key_dst:key_lih */
-			sprintf( pkt->key, "%s:%s", pkt->key_dst, key_lih);
-		}
-		else {
-			/* if we did not find any LIH, we then invalidate key with the null value */
-			///ROBIN - 2009-04-13: No longer, we want connections initiated by HIH to be handled
-			///pkt->key = NULL;
-			/*!!! 	We invert the orientation of the connection, otherwise it won't be recognized.
-				Problem to be solved !!!*/
-			sprintf( pkt->key, "%s:%s", pkt->key_dst, pkt->key_src );
-		}
-		free(key_lih);
-		free(double_key);
-	}
-	else if ( test_honeypot_addr( pkt->key_src, LIH ) == OK) 
-	{
-		/* The source is matching the IP of a low interaction honeypot
-		 * We update origin accordingly */
-		pkt->origin = LIH;
-
-		/* We also update the key to be key_dst:key_src */
-		sprintf( pkt->key, "%s:%s", pkt->key_dst, pkt->key_src );
-	}
-	else
-	{
-		/* We did not find the IP in the list of low/high interaction honeypot, then the IP is external */
-		sprintf( pkt->key, "%s:%s", pkt->key_src, pkt->key_dst );
-	}
 	return OK;
 }
 
@@ -190,7 +148,6 @@ int free_pkt( struct pkt_struct *pkt )
 	return OK;
 }
 
-
 /*! init_conn
  \brief init the current context using the tuples
  \param[in] pkt: struct pkt_struct to work with
@@ -199,6 +156,10 @@ int free_pkt( struct pkt_struct *pkt )
  */
 int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 {
+	#ifdef DEBUG
+	g_printerr("%s ~~~~ function called ~~~~\n", H(0));
+	#endif
+
 	/*! Get current time to update or create the structure
 	 */
 	GTimeVal t;
@@ -210,15 +171,39 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 	microtime += (((gdouble)t.tv_usec)/1000000.0);
 
 	/*! if key->str is null, then we have a seg fault! And it can happen if no LIH was found from a HIH->EXT packet...
-	 */
 	if ( pkt->key == NULL ) {
 		g_printerr("%s key is NULL, no valid connection attached\n", H(4));
-		/*! We return the Invalid state */
 		return NOK;
 	}
+	 */
+	char *key0 = malloc(64);
+        sprintf(key0, "%s:%s", pkt->key_src, pkt->key_dst);
+	char *key1 = malloc(64);
+        sprintf(key1, "%s:%s", pkt->key_dst, pkt->key_src);
 
-	if (TRUE != g_tree_lookup_extended(conn_tree, pkt->key, NULL,(gpointer *) conn))
-	{
+	int update = 0;
+	int create = 0;
+
+	if (TRUE == g_tree_lookup_extended(conn_tree, key0, NULL,(gpointer *) conn)) {
+		snprintf(pkt->key, 64, "%s", key0);
+		pkt->origin = EXT;
+		//pkt->origin = HIH; //?
+		update = 1;	
+	} else if (TRUE == g_tree_lookup_extended(conn_tree, key1, NULL,(gpointer *) conn)) {
+		snprintf(pkt->key, 64, "%s", key1);
+		pkt->origin = LIH;
+		update = 1;	
+	} else {
+		create = 1;
+	}
+
+	free(key0);
+	free(key1);
+
+	if (create == 1) {
+		#ifdef DEBUG
+		g_printerr("%s ~~~~ Creating a new connection structure ~~~~\n", H(0));
+		#endif
 		/*! The key could not be found, then we make sure that the packet is from an external IP
 		 */
 		///We now accept packets from HIH or LIH because we can then control them
@@ -226,8 +211,42 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 			/*! The source is not external, then we invalidate the state */
 		///	return NOK;
 		///else if(pkt->packet.ip->protocol == 0x06 && pkt->packet.tcp->syn == 0 )
-		if(pkt->packet.ip->protocol == 0x06 && pkt->packet.tcp->syn == 0 )
+		if(pkt->packet.ip->protocol == 0x06 && pkt->packet.tcp->syn == 0 ) {
+			g_printerr("%s ~~~~ TCP packet without SYN: we drop ~~~~\n", H(0));
 			return NOK;
+		}
+
+		/*! Try to match a target with the destination of this packet */
+		int found = -1;
+		int i = 0;
+		for (i = 0; i < targets->len; i++) {
+			#ifdef DEBUG
+			g_printerr("%s ~~~~ ...looking for target %d... ~~~~\n", H(0), i);
+			#endif
+			if(bpf_filter(
+			    ((struct target *)g_ptr_array_index(targets,i))->filter->bf_insns, 
+			    (u_char *)pkt->packet.ip, 
+			    pkt->size, 
+			    pkt->size) != 0) {
+				g_printerr("%s Target found!\n", H(0));
+				found = i;
+				snprintf(pkt->key, 64, "%s:%s", pkt->key_src, pkt->key_dst);
+				pkt->origin = EXT;
+				break;
+			}	
+		}
+
+		/*! If not, then it means the packets is originated from a honeypot inside */
+		if (found < 0) {
+			g_printerr("%s No target found\n", H(0));
+			/*! check if the src is in the honeynet */
+			snprintf(pkt->key, 64, "%s:%s", pkt->key_dst, pkt->key_src);
+			pkt->origin = LIH;
+
+			/*! if not, then this packet is for an unconfigured target, we drop it */
+			g_printerr("%s Dropping for now\n", H(0));
+			return NOK;
+		}
 
 		/*! Update state to be INIT */
 
@@ -235,6 +254,8 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 		struct conn_struct *conn_init = (struct conn_struct *) malloc( sizeof(struct conn_struct) );
 
 		/*! fill the structure */
+		conn_init->target			= g_ptr_array_index(targets,i);
+
 		conn_init->key				= g_strdup(pkt->key);
 		conn_init->key_ext				= g_strdup(pkt->key_src);
 		conn_init->key_lih				= g_strdup(pkt->key_dst);
@@ -295,7 +316,13 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 		if (TRUE != g_tree_lookup_extended(conn_tree, pkt->key, NULL,(gpointer *) conn))
 			return NOK;
 
-	} else {
+	} 
+
+	if (update == 1) {
+		#ifdef DEBUG
+		g_printerr("%s ~~~~ Updating an existing structure ~~~~\n", H(0));
+		#endif
+
 		/*! The key was found in the B-Tree */
 		int state = (*conn)->state;
 
@@ -331,7 +358,14 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 		///g_static_rw_lock_writer_unlock( &(*conn)->lock );
 
 	}
+
+
 	pkt->conn = *conn;
+
+	#ifdef DEBUG
+	g_printerr("%s ~~~~ returning ~~~~\n", H(0));
+	#endif
+
 	return OK;
 }
 
@@ -740,5 +774,18 @@ int setup_redirection(struct conn_struct *conn)
 	else
 		return NOK;
 	return OK;
+}
+
+
+/*! config_lookup
+ /brief lookup values from the config hash table. Make sure the required value is present
+ */
+
+char * 
+config_lookup(char * parameter) {
+	if (NULL == g_hash_table_lookup(config, parameter)) {
+		errx(1, "Missing configuration parameter '%s'", parameter);
+	}
+	return (char *)g_hash_table_lookup(config, parameter);
 }
 

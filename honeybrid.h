@@ -18,4 +18,75 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <pcap.h>
+
 int     daemon(int, int);
+
+int	yyparse(void);
+extern	FILE *yyin;
+
+/*! Version (should always be in sync with the content of the VERSION file) */
+#define VERSION "0.9"
+
+/*! File to store PID */
+#define PIDFILE "/var/run/honeybrid.pid"
+
+/*! writing lock initialization */
+#define G_STATIC_RW_LOCK_INIT { G_STATIC_MUTEX_INIT, NULL, NULL, 0, FALSE, 0, 0 }
+
+/*! Multi-thread safe mode */
+#define G_THREADS_ENABLED
+
+/*! Decision Engine thread enabled */
+//#define DE_THREAD
+
+/*! Cleaning Engine thread enabled */
+//#define CLEAN_THREAD
+
+/*! NFQUEUE Loop enabled
+    (when disabled, packets on the queue are processed through libev) */
+//#define NF_LOOP
+
+/*!
+  \def DESTSIZE
+ *
+ * max size of an IP address (4*3 = 12 + 3 dots = 15) */
+#define DESTSIZE 15
+
+/*!
+  \def CONF_MAX_LINE
+ *
+ * max size of a line in the configuration file */
+#define CONF_MAX_LINE 1024
+
+/*! 
+ \def RESET_HIH
+ * use to reset (1) or accept (0) connections initiated by HIH
+ */
+#define RESET_HIH 0
+
+/*!
+ \def BUFSIZE
+ * use by NF_QUEUE to set the data size of received packets
+ */
+#define BUFSIZE         2048
+
+/*!
+ \def PAYLOADSIZE
+ * use by NF_QUEUE to set the data size of received packets
+ */
+#define PAYLOADSIZE     0xffff
+
+/*!
+ \def running
+ *
+ * Init value: OK
+ * Set to NOK when honeybrid stops
+ * It is used to stop processing new data wht NF_QUEUE when honeybrid stops */
+int running;
+
+/*!
+ \def thread_clean
+ \def thread_log */
+GThread *thread_clean;
+GThread *thread_de;

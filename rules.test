@@ -1,0 +1,36 @@
+
+config {
+	output = 2;
+	record = 0;
+	log_level = 4;
+	reset_ext = yes;
+	exec_directory = /var/run;
+	log_directory = /var/log/honeybrid;
+	log_file = debug.honeybrid.log;
+	log_rotation = 0;
+	debug_file = debug.honeybrid.debug;
+	redirect_table = /etc/honeybrid/debug.rules.conf;
+	expiration_delay = 30;
+	conn_record = /var/log/honeybrid/honeybrid_pcap_;
+	sourcetable = /etc/honeybrid/debug.source.tb;
+	sha1table = /etc/honeybrid/debug.sha1_bdd.tb;	
+}
+
+module "hash" {
+	param1 = 17;
+	param2 = no;
+}
+
+#target "192.168.0.1" {
+#	frontend 10.0.0.1 "hash(bdd1) and counter(4)";
+#	backend 10.0.0.2 "hash(bdd1)";
+#	control "hash(bdd1)";
+#}
+
+target {
+	filter "host 192.168.0.1";
+	frontend 10.0.0.1 "hash(bdd1) AND counter(5)";
+	backend 10.0.0.2 "hash(bdd2)";
+	control "hash(bdd3)";
+}
+

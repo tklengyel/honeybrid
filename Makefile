@@ -32,8 +32,13 @@ CPPFLAGS+=# Preprocessor options
 #CFLAGS+=-Wall -D RST_EXT -O2 `pkg-config --cflags glib-2.0 gthread-2.0`# compilator options
 CFLAGS+=-Wall -D RST_EXT -O0 `pkg-config --cflags glib-2.0 gthread-2.0`# compilator options
 CFLAGS+=-Wall -g -ggdb -D DEBUG
-LDFLAGS+=-lnetfilter_queue -lpcap -lev `pkg-config --libs gthread-2.0 glib-2.0` -lcrypto# link editor options -lnetfilter_conntrack
+LDFLAGS+=-lnetfilter_queue -lpcap -lev -ldumbnet `pkg-config --libs gthread-2.0 glib-2.0` -lcrypto# link editor options -lnetfilter_conntrack
 #LDFLAGS+=-lnetfilter_queue -lpcap `pkg-config --libs gthread-2.0 glib-2.0` -lcrypto# link editor options -lnetfilter_conntrack
+
+YACC=bison -tvy
+LEX=flex
+YFLAGS=-d -v
+LFLAGS=-i
 
 BIN=honeybrid# main binary
 BINDIR?=/usr/local/sbin# installation prefix
@@ -51,7 +56,7 @@ CONF=$(BIN).conf
 RULE=rules.conf
 SCRIPT=$(BIN).sh# startup scripts
 SRC=honeybrid.c daemon.c err.c netcode.c tables.c log.c decision_engine.c modules.c mod_control.c mod_hash.c mod_counter.c mod_yesno.c mod_source.c mod_random.c mod_proxy.c# source files
-OBJ=$(subst .c,.o,$(SRC))# object files
+OBJ=$(subst .c,.o,$(SRC)) rules.o syntax.o# object files
 
 export BIN CONF RULE SCRIPT
 
@@ -72,13 +77,33 @@ $(BIN): $(OBJ) Makefile
 	./$<
 	chmod +x $@
 
+#parser
+rules.h: rules.c
+rules.c: rules.y
+	@rm -f rules.c rules.h
+	$(YACC) $(YFLAGS) $<
+	mv y.tab.c rules.c
+	mv y.tab.h rules.h
+
+syntax.c: rules.l
+	@rm -f $@
+	$(LEX) $(LFLAGS) $< 
+	mv lex.yy.c $@
+
+depend: rule.c syntax.c
+	makedepend $(CPPFLAGS) -- *.c *.h
+
+#configuration files
 %.conf: %.conf.gen.sh Makefile
 	./$<
 
 config: $(CONF) $(SCRIPT)
 
 clean:
-	-@rm *.o $(BIN) $(SCRIPT) $(CONF)
+	-@rm *.o $(BIN) $(SCRIPT) $(CONF) rules.h rules.c syntax.c
+
+lint:
+	splint -warnposix *.c
 
 dir:
 	@-for d in $(DIRS); \
@@ -114,7 +139,7 @@ uninstall:
 
 #### Additionnal dependencies ####
 
-honeybrid.o: honeybrid.h netcode.h tables.h log.h decision_engine.h modules.h mod_control.h mod_counter.h mod_hash.h types.h mod_yesno.h mod_source.h mod_random.h mod_proxy.h
+honeybrid.o: honeybrid.h netcode.h tables.h log.h decision_engine.h modules.h mod_control.h mod_counter.h mod_hash.h types.h mod_yesno.h mod_source.h mod_random.h mod_proxy.h rules.h
 netcode.o: tables.h log.h types.h
 #pcap_tool.o: tables.h log.h netcode.h types.h
 tables.o: log.h netcode.h types.h
@@ -128,5 +153,7 @@ mod_yesno.o: log.h tables.h modules.h types.h
 mod_source.o: log.h tables.h modules.h types.h
 mod_random.o: log.h tables.h modules.h types.h
 mod_proxy.o: log.h tables.h modules.h types.h
+rules.o: honeybrid.h rules.h
+syntax.o: honeybrid.h
 
 .PHONY: all clean install uninstall config
