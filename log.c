@@ -142,7 +142,7 @@ open_debug_log(void)
                 errx(1,"%s: can't change directory",__func__);
 	if (NULL == g_hash_table_lookup(config,"debug_file")) 
                 errx(1,"%s: no log file specified in the config",__func__);
-	if ((fd = open( g_hash_table_lookup(config,"debug_file"), O_CREAT | O_RDWR, 0744)) == -1)
+	if ((fd = open( g_hash_table_lookup(config,"debug_file"), O_CREAT | O_WRONLY | O_APPEND, 0744)) == -1)
 		err(1,"%s: open", __func__);
 	if (0 != chdir(g_hash_table_lookup(config,"exec_directory"))) 
 		warnx("%s: can't change directory",__func__);

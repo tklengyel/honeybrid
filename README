@@ -41,27 +41,23 @@ EXAMPLE
 Netfilter's functions are used to redirect traffic to honeybrid. It is important to correctly add
 the queueing rules using iptables for honeybrid to receive the traffic it needs.
 For example, in an architecture like the following:
+							       ___________________
+       	 __________                ___________		      / Low Int. Honeypot \ 
+	/          \              / Honeybrid \	      ,-----> |     10.0.0.2      |
+	| attacker | -----------> |eth0   eth1| ------|	      \___________________/
+	\__________/              \___________/	      |	       ___________________
+	                                              |	      / High Int. Honeypot\
+	                                              `-----> |     10.0.0.3      |
+							      \___________________/
 
-                          +=================+
-+----------+              |eth0            ||
-| attacker | ===========> ||   HONEYBRID   ||
-|(internet)|              ||   10.0.0.1:eth1|
-+----------+              +=================+
-                           /            \
-                          /              \
-                     +--------+          +---------+
-                     |honeypot|          | honeyd  |
-                     |10.0.0.3|          |10.0.0.2 |
-                     +--------+          +---------+
-
-The following rules will queue the traffic from the attacker to honeyd and from honeyd to the attacker, as well
+The following rules will queue the traffic from the attacker to the low int. honeypot (honeyd) and from honeyd to the attacker, as well
 as from the high interaction honeypot to honeybrid:
-iptables -A FORWARD -p tcp -i eth1 -s 10.0.0.2 -j QUEUE -m comment --comment 'honeybrid: packets from honeyd (LIH)'
-iptables -A FORWARD -p tcp -i eth0 -d 10.0.0.2 -j QUEUE -m comment --comment 'honeybrid: packets to honeyd (LIH)'
-iptables -A FORWARD -p tcp -i eth1 -s 10.0.0.3 -j QUEUE -m comment --comment 'honeybrid: packets from honeypot (HIH)'
+ iptables -A FORWARD -p tcp -i eth1 -s 10.0.0.2 -j QUEUE -m comment --comment 'honeybrid: packets from honeyd (LIH)'
+ iptables -A FORWARD -p tcp -i eth0 -d 10.0.0.2 -j QUEUE -m comment --comment 'honeybrid: packets to honeyd (LIH)'
+ iptables -A FORWARD -p tcp -i eth1 -s 10.0.0.3 -j QUEUE -m comment --comment 'honeybrid: packets from honeypot (HIH)'
 
 Don't forget to active the routing mode:
-echo 1 > /proc/sys/net/ipv4/ip_forward
+ echo 1 > /proc/sys/net/ipv4/ip_forward
 
 
 CONTACT
@@ -79,20 +75,20 @@ To concentrate all these comments into a coherent manual is in process.
 DEVELOPMENT
 
 Adding a new module -- Example with the module RANDOM:
- 1. Create two files: random_mod.c and random_mod.h
- 2. random_mod.h can be left empty (but the file needs to be created!
-    random_mod.c must have at least the following two functions:
+ 1. Create two files: mod_random.c and mod_random.h
+ 2. mod_random.h can be left empty (but the file needs to be created!)
+    mod_random.c must have at least the following two functions:
 	- int  init_mod_random () 	[** this is optional, only if you need some initialization **]
 	- void mod_random (struct mod_args args)
-    random_mod.c has also to have the following includes:
+    mod_random.c has also to have the following includes:
 	#include "tables.h"
 	#include "modules.h"
 	#include "netcode.h"
-	#include "random_mod.h"
+	#include "mod_random.h"
  3. Modify the Makefile to:
-	- add random_mod.c to the target SRC
-	- add random_mod.h to the target main.o
-	- random_mod.o: log.h tables.h modules.h types.h
+	- add mod_random.c to the target SRC
+	- add mod_random.h to the target main.o
+	- add the target "mod_random.o: log.h tables.h modules.h types.h"
  4. Add the following function declarations in modules.h:
 	int init_mod_random();		[** this is optional, only if you need some initialization **]
 	void mod_random(struct mod_args args);

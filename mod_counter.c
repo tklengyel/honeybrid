@@ -33,32 +33,38 @@
 #include "modules.h"
 #include "tables.h"
 
+/*! mod_counter requires the configuration of the following mandatory parameter:
+	- "counter", number of packet to receive before accepting
+ */
+
 /*! mod_counter
  \param[in] args, struct that contain the node and the datas to process
- *
  \param[out] set result to 1 packet position match arg, 0 otherwise
  */
 void mod_counter(struct mod_args args)
 {
-	char *logbuf;
-	L("mod_counter():\tModule called\n", NULL, 3,args.pkt->conn->id);
-	int pktval = atoi(args.node->arg);
+	int pktval = 0;
+	gchar *param;
 
-	if(pktval <= args.pkt->conn->count_data_pkt_from_intruder)
-	{
-		args.node->result = 1;
-		//L("mod_counter():\tPACKET MATCH RULE\n", NULL, 2, args.pkt->conn->id);
-		logbuf = malloc(128);
-		sprintf(logbuf,"mod_counter():\tPACKET MATCH RULE for counter(%d)\n", pktval);
-		L(NULL, logbuf, 2, args.pkt->conn->id);
+	g_printerr("%s Module called\n", H(args.pkt->conn->id));
+
+	if ((param = (char *)g_hash_table_lookup(args.node->arg, "counter")) == NULL) {
+		/*! We can't decide */
+		args.node->result = -1;
+		g_printerr("%s mandatory argument 'counter' undefined!\n", H(args.pkt->conn->id));
+		return;
+        } else {
+		pktval = atoi(param);
 	}
-	else
-	{
+
+	if(pktval <= args.pkt->conn->count_data_pkt_from_intruder) {
+		/*! We accept this packet */
+		args.node->result = 1;
+		g_printerr("%s PACKET MATCH RULE for counter(%d) with value %d\n", H(args.pkt->conn->id), pktval, args.pkt->conn->count_data_pkt_from_intruder);
+	} else 	{
+		/*! We reject this packet */
 		args.node->result = 0;
-		//L("mod_counter():\tPACKET DOES NOT MATCH RULE\n", NULL, 2, args.pkt->conn->id);
-		logbuf = malloc(128);
-                sprintf(logbuf,"mod_counter():\tPACKET DOES NOT MATCH RULE for counter(%d)\n", pktval);
-                L(NULL, logbuf, 2, args.pkt->conn->id);
+		g_printerr("%s PACKET DOES NOT MATCH RULE for counter(%d) with value %d\n", H(args.pkt->conn->id), pktval, args.pkt->conn->count_data_pkt_from_intruder);
 	}
 }
 

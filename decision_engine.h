@@ -25,19 +25,12 @@
 #include "tables.h"
 
 /*!
- \def MIN_DECISION_DATA
- *
- * minimum number of byte to submit a packet to the Decision Engine
+ \def decision types
  */
-#define MIN_DECISION_DATA 0
-
-/*!
- \def decision types (for later user)
-#define DROP		0	//Already defined!!!
-#define CONTINUE	1
-#define ACCEPT		2
-#define REDIRECT	3
- */
+#define DE_NO_RULE	-2
+#define DE_UNKNOWN	-1
+#define DE_REJECT	0
+#define DE_ACCEPT	1
 
 /*!
  \def DE_rules
@@ -72,6 +65,6 @@ void *DE_create_tree(const gchar *equation);
 void DE_submit_packet();
 
 void DE_push_pkt(struct pkt_struct *pkt);
-void DE_process_packet(struct pkt_struct *pkt);
+int DE_process_packet(struct pkt_struct *pkt);
 
 #endif

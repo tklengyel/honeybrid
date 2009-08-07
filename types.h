@@ -28,6 +28,8 @@
 #include <dumbnet.h>
 #include "modules.h"
 
+#define ETHER_ADDR_LEN	6
+#define ETHER_HDR_LEN	14
 
 /*!
  \def target
@@ -43,6 +45,19 @@ struct target
 	struct node *back_rule;		/* Rules of decision modules to accept packets to be transited from front to back end */
 	struct node *control_rule;	/* Rules of decision modules to limit outbound packets from honeypots */
 };
+
+
+/*!
+ \def ethernet_hdr
+ \brief memory structure to hold ethernet header (14 bytes)
+ */
+
+struct ethernet_hdr {
+	u_char ether_dhost[ETHER_ADDR_LEN]; /* Destination host address */
+	u_char ether_shost[ETHER_ADDR_LEN]; /* Source host address */
+	u_short ether_type; /* IP? ARP? RARP? etc */
+};
+
 
 /*!
  \def packet
@@ -60,6 +75,7 @@ struct packet
 	struct tcphdr *tcp;
 	struct udphdr *udp;
 	char *payload;
+	char *FRAME;
 };
 
 /*!

@@ -1,4 +1,6 @@
 /*
+ * $Id: tables.c 647 2009-08-07 03:01:56Z robin $
+ *
  * This file is part of the honeybrid project.
  *
  * Copyright (C) 2007-2009 University of Maryland (http://www.umd.edu)
@@ -42,6 +44,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <dumbnet.h>
+#include <ctype.h>
+
 #include "tables.h"
 #include "log.h"
 #include "netcode.h"
@@ -50,6 +55,146 @@
  * \brief number of bytes of the buffer in the netfilter callback function
  */
 #define CONCALLSIZE 2048
+
+/*
+ * print data in rows of 16 bytes: offset   hex   ascii
+ *
+ * 00000   47 45 54 20 2f 20 48 54  54 50 2f 31 2e 31 0d 0a   GET / HTTP/1.1..
+ */
+void
+print_hex_ascii_line(const u_char *payload, int len, int offset)
+{
+
+	int i;
+	int gap;
+	const u_char *ch;
+
+	/* offset */
+	printf("\t%05d   ", offset);
+	
+	/* hex */
+	ch = payload;
+	for(i = 0; i < len; i++) {
+		printf("%02x ", *ch);
+		ch++;
+		/* print extra space after 8th byte for visual aid */
+		if (i == 7)
+			printf(" ");
+	}
+	/* print space to handle line less than 8 bytes */
+	if (len < 8)
+		printf(" ");
+	
+	/* fill hex gap with spaces if not full line */
+	if (len < 16) {
+		gap = 16 - len;
+		for (i = 0; i < gap; i++) {
+			printf("   ");
+		}
+	}
+	printf("   ");
+	
+	/* ascii (if printable) */
+	ch = payload;
+	for(i = 0; i < len; i++) {
+		if (isprint(*ch))
+			printf("%c", *ch);
+		else
+			printf(".");
+		ch++;
+	}
+
+	printf("\n");
+
+return;
+}
+
+
+/*! print_payload
+ */
+void
+print_payload(const u_char *payload, int len)
+{
+
+	int len_rem = len;
+	int line_width = 16;			/* number of bytes per line */
+	int line_len;
+	int offset = 0;					/* zero-based offset counter */
+	const u_char *ch = payload;
+
+	if (len <= 0)
+		return;
+
+	/* data fits on one line */
+	if (len <= line_width) {
+		print_hex_ascii_line(ch, len, offset);
+		return;
+	}
+
+	/* data spans multiple lines */
+	for ( ;; ) {
+		/* compute current line length */
+		line_len = line_width % len_rem;
+		/* print line */
+		print_hex_ascii_line(ch, line_len, offset);
+		/* compute total remaining */
+		len_rem = len_rem - line_len;
+		/* shift pointer to remaining bytes to print */
+		ch = ch + line_len;
+		/* add offset */
+		offset = offset + line_width;
+		/* check if we have line width chars or less */
+		if (len_rem <= line_width) {
+			/* print last line and get out */
+			print_hex_ascii_line(ch, len_rem, offset);
+			break;
+		}
+	}
+
+	return;
+}
+
+char *lookup_state(int state) {
+	switch(state) {
+	case 0:
+		return "INVALID";
+		break;
+	case 1:
+		return "INIT";
+		break;
+	case 2:
+		return "DECISION";
+		break;
+	case 3:
+		return "REPLAY";
+		break;
+	case 4:
+		return "FORWARD";
+		break;
+	case 5:
+		return "PROXY";
+		break;
+	case 6:
+		return "DROP";
+		break;
+	case 7:
+		return "CONTROL";
+		break;
+	default:
+		return "unknown";
+		break;
+	}
+}
+
+int switch_state(struct conn_struct *conn, int new_state) 
+{
+	int old = conn->state;
+	#ifdef DEBUG
+	g_printerr("%s switching state from %s (%d) to %s (%d)\n", H(conn->id), lookup_state(old), old, lookup_state(new_state), new_state);
+	#endif
+	conn->state = new_state;
+	return OK;
+}
 
 /*! init_pkt
  \brief init the current packet structure with meta-information such as the origin and the number of bytes of data
@@ -74,6 +219,24 @@ int init_pkt( char *nf_packet, struct pkt_struct *pkt)
 		g_printerr("%s Invalid packet size: dropped\n", H(4));
 		return NOK;
 	}
+
+	/*! Create fake ethernet header (used later by bpf_filter) */
+	pkt->packet.FRAME = malloc( ETHER_HDR_LEN + pkt->size );
+	struct ethernet_hdr *eth = malloc( ETHER_HDR_LEN );
+	memcpy (pkt->packet.FRAME, eth, ETHER_HDR_LEN );	
+	memcpy( pkt->packet.FRAME + ETHER_HDR_LEN, nf_packet, pkt->size );
+	g_free(eth);
+	
+	/*! The most important part is to give to this ethernet header the type "IP protocol" */
+	(pkt->packet.FRAME)[12] = 0x08;
+	(pkt->packet.FRAME)[13] = 0x00;
+	
+	/* DEBUG:
+	printf("Printing nf_packet:\n");
+	print_payload( (u_char *)nf_packet, pkt->size);
+	printf("Printing FRAME:\n");
+	print_payload( (u_char *)pkt->packet.FRAME, pkt->size + 14);
+	*/
 	
 	/*! Add the packet IP header and payload to the packet structure */
 	memcpy( pkt->packet.ip, nf_packet, pkt->size );///THOMAS:Let's save memory!
@@ -123,7 +286,11 @@ int init_pkt( char *nf_packet, struct pkt_struct *pkt)
 	{
 		/*! Every other packets are ignored */
 		g_printerr("%s Invalid protocol: %d, packet dropped\n", H(4), pkt->packet.ip->protocol);
-		//L("init_pkt():\tInvalid protocol: dropped\n",NULL,2,4);
+		return NOK;
+	}
+
+	if (pkt->data < 0) {
+		g_printerr("%s Invalid data size: %d, packet dropped\n", H(4), pkt->data);
 		return NOK;
 	}
 
@@ -137,10 +304,10 @@ int init_pkt( char *nf_packet, struct pkt_struct *pkt)
  */
 int free_pkt( struct pkt_struct *pkt )
 {
-///	L("free_pkt():\tfreeing NULL !\n",NULL, 3, pkt->conn->id);
 	if(pkt == NULL)
 		return NOK;
 	g_free(pkt->packet.ip);
+	g_free(pkt->packet.FRAME);
 	g_free(pkt->key);
 	g_free(pkt->key_src);
 	g_free(pkt->key_dst);
@@ -156,12 +323,7 @@ int free_pkt( struct pkt_struct *pkt )
  */
 int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 {
-	#ifdef DEBUG
-	g_printerr("%s ~~~~ function called ~~~~\n", H(0));
-	#endif
-
-	/*! Get current time to update or create the structure
-	 */
+	/*! Get current time to update or create the structure */
 	GTimeVal t;
 	g_get_current_time(&t);
 	gint curtime = (t.tv_sec);
@@ -176,6 +338,8 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 		return NOK;
 	}
 	 */
+
+	/* Creating keys for both directions (0 and 1)*/
 	char *key0 = malloc(64);
         sprintf(key0, "%s:%s", pkt->key_src, pkt->key_dst);
 	char *key1 = malloc(64);
@@ -184,51 +348,73 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 	int update = 0;
 	int create = 0;
 
+	/* Check first if a structure already exists for direction 0 */
+	/* Assumption: connection structures are created only for direction EXT -> INT */
 	if (TRUE == g_tree_lookup_extended(conn_tree, key0, NULL,(gpointer *) conn)) {
+		/* Structure found! It means source is EXT */	
 		snprintf(pkt->key, 64, "%s", key0);
 		pkt->origin = EXT;
-		//pkt->origin = HIH; //?
 		update = 1;	
+	/* Then we check for the opposite direction */
 	} else if (TRUE == g_tree_lookup_extended(conn_tree, key1, NULL,(gpointer *) conn)) {
+		/* Structure found! It means destination is EXT and source is INT */
 		snprintf(pkt->key, 64, "%s", key1);
 		pkt->origin = LIH;
 		update = 1;	
 	} else {
-		create = 1;
+		char *key_lih;	
+		/* Nothing found, looking up in the redirection table */
+		if ( 	high_redirection_table != NULL &&
+			(key_lih = g_hash_table_lookup(high_redirection_table, key0)) != NULL) {
+			g_printerr("%s ~~~~ This packet is part of a replayed connection ~~~~~\n", H(0));
+			/* Structure found! It means destination is EXT and source is INT */
+			snprintf(pkt->key, 64, "%s:%s", pkt->key_dst, key_lih);
+			pkt->origin = HIH;
+			update = 1;
+			if (FALSE == g_tree_lookup_extended(conn_tree, pkt->key, NULL,(gpointer *) conn)) {
+				g_printerr("%s ~~~~ Error! Related connection structure can't be found ~~~~~\n", H(0));
+			}
+		} else {
+			/* Still nothing found, we need to initiate a new structure. We don't know yet if the source is EXT or INT... 
+			   pcap filter defined in targets will help us figuring this out */
+			create = 1;
+		}
 	}
 
-	free(key0);
-	free(key1);
+	g_free(key0);
+	g_free(key1);
 
 	if (create == 1) {
-		#ifdef DEBUG
-		g_printerr("%s ~~~~ Creating a new connection structure ~~~~\n", H(0));
-		#endif
-		/*! The key could not be found, then we make sure that the packet is from an external IP
-		 */
-		///We now accept packets from HIH or LIH because we can then control them
-		///if ( pkt->origin != EXT )
-			/*! The source is not external, then we invalidate the state */
-		///	return NOK;
-		///else if(pkt->packet.ip->protocol == 0x06 && pkt->packet.tcp->syn == 0 )
+		/*! The key could not be found, so we need to figure out where this packet comes from */
 		if(pkt->packet.ip->protocol == 0x06 && pkt->packet.tcp->syn == 0 ) {
 			g_printerr("%s ~~~~ TCP packet without SYN: we drop ~~~~\n", H(0));
 			return NOK;
 		}
 
-		/*! Try to match a target with the destination of this packet */
+		/*DEBUG
+		printf("Printing pkt->ip:\n");
+		print_payload( (u_char *)pkt->packet.ip, pkt->size );
+		printf("Printing pkt->FRAME:\n");
+		print_payload( (u_char *)pkt->packet.FRAME, pkt->size + 14);
+		*/
+
+		/*! Try to match a target with this packet */
 		int found = -1;
 		int i = 0;
 		for (i = 0; i < targets->len; i++) {
+			/*
 			#ifdef DEBUG
-			g_printerr("%s ~~~~ ...looking for target %d... ~~~~\n", H(0), i);
+			g_printerr("%s ~~~~ ...looking for target %d (pkt->size is %d)... ~~~~\n", H(0), i,
+				ntohs(pkt->packet.ip->tot_len));
+			//bpf_dump( ((struct target *)g_ptr_array_index(targets,i))->filter, 0);
 			#endif
+			*/
 			if(bpf_filter(
 			    ((struct target *)g_ptr_array_index(targets,i))->filter->bf_insns, 
-			    (u_char *)pkt->packet.ip, 
-			    pkt->size, 
-			    pkt->size) != 0) {
-				g_printerr("%s Target found!\n", H(0));
+			    (u_char *)(pkt->packet.FRAME ), 
+			    pkt->size + ETHER_HDR_LEN, 
+			    pkt->size + ETHER_HDR_LEN) != 0) {
+				g_printerr("%s This packet matches the filter of target %d\n", H(0), i);
 				found = i;
 				snprintf(pkt->key, 64, "%s:%s", pkt->key_src, pkt->key_dst);
 				pkt->origin = EXT;
@@ -236,25 +422,73 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 			}	
 		}
 
-		/*! If not, then it means the packets is originated from a honeypot inside */
+
+		/*! If not, then it means the packets is either originated from a honeypot inside (we control) or from a non supported external host (we drop) */
 		if (found < 0) {
-			g_printerr("%s No target found\n", H(0));
 			/*! check if the src is in the honeynet */
 			snprintf(pkt->key, 64, "%s:%s", pkt->key_dst, pkt->key_src);
-			pkt->origin = LIH;
 
-			/*! if not, then this packet is for an unconfigured target, we drop it */
-			g_printerr("%s Dropping for now\n", H(0));
-			return NOK;
+			struct addr *src_addr = malloc(sizeof(struct addr));
+			addr_pton( inet_ntoa(*(struct in_addr*)&pkt->packet.ip->saddr), src_addr);
+
+			for (i = 0; i < targets->len; i++) {
+
+				if (	addr_cmp( ((struct target *)g_ptr_array_index(targets,i))->front_handler, src_addr) == 0 )
+				{
+					g_printerr("%s This packet matches a LIH honeypot IP address for target %d\n", H(0), i);
+					found = i;
+					pkt->origin = LIH;
+					break;
+					/* Note: this honeypot might be defined later in another target... */
+				}
+
+				if (	addr_cmp( ((struct target *)g_ptr_array_index(targets,i))->back_handler, src_addr) == 0 )
+				{
+					g_printerr("%s This packet matches a HIH honeypot IP address for target %d\n", H(0), i);
+					found = i;
+					pkt->origin = HIH;
+					break;
+					/* Note: this honeypot might be defined later in another target... */
+				}
+				
+			}
+
+			g_free(src_addr);
+
+			if (found < 0) {
+				/*! if not, then this packet is for an unconfigured target, we drop it */
+				g_printerr("%s No honeypot IP found for this address, dropping for now\n", H(0));
+				return NOK;
+			}
+		} else {
+			// \todo We should now check if the destination is a valid LIH
+			// If not, we should either drop or NAT
+			struct addr *dst_addr = malloc(sizeof(struct addr));
+                        addr_pton( inet_ntoa(*(struct in_addr*)&pkt->packet.ip->daddr), dst_addr);
+
+			if (    addr_cmp( ((struct target *)g_ptr_array_index(targets, found))->front_handler, dst_addr) == 0 ) {
+				/*! IPs match, we can proceed */	
+				//g_printerr("%s Destination %s match the LIH, continuing...\n", H(0), addr_ntoa(dst_addr));
+			} else {
+				/*! destination address is not the LIH address, so we drop the packet (later we might NAT \todo) */
+				//g_printerr("%s Destination %s is not the LIH, dropping for now\n", H(0), addr_ntoa(dst_addr));
+				g_printerr("%s Destination %s is not the LIH, but we continue...\n", H(0), addr_ntoa(dst_addr));
+                                //return NOK;
+			}
+
+			g_free(dst_addr);
 		}
-
-		/*! Update state to be INIT */
 
 		/*! Init new connection structure */
 		struct conn_struct *conn_init = (struct conn_struct *) malloc( sizeof(struct conn_struct) );
 
 		/*! fill the structure */
-		conn_init->target			= g_ptr_array_index(targets,i);
+		conn_init->target			= g_ptr_array_index(targets, found);
+	
+		//g_printerr("%s Assigning target %p to new connection\n", H(0), conn_init->target);
+		//g_printerr("%s (front end rule is: %s)\n", H(0), (conn_init->target->front_rule  == NULL) ? "(null)" : conn_init->target->front_rule->module_name->str);
+
+		//g_printerr("%s Initializing target to %p (%p) at index %d\n", H(0), g_ptr_array_index(targets, found), conn_init->target, found);
 
 		conn_init->key				= g_strdup(pkt->key);
 		conn_init->key_ext				= g_strdup(pkt->key_src);
@@ -262,7 +496,10 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 		conn_init->key_hih				= NULL;
 		conn_init->protocol				= pkt->packet.ip->protocol;
 		conn_init->access_time			= curtime;
-		conn_init->state		 		= INIT;
+		if (pkt->origin == LIH)
+			conn_init->state		 		= CONTROL;
+		else
+			conn_init->state		 		= INIT;
 		conn_init->count_data_pkt_from_lih 		= 0;
 		conn_init->count_data_pkt_from_intruder 	= 0;
 		conn_init->BUFFER				= NULL;
@@ -309,19 +546,16 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 		/*! free the lock */
 		g_static_rw_lock_writer_unlock (&rwlock);
 
-		g_printerr("%s New entry created in B-Tree for connection %s\n", H(conn_init->id), conn_init->key);
+		//g_printerr("%s New entry created in B-Tree for connection %s\n", H(conn_init->id), conn_init->key);
 
 		/*! store new entry in current struct */
-
 		if (TRUE != g_tree_lookup_extended(conn_tree, pkt->key, NULL,(gpointer *) conn))
 			return NOK;
 
+		pkt->conn = conn_init;
 	} 
 
 	if (update == 1) {
-		#ifdef DEBUG
-		g_printerr("%s ~~~~ Updating an existing structure ~~~~\n", H(0));
-		#endif
 
 		/*! The key was found in the B-Tree */
 		int state = (*conn)->state;
@@ -331,18 +565,6 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 			state = PROXY;
 		}
 
-		/*! We lock the structure */
-		///ROBIN 2009-03-29: deadlock occurred between here and line 676 (setup_redirection())
-		//g_static_rw_lock_writer_lock( &(*conn)->lock );
-		/*
-		#ifdef DEBUG
-		g_print("init_conn()\tTrying to unlock conn for connection id %d\n", (*conn)->id);
-		#endif
-		while (!g_static_rw_lock_writer_trylock( &(*conn)->lock )) {
-			g_usleep(1);
-			//g_static_rw_lock_writer_unlock( &(*conn)->lock );
-		}
-		*/
 		/*! statistics */
 		(*conn)->stat_time[   state ]  = microtime;
 		(*conn)->stat_packet[ state ] += 1;
@@ -352,20 +574,29 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 		/*! We update the current connection access time */
 		(*conn)->access_time = curtime;
 		if(pkt->origin == EXT)
-			(*conn)->count_data_pkt_from_intruder += pkt->packet.tcp->psh;
+			(*conn)->count_data_pkt_from_intruder += 1;
+			//(*conn)->count_data_pkt_from_intruder += pkt->packet.tcp->psh;
 
-		/*! We unlock the structure */
-		///g_static_rw_lock_writer_unlock( &(*conn)->lock );
+		pkt->conn = *conn;
 
 	}
 
+	/*
+					#ifdef DEBUG
+                                        g_printerr("%s [** HIH address: %s (%d) **]\n", H(pkt->conn->id),
+                                                addr_ntoa(pkt->conn->target->back_handler),
+                                                pkt->conn->target->back_handler->addr_ip);
+                                        g_printerr("%s [** LIH address: %s (%d) **]\n", H(pkt->conn->id),
+                                                addr_ntoa(pkt->conn->target->front_handler),
+                                                pkt->conn->target->front_handler->addr_ip);
+                                        #endif
 
-	pkt->conn = *conn;
+
 
 	#ifdef DEBUG
 	g_printerr("%s ~~~~ returning ~~~~\n", H(0));
 	#endif
-
+	*/
 	return OK;
 }
 
@@ -378,6 +609,11 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 int addr2int(char *address) {
         gchar **addr;
 	int intaddr;
+
+	if (address == NULL) {
+		g_printerr("%s Error, null address can't be converted!\n", H(0));
+		return -1;
+	}
 
         addr = g_strsplit ( address, ".", 0 );
 
@@ -536,7 +772,7 @@ int store_pkt(struct conn_struct *conn, struct pkt_struct *pkt)
 	/*! Unlock the structure */
         ///g_static_rw_lock_writer_unlock (&conn->lock);	
 	
-	g_printerr("%s Packet stored in memory for connection %s\n", H(conn->id), conn->key);
+	g_printerr("%s\t Packet stored in memory for connection %s\n", H(conn->id), conn->key);
 
 	return OK;
 }
@@ -588,7 +824,7 @@ int expire_conn(gpointer key, struct conn_struct *conn, gint *expiration_delay)
 		g_slist_free(conn->BUFFER);
 		g_free(conn->key_ext);
 		g_free(conn->key_lih);
-		g_free(conn->key_hih);
+		///g_free(conn->key_hih);
 		///free(conn->decision_rule);
 		g_string_free(conn->decision_rule, TRUE);
 
@@ -628,12 +864,6 @@ void clean()
 	}
 	int delay = atoi(expiration_delay);
 
-	/*! DEBUG
-	char *log = malloc(192);
-        sprintf(log,"clean():\texpiration delay set to %d seconds\n", delay);
-        L(NULL,log,3,8);
-	*/
-
 	while ( threading == OK )
 	{
 		/*! wake up every second */
@@ -670,109 +900,75 @@ void clean()
 int setup_redirection(struct conn_struct *conn)
 {
 	g_printerr("%s [** Starting... **]\n", H(conn->id));
-
-	char* hihaddr = lookup_honeypot_addr( conn->key_lih, LIH );
+	struct addr *hihaddr = conn->target->back_handler;
 
 	if ( hihaddr != NULL ) {
-		/*! If a high interaction was found, we then check that it's not currently used by the same external host IP and Port */
-		GString *key_hih_ext = g_string_new( "" );
-		g_string_printf( key_hih_ext, "%s:%s", hihaddr, conn->key_ext );
+		gchar **tmp;
+        	tmp = g_strsplit(conn->key, ":", 0);
 
-		if ( lookup_honeypot_addr( key_hih_ext->str, HIH ) == NULL )
-		{
-			/*! No concurrent redirection detected so we can move forward in this one */
+		g_printerr("%s [** HIH address: %s, port: %s **]\n", H(conn->id), addr_ntoa(hihaddr), tmp[3]);
 
-			/*! We start by registering the HIH:EXT->LIH dynamic relation into high_redirection_table
-			 * to prevent any similar redirection from being started */
+		/*! we check for concurrent connections using the same EXT_IP:PORT <-> HIH_IP:PORT */
+                GString *key_hih_ext = g_string_new("");
+                g_string_printf(key_hih_ext, "%s:%s:%s", addr_ntoa(hihaddr), tmp[3], conn->key_ext );
 
-			/*! We need first to initialize the high_redirection_table */
-			if ( high_redirection_table == NULL )
-			{
-				high_redirection_table = g_hash_table_new (g_str_hash, g_str_equal);
-			}
-
-			g_hash_table_insert (high_redirection_table, key_hih_ext->str, conn->key_lih );
-
+		if (high_redirection_table == NULL) {
+			high_redirection_table = g_hash_table_new(g_str_hash, g_str_equal);
+			g_printerr("%s [** high_redirection_table created **]\n", H(conn->id));
+		}
+		if (g_hash_table_lookup(high_redirection_table, key_hih_ext->str) == NULL) {
+			g_hash_table_insert (high_redirection_table, key_hih_ext->str, conn->key_lih);
 			g_printerr("%s [** high_redirection_table updated **]\n", H(conn->id));
-
-			GTimeVal t;
-		        g_get_current_time(&t);
-		        gdouble microtime = 0.0;
-		        microtime +=  ((gdouble)t.tv_sec);
-		        microtime += (((gdouble)t.tv_usec)/1000000.0);
-
-			gchar **tmp_ = g_strsplit( hihaddr, ":", 0);
-
-			int tmp_port;
-			sscanf(tmp_[1],"%i",&tmp_port);
-
-			/*! We update the connection structure with the high interaction honeypot found */
-			///ROBIN 2009-03-29: deadlock occurred between here and line 312 (init_conn())
-			///g_static_rw_lock_writer_lock (&conn->lock);
-			/*
-			#ifdef DEBUG
-			g_print("setup_redirection()\tTrying to unlock conn for connection id %d\n", conn->id);
-			#endif
-			while (!g_static_rw_lock_writer_trylock( &conn->lock )) {
-				g_usleep(1);
-				//g_static_rw_lock_writer_unlock( &conn->lock );
-			}
-			*/
-			conn->key_hih = hihaddr;
-			conn->hih.addr = htonl(addr2int( *tmp_ ));
-			conn->hih.lih_addr = htonl(addr2int( conn->key_lih ));
-			conn->hih.port = htons( (short)tmp_port );
-			/*! We then update the status of the connection structure
-			 */
-			conn->stat_time[ DECISION ] = microtime;
-			conn->state = REPLAY;
-
-			///g_static_rw_lock_writer_unlock (&conn->lock);
-
-			g_printerr("%s State updated to REPLAY\n", H(conn->id));
-
-			g_strfreev(tmp_);
-			g_string_free(key_hih_ext,0);
-
-			/*! We reset the LIH */
-			reset_lih( conn );
-
-			/*! We replay the first packets */
-			struct pkt_struct* current;
-			current = (struct pkt_struct*) g_slist_nth_data ( conn->BUFFER, conn->replay_id );
-
-			g_printerr("%s [** starting the forwarding loop... **]\n", H(conn->id));
-			// Does not correctly replay when MIN_DATA_DECISION is 0...
-			while(current->origin == EXT)
-			{
-				forward(current);
-				if(g_slist_next(g_slist_nth( conn->BUFFER, conn->replay_id )) == NULL)
-				{
-					///g_static_rw_lock_writer_lock (&conn->lock);
-					conn->state = FORWARD;
-					///g_static_rw_lock_writer_unlock (&conn->lock);
-					g_printerr("%s State updated to FORWARD\n", H(conn->id));
-					///g_string_free(key_hih_ext, TRUE);	///Seg fault - ROBIN - 2009-04-09
-					return OK;
-				}
-				///g_static_rw_lock_writer_lock (&conn->lock);
-				conn->replay_id++;
-				///g_static_rw_lock_writer_unlock (&conn->lock);
-				current = (struct pkt_struct*) g_slist_nth_data ( conn->BUFFER, conn->replay_id );
-			}
-			g_printerr("%s [** ...done with the forwarding loop **]\n", H(conn->id));
-			g_printerr("%s [** defining expected data **]\n", H(conn->id));
-			/*! then define the next expected data */
-			define_expected_data(current);
-			///g_static_rw_lock_writer_lock (&conn->lock);
-			conn->replay_id++;
-			///g_static_rw_lock_writer_unlock (&conn->lock);
 		} else {
 			g_string_free(key_hih_ext, TRUE);
+			g_printerr("%s [** HIH already busy with the same tuple, can't proceed **]\n", H(conn->id));
+			return NOK;
 		}
-	}
-	else
+
+		GTimeVal t;
+	        g_get_current_time(&t);
+	        gdouble microtime = 0.0;
+	        microtime +=  ((gdouble)t.tv_sec);
+	        microtime += (((gdouble)t.tv_usec)/1000000.0);
+
+		///conn->key_hih = hihaddr;
+		conn->hih.addr = 	htonl(addr2int(addr_ntoa(hihaddr))); 
+		conn->hih.lih_addr = 	htonl(addr2int(conn->key_lih));
+		conn->hih.port = 	htons((short)atoi(tmp[3]));
+		/*! We then update the status of the connection structure */
+		conn->stat_time[ DECISION ] = microtime;
+		//conn->state = REPLAY;
+		switch_state(conn, REPLAY);
+
+		g_strfreev(tmp);
+
+		/*! We reset the LIH */
+		reset_lih( conn );
+
+		/*! We replay the first packets */
+		struct pkt_struct* current;
+		current = (struct pkt_struct*) g_slist_nth_data ( conn->BUFFER, conn->replay_id );
+
+		g_printerr("%s [** starting the forwarding loop... **]\n", H(conn->id));
+		// Does not correctly replay when MIN_DATA_DECISION is 0...
+		while(current->origin == EXT) {
+			forward(current);
+			if(g_slist_next(g_slist_nth( conn->BUFFER, conn->replay_id )) == NULL) {
+				//conn->state = FORWARD;
+				switch_state(conn, FORWARD);
+				return OK;
+			}
+			conn->replay_id++;
+			current = (struct pkt_struct*) g_slist_nth_data ( conn->BUFFER, conn->replay_id );
+		}
+		g_printerr("%s [** ...done with the forwarding loop **]\n", H(conn->id));
+		g_printerr("%s [** defining expected data **]\n", H(conn->id));
+		define_expected_data(current);
+		conn->replay_id++;
+	} else {
+		g_printerr("%s [** Error, no HIH address defined **]\n", H(conn->id));
 		return NOK;
+	}
 	return OK;
 }
 

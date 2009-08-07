@@ -37,78 +37,50 @@
 #include "modules.h"
 #include "netcode.h"
 
-#include "mod_random.h"
-
-/*! init_mod_random
- \brief init the random module, fill up the databases */
-int init_mod_random()
-{
-	L("init_mod_random():\tInitializing Random Module\n",NULL,3,6);
-	return 0;
-}
+/*! mod_random requires the configuration of the following mandatory parameter:
+	- "value", to define a basis for the probability to accept the packet, which is 1 out of value
+ */ 
 
 /*! mod_random
  \param[in] args, struct that contain the node and the data to process
- \param[in] user_data, not used
- *
- \param[out] set result to 0 if attacker ip is found in search table, 1 if not
  */
 void mod_random(struct mod_args args)
 {
-	L("mod_random():\tModule called\n", NULL, 3, args.pkt->conn->id);
+	g_printerr("%s Module called\n", H(args.pkt->conn->id));
 
-	unsigned int value;
+	unsigned int value = 0;
 	unsigned int proba;
 	int selector = 1;
-	char *logbuf;
-	char *type;
-	int drop, check;
+	gchar *param;
 
-	/*! by defaut we discard
-	 */
-	args.node->result = 0; 
-	
-	/*! getting the value provided in argument
-	 */
-	//sscanf(args.node->arg,"%d",&value);
-	type = malloc(64);
-        check = sscanf(args.node->arg,"%d,%s", &value, type);
-
-        if (check != 2) {
-                L("mod_random():\tError: module argument malformed!\n", NULL, 3, args.pkt->conn->id);
-                return;
-        }
-
-        if (strcmp( type, "drop") == 0) {
-                drop = -1;
-        } else {
-                drop = 0;
-        }
-	free(type);
-
-	if (value < selector) {
-		logbuf = malloc(256);
-		sprintf(logbuf, "mod_random():\tIncorrect value given in argument: %d\n", value);
-		L(NULL, logbuf, 3, args.pkt->conn->id);
+	/*! getting the value provided as parameter */
+	if (	(param = (char *)g_hash_table_lookup(args.node->arg, "value")) == NULL ) {
+		/*! We can't decide */
+		args.node->result = -1;
+		g_printerr("%s Incorrect value parameter: %d\n", H(args.pkt->conn->id), value);
 		return;
+	} else {
+		value = atoi(param);
 	}
 
-	/*! deciding based on a probability of 1 out of "value":
-	 */
+	if (value < selector) {
+		/*! We can't decide */
+                args.node->result = -1;
+                g_printerr("%s Incorrect value parameter: %d\n", H(args.pkt->conn->id), value);
+                return;
+	}
+
+	/*! deciding based on a probability of 1 out of "value": */
 	proba = (int) (((double)value) * (rand() / (RAND_MAX + 1.0)));	
 
 	if (proba == selector) {
+		/*! We accept this packet */
 		args.node->result = 1;
-		logbuf = malloc(256);
-                sprintf(logbuf,"mod_random():\tPACKET MATCH RULE for random(%d)\n", value);
-                L(NULL, logbuf, 2, args.pkt->conn->id);
+		g_printerr("%s PACKET MATCH RULE for random(%d)\n", H(args.pkt->conn->id), value);
 	} else {
-		args.node->result = drop;
-		logbuf = malloc(256);
-                sprintf(logbuf,"mod_random():\tPACKET DOES NOT MATCH RULE for random(%d)\n", value);
-                L(NULL, logbuf, 2, args.pkt->conn->id);
+		/*! We reject this packet */
+		args.node->result = 0;
+		g_printerr("%s PACKET DOES NOT MATCH RULE for random(%d)\n", H(args.pkt->conn->id), value);
 	}
-
-	return;
 }
 

@@ -57,6 +57,9 @@ GHashTable *config;
 /*! \brief global hash table to hold module paramaters */
 GHashTable *module;
 
+
+
+//////////////// DEPRECATED ///////////// \todo to remove and clean
 /*! \brief global hash table that contain the static correspondance between LIH services et HIH services  */
 GHashTable *low_redirection_table;
 
@@ -69,6 +72,15 @@ GHashTable *low_honeypot_addr;
 /*! \brief global integer table that contains the addresses of the high_interaction honeypots (integer version)  */
 GHashTable *high_honeypot_addr;
 
+int test_honeypot_addr( char *testkey, int list );
+
+char * lookup_honeypot_addr( gchar *testkey, int list );
+//////////////////////////////////////////
+
+
+
+
+
 /*! \brief Balanced Binary Tree that keep meta informations about active connections
  *
  \param key, each entry is represented by the tuple of the connection (sourceIP+sourcePort+destIP+destPort)
@@ -80,15 +92,14 @@ unsigned c_id;
 /*! \brief pointer table for btree cleaning */
 GPtrArray *entrytoclean;
 
+char *lookup_state(int state);
+int switch_state(struct conn_struct *conn, int new_state);
+
 int init_pkt( char *nf_packet, struct pkt_struct *pkt);
 
 int free_pkt( struct pkt_struct *pkt );
 
 int init_conn(struct pkt_struct *pkt, struct conn_struct **conn);
-
-int test_honeypot_addr( char *testkey, int list );
-
-char * lookup_honeypot_addr( gchar *testkey, int list );
 
 int store_pkt(struct conn_struct *conn, struct pkt_struct *pkt);
 

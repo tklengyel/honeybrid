@@ -20,109 +20,63 @@
 
 echo "#********************************************************************************#
 #*			HONEYBRID CONFIGURATION FILE				*#
-#*										*#
-#* syntax is : key = 'value' (be careful, the pattern ' = ' is important)	*#
-#* comments lines starts with #							*#
 #********************************************************************************#
 
-## output mode
-#
-# 1 = syslog
-# 2 = stdout (do not daemonize)
-# 3 = log files
-#
+## main configuration:
+config {
+	## output mode
+	# 1 = syslog
+	# 2 = stdout (do not daemonize)
+	# 3 = log files
+        output = 3;
 
-output = 3
+	## 'yes' to send reset to external source, 'no' to remain silent
+        reset_ext = yes;
 
+	## pid directory
+        exec_directory = $RUNDIR;
 
-## verbose level
-#
-# 1 errors only
-# 2 minimal redirection information
-# 3 full redirection information
-# 4 internal processing events
-# 5 permanent internal processing events
-#
+	## log file directory
+        log_directory = $LOGDIR;
 
-log_level = 4
+	## enable automatic hourly log rotation (only for connection logs, not for debug logs)
+        log_rotation = 0;
 
+	## connection log file (log_directory defines the path)
+        log_file = $LOGFILE;
 
-## send reset to external source...
-#
+	## debug log file (detailed internal process, log_directory defines the path)
+        debug_file = $DEBUGFILE;
 
-reset_ext = yes
-
-
-## pid directory
-#
-
-exec_directory = $RUNDIR
+	## Number of seconds after which network sessions are expired
+        expiration_delay = 120;
+}
 
 
-## log directory
-#
+## module configuration:
+module \"hash\" {
+        function = hash;
+        backup = /etc/honeybrid/hash.tb;
+}
 
-log_directory = $LOGDIR
+module \"counter\" {
+        function = counter;
+        counter = 2;
+}
 
-## log file for connections
-#
-
-log_file = $LOGFILE
-
-## log file hourly rotation
-#  sending the signal USR1 to Honeybrid will force the logs to rotate
-#
-
-log_rotation = 1
-
-## log format
-#  if you need connections to be logged in csv format, just uncomment the following line
-#
-
-#log_format = csv
-
-## debug file for internal process
-#  (this one is never rotated)
-#
-
-debug_file = $DEBUGFILE
+module \"control\" {
+        function = control;
+	backup = /etc/honeybrid/control.tb;
+	expiration = 600;
+	max_packet = 1000;
+}
 
 
-## static redirect table
-#
-
-redirect_table = $CONFDIR/$RULE
-
-
-## delay in second to expire connections
-#
-
-expiration_delay = 120
-
-## enable pcap recording
-#
-
-record = 1
-
-
-## dump file path and prefix
-# (a time value and a .pcap suffix will be automatically
-# added by the program)
-#
-
-conn_record = $LOGDIR/honeybrid_pcap_
-
-## Control Engine table file
-#
-
-controltable = $CONFDIR/control.tb
-
-## Source Module table file
-#
-
-sourcetable = $CONFDIR/source.tb
-
-## Hash Module table file
-#
-
-hashtable = $CONFDIR/hash_bdd.tb">$CONF
+## target configuration:
+target {
+        filter \"dst host 192.168.0.10 and port 80\";
+        frontend 192.168.0.10 \"hash\";
+        backend 192.168.0.11 \"hash\";
+	control \"control\";
+}
+" >$CONF

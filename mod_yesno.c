@@ -21,8 +21,7 @@
 /*! \file yesno_mod.c
  * \brief Yesno Module for honeybrid Decision Engine
  *
- * This module always decides to redirect or not according to the "yes" or "no" value of its argument
- *
+ * This module always decides to redirect or not according to the "yes" (1) or "no" (0) value of its argument
  *
  \author Thomas Coquelin, 2008
  */
@@ -32,6 +31,10 @@
 #include "modules.h"
 #include "tables.h"
 
+/*! mod_yesno requires the configuration of the following mandatory parameter:
+	- "value", if 0 it rejects everything, if 1 it accepts everything
+ */
+
 /*! mod_yesno
  \param[in] args, struct that contain the node and the datas to process
  *
@@ -39,18 +42,28 @@
  */
 void mod_yesno(struct mod_args args)
 {
-	L("mod_yesno():\tModule called\n", NULL, 4,args.pkt->conn->id);
+	g_printerr("%s Module called\n", H(args.pkt->conn->id));
 
-	/*! strncmp returns 0 if the two arguments are equal */
-	if(0 == strncmp(args.node->arg,"yes",3))
-	{
-		args.node->result = 1;
-		L("mod_yesno():\tPACKET MATCH RULE for yesno(yes)\n", NULL, 2, args.pkt->conn->id);
+	int value = 0;
+	gchar *param;
+
+	if ((param = (char *)g_hash_table_lookup(args.node->arg, "value")) == NULL) {
+                /*! We can't decide */
+                args.node->result = -1;
+                g_printerr("%s mandatory argument 'value' undefined!\n", H(args.pkt->conn->id));
+                return;
+        } else {
+		value = atoi(param);
 	}
-	else
-	{
+
+	if(0 == value) {
+		/*! We accept this packet */
+		args.node->result = 1;
+		g_printerr("%s PACKET MATCH RULE for yesno(%d)\n", H(args.pkt->conn->id), value);
+	} else {
+		/*! We reject this packet */
 		args.node->result = 0;
-		L("mod_yesno():\tPACKET DOES NOT MATCH RULE for yesno(no)\n", NULL, 2, args.pkt->conn->id);
+		g_printerr("%s PACKET DOES NOT MATCH RULE for yesno(%d)\n", H(args.pkt->conn->id), value);
 	}
 }
 

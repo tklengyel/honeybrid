@@ -50,7 +50,7 @@ struct mod_args
 struct node
 {
 	void (*module)(struct mod_args);
-	char *arg;
+	GHashTable *arg;
 	GString *module_name;
 	struct node *true;
 	struct node *false;
@@ -63,58 +63,31 @@ void init_modules();
 
 void (*get_module(char *modname))(struct mod_args);
 
-/*!*************** YESNO FUNCTIONS AND VARIABLES ***********************************************/
+int save_backup(GKeyFile *data, char *filename);
 
-/*! mod_yesno
- \brief replies as asked 
- */
+/*!************ [Basic Modules] **************/
+
+/*!** MODULE YESNO **/
 void mod_yesno(struct mod_args args);
 
-
-/*!*************** PACKET POSITION COUNTER FUNCTIONS AND VARIABLES *****************************/
-
-/*! mod_counter
- \brief count push packets from the attacker
- */
+/*!** MODULE COUNTER **/
 void mod_counter(struct mod_args args);
 
-
-/*!*************** HASH FUNCTIONS AND VARIABLES ***********************************************/
-
-
-//#ifndef _NO_SSL_
-/*! message digest function
- */
-const EVP_MD *md;
-//#endif
-
-/*!
- \def SHA1 BDD HASH TABLES
- */
-GHashTable **hash_bdd;
-
-int init_mod_hash();
-
-void mod_hash(struct mod_args args);
-
-/*!
- \def Source bdd hash table
- */
-GHashTable **source_bdd;
-
-int init_mod_source();
-
-void mod_source(struct mod_args args);
-
-/*! module RANDOM
- */
-
-int init_mod_random();
-
+/*!** MODULE RANDOM **/
 void mod_random(struct mod_args args);
 
-/*! module PROXY
- */
-void mod_proxy(struct mod_args args);
+/*!*********** [Advanced Modules] ************/
+
+/*!** MODULE HASH **/
+const EVP_MD *md;
+int init_mod_hash();
+void mod_hash(struct mod_args args);
+
+/*!** MODULE SOURCE **/
+void mod_source(struct mod_args args);
+
+/*!** MODULE CONTROL **/
+void mod_control(struct mod_args args);
+//int control(struct pkt_struct *pkt);
 
 #endif //_MODULES_H_

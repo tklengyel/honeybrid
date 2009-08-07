@@ -40,12 +40,15 @@ extern	FILE *yyin;
 /*! Decision Engine thread enabled */
 //#define DE_THREAD
 
-/*! Cleaning Engine thread enabled */
-//#define CLEAN_THREAD
-
-/*! NFQUEUE Loop enabled
-    (when disabled, packets on the queue are processed through libev) */
-//#define NF_LOOP
+/*! Two strategies: with thread or with libev 
+ *  If USE_LIBEV is defined, the program loops on the main libev loop:
+ *	- packets on queue are processed through libev callback
+ *	- connection structures are cleaned by libev timer
+ *  If not, then the program loops on nfqueue:
+ *	- packets on queue are processed through nfqueue callback
+ *	- connection structures are cleaned by a thread
+ */
+//#define USE_LIBEV
 
 /*!
   \def DESTSIZE

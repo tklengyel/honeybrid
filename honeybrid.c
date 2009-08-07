@@ -1,4 +1,6 @@
 /*
+ * $Id: honeybrid.c 647 2009-08-07 03:01:56Z robin $
+ *
  * This file is part of the honeybrid project.
  *
  * Copyright (C) 2007-2009 University of Maryland (http://www.umd.edu)
@@ -104,8 +106,12 @@
 #include "log.h"
 #include "decision_engine.h"
 #include "modules.h"
-#include "mod_control.h"
 //#include "rules.h"
+
+#ifdef USE_LIBEV
+struct nfq_handle	*h; 
+struct ev_loop		*loop;
+#endif
 
 /*! usage function
  \brief print command line informations */
@@ -131,13 +137,13 @@ int close_thread()
 
 	threading = NOK;
 
-	#ifdef CLEAN_THREAD
-	g_printerr("%s:Waiting for thread_clean to terminate\n", __func__);
+	#ifndef USE_LIBEV
+	g_printerr("%s: Waiting for thread_clean to terminate\n", __func__);
 	g_thread_join(thread_clean);
 	#endif
 
 	#ifdef DE_THREAD
-	g_printerr("%s:Waiting for thread_de to terminate\n", __func__);
+	g_printerr("%s: Waiting for thread_de to terminate\n", __func__);
 	g_thread_join(thread_de);
 	#endif
 	/*
@@ -183,37 +189,32 @@ int close_hash()
 		g_hash_table_destroy(log_table);
 	}
 
+	/* \todo TODO deprecated
 	if (low_redirection_table != NULL) {
 		g_printerr("%s: Destroying table low_redirection_table\n", __func__);
 		g_hash_table_foreach_remove(low_redirection_table, (GHRFunc) free_table, NULL);
 		g_hash_table_destroy(low_redirection_table);
 	}
 
-	if (high_redirection_table != NULL) {
-		/*! this one is always NULL... must be free somewhere else before?
-		 */
-		g_printerr("%s: Destroying table high_redirection_table\n", __func__);
-		g_hash_table_foreach_remove(high_redirection_table, (GHRFunc) free_table, NULL);
-		g_hash_table_destroy(high_redirection_table);
-	}
 
-	if (low_honeypot_addr != NULL) {
-		/*! this table generates invalid free error in valgrind
-		 */
-		/*! and apparently also a seg fault... 
+	//if (low_honeypot_addr != NULL) {	//DEPRECATED
 		g_print("close_hash():\tDestroying table low_honeypot_addr\n");
 		g_hash_table_foreach_remove(low_honeypot_addr, (GHRFunc) free_table, NULL);
 		g_hash_table_destroy(low_honeypot_addr);
-		*/
-	}
+	//}
 
-	/*! this one also generate a seg fault... 
 	if (high_honeypot_addr != NULL) {
 		g_print("close_hash():\tDestroying table high_honeypot_addr\n");
 		g_hash_table_foreach_remove(high_honeypot_addr, (GHRFunc) free_table, NULL);
 		g_hash_table_destroy(high_honeypot_addr);
 	}
 	*/
+
+	if (high_redirection_table != NULL) {
+		g_printerr("%s: Destroying table high_redirection_table\n", __func__);
+		g_hash_table_foreach_remove(high_redirection_table, (GHRFunc) free_table, NULL);
+		g_hash_table_destroy(high_redirection_table);
+	}
 
 	if (DE_rules != NULL) {
 		/*! this table generates invalid free error in valgrind
@@ -230,14 +231,14 @@ int close_hash()
 		g_hash_table_foreach_remove(config, (GHRFunc) free_table, NULL);
 		g_hash_table_destroy(config);
 	}
-
+	/*
 	if (module != NULL) {
 		g_printerr("%s: Destroying table module\n", __func__);
 		g_hash_table_foreach(module, (GHFunc) free_hash, NULL);
 		//g_hash_table_foreach_remove(module, (GHRFunc) free_table, NULL);
 		g_hash_table_destroy(module);
 	}
-
+	*/
 
 	return 0;
 }
@@ -270,6 +271,32 @@ int close_conn_tree()
 	return 0;
 }
 
+void
+free_target(struct target *t, gpointer user_data)
+{
+	g_free(t->filter);
+	g_free(t->front_handler);
+	g_free(t->back_handler);
+	if (t->front_rule != NULL)
+		g_free(t->front_rule);
+	if (t->back_rule != NULL)
+		g_free(t->back_rule);
+	if (t->control_rule != NULL)
+		g_free(t->control_rule);
+	g_free(t);
+}
+
+/*! close_target
+ \brief destroy global structure "targets" when the program has to quit */
+int
+close_target(void)
+{
+	g_printerr("%s: Destroying targets\n", __func__);
+	g_ptr_array_foreach(targets, (GFunc) free_target, NULL);
+	g_ptr_array_free(targets, TRUE);
+	return OK;
+}
+
 /*! close_all
  \brief destroy structures and free memory when the program has to quit */
 void
@@ -290,8 +317,8 @@ close_all(void)
 	if (close_hash() < 0) 
 		g_printerr("%s: Error when closing hashes\n", __func__);
 
-	g_ptr_array_free(targets, TRUE);
-	/*! \todo: remove each element one by one and free the associated data structure */
+	if (close_target() <0)
+		g_printerr("%s: Error when closing targets\n", __func__);
 
 	/*! delete conn_tree */
 	if (close_conn_tree() < 0) 
@@ -311,10 +338,16 @@ int
 term_signal_handler(int signal_nb, siginfo_t * siginfo, void *context)
 {
 	g_printerr("%s: Signal received, halting engine\n", __func__);
-	running = NOK;
+	running = NOK;	/*! this will cause the queue loop to stop */
+	/*
 	close_all();
 	g_printerr("%s: Halted\n", __func__);
 	exit(signal_nb);
+	*/
+	#ifdef USE_LIBEV
+	ev_unloop (loop, EVUNLOOP_ALL);
+	#endif
+	return 0;
 }
 
 
@@ -377,163 +410,6 @@ init_parser(char *filename)
 	g_printerr("Parsing done\n");
 }
 
-/*! init_config	DEPRECATED
- \brief Config_parse function, read the configuration from a config file and parse it into a hash table */
-void 
-init_config (char *config_file_name)
-{
-	static FILE *rt;
-	static FILE *fd;
-	char confbuf[CONF_MAX_LINE];
-
-	/*! open config file defined by the "-c" argument */
-	if (NULL == (fd = fopen(config_file_name, "r"))) 
-		err(1,"fopen");
-
-	/*! process each line */
-	while (fgets (confbuf, CONF_MAX_LINE, fd)) {
-		/*! if a "#" is found at the beginning of the line, line is a comment */
-		if ( NULL != strchr("#",confbuf[0]) || NULL != strchr("\n",confbuf[0]) ) {
-			/// Then, go to next line
-		} else {
-			/*! create a glib table to store the line */
-			gchar **line;
-
-			/*! split the line in the table using the pattern ' = ' as a separator */
-			line = g_strsplit (confbuf, " = ",0);
-
-			/*! convert values from glib pointer to char * */
-			char *key, *value;
-			key = g_strdup(line[0]);
-			value = g_strdup(line[1]);
-
-			/*! delete '\n' at the end of the line */
-			if (strlen(value) > 1) {
-				value[strlen(value)-1]='\0';
-			} else {
-				#ifdef DEBUG
-				g_printerr("%s: line too short!\n", __func__);
-				#endif
-				g_strfreev(line);
-				continue;
-			}
-
-			/*! add values to config hash table */
-			g_hash_table_insert (config, key, value);
-
-			/*! log config parameters */
-			g_printerr("%s: '%s' = '%s'\n", __func__, key, value);
-
-			/*! free the memory */
-			g_strfreev(line);
-		}
-	}
-
-	/*! MUST NOT exit before the end of the configuration file */
-	if (!feof (fd))
-	{
-		g_hash_table_destroy(config);
-		config = NULL;
-		errx(1,"%s: Fatal error when reading configuration file", __func__);
-	}
-
-	/*! close config file */
-	fclose(fd);
-
-	/*! DEPRECATED Initialize log_level: */
-	char* log_level_buffer = CONFIG("log_level");
-        if(log_level_buffer == NULL)
-                LOG_LEVEL = 3;
-	else
-        	LOG_LEVEL = atoi(log_level_buffer);
-
-	/*! feed the redirection table with the configuration file */
-	if( NULL == CONFIG("redirect_table")) {
-		g_hash_table_destroy(config);
-		errx(1, "%s: No redirection table defined", __func__);
-	} else {
-		/*! open the file */
-		if (NULL == (rt = fopen(CONFIG("redirect_table"), "r"))) {
-			err(1,"fopen");
-		}
-		/*! process each line */
-		while (fgets (confbuf, CONF_MAX_LINE, rt))
-		{
-			confbuf[strlen(confbuf)-1]=0;
-			/*! if a "#" is found at the beginning of the line, line is a comment */
-			if ( (0 != strchr("#",confbuf[0])) || (0 != strchr("\n",confbuf[0])) )
-				continue;
-
-			unsigned lih_[5],hih_[5];
-			unsigned *lih_p, *hih_p;
-			char *lih = malloc(24);
-			char *hih = malloc(24);
-			char expr[1024];
-			int valid = 1;
-
-			if(sscanf(confbuf,"%i.%i.%i.%i:%i -> %i.%i.%i.%i:%i : %[^\n]",
-				lih_, lih_+1, lih_+2, lih_+3, lih_+4,hih_+0, hih_+1, hih_+2, hih_+3, hih_+4 ,expr) != 11) {
-				valid = 0;
-			}
-
-			if(sscanf(confbuf,"%[0-9.:] -> %[0-9.:] : %[^\n]",lih,hih,expr) != 3) {
-				valid = 0;
-			}
-
-			if (valid > 0) {
-				lih_p = malloc(sizeof(unsigned)); /*! \todo to be freed before g_hash_table_destroy(low_honeypot_addr) */
-				hih_p = malloc(sizeof(unsigned)); /*! \todo to be freed before g_hash_table_destroy(high_honeypot_addr) */
-
-				*lih_p = (lih_[0]<<24) + (lih_[1]<<16) + (lih_[2]<<8) + lih_[3];
-				*hih_p = (hih_[0]<<24) + (hih_[1]<<16) + (hih_[2]<<8) + hih_[3];
-
-				if(g_hash_table_lookup(low_honeypot_addr, lih_p) == NULL) {
-					g_hash_table_insert(low_honeypot_addr, lih_p, lih_p);
-				}
-				else
-					free(lih_p);
-	
-				if(g_hash_table_lookup(high_honeypot_addr, hih_p) == NULL) {
-					g_hash_table_insert(high_honeypot_addr, hih_p, hih_p);
-				}
-				else
-					free(hih_p);
-
-				/*! add values to config hash table */
-				g_hash_table_insert (low_redirection_table, lih, hih);
-				//g_print("\tconfig_parse(): '%s' -> '%s' inserted into low_redirection_table\n", lih, hih);
-
-				/*! process the equation to create the boolean tree
-				 * and store the return tree root in the DE_rules hash table
-				 * The key to then find the correct expression in the hash table is provided by lih
-				 */
-				g_hash_table_insert(DE_rules, lih, DE_create_tree(expr));
-			}
-
-			if (valid > 0) {
-				/*! log config parameters */
-				//char *logbuf = malloc(128);
-				//sprintf(logbuf,"config_parse(): | %s\n",confbuf);
-				//L(NULL,logbuf,3,3);
-				g_printerr("%s: '%s'\n", __func__, confbuf);
-			} else {
-				g_printerr("%s: '%s' (ERROR: syntax incorrect!)\n", __func__, confbuf);
-			}
-		}
-
-		/*! MUST NOT exit before the end of the file */
-		if (!feof (rt))
-		{
-			g_hash_table_destroy(low_redirection_table);
-			g_hash_table_destroy(config);
-			config = NULL;
-			low_redirection_table = NULL;
-			errx(1,"%s: Fatal error when reading redirection table", __func__);
-		}
-		fclose(rt);
-	}
-}
-
 void
 init_variables()
 {
@@ -553,17 +429,18 @@ init_variables()
 	if (NULL == (log_table = g_hash_table_new(g_str_hash, g_str_equal))) 
 		errx(1,"%s: Fatal error while creating log_table hash table.\n", __func__);
 
-	/*! create the hash table for the redirection table */
+	/*! create the hash table for the redirection table \todo DEPRECATED
 	if (NULL == (low_redirection_table = g_hash_table_new(g_str_hash, g_str_equal))) 
 		errx(1,"%s: Fatal error while creating redirection_table hash table.\n", __func__);
-
-	/*! create the hash table for the LIH list */
+	*/
+	/*! create the hash table for the LIH list \todo DEPRECATED
 	if (NULL == (low_honeypot_addr = g_hash_table_new(g_int_hash, g_int_equal))) 
 		errx(1,"%s: Fatal error while creating low_honeypot_addr hash table.\n", __func__);
-
-	/*! create the hash table for the HIH list */
+	*/
+	/*! create the hash table for the HIH list \todo DEPRECATED
 	if (NULL == (high_honeypot_addr = g_hash_table_new(g_int_hash, g_int_equal))) 
 		errx(1, "%s: Error while creating high_honeypot_addr hash table.\n", __func__);
+	*/
 
 	/*! create the hash table to store the pointers to the boolean execution trees */
 	if (NULL == (DE_rules = g_hash_table_new(g_str_hash, g_str_equal))) 
@@ -612,46 +489,49 @@ init_variables()
 static u_int32_t 
 process_packet(struct nfq_data *tb)
 {
-	struct conn_struct conn_invalid;
-	conn_invalid.state = INVALID;
-	conn_invalid.id = 4;
-	struct conn_struct * conn = &conn_invalid;
-	struct pkt_struct * pkt = (struct pkt_struct *) malloc( sizeof(struct pkt_struct) ); ///TODO: check that it's correctly freed
-	int statement = 0;
+	/*! We create a new temporary connection structure */
+	struct conn_struct conn_init;
+        conn_init.state = INVALID;	/* by default the connection is invalid */
+        conn_init.id = 0;
+        struct conn_struct * conn = &conn_init;
+
+	struct pkt_struct * pkt = (struct pkt_struct *) malloc(sizeof(struct pkt_struct)); /* \todo TODO: check that it's correctly freed */
+	int statement = 0;		/* by default we reject this packet */
 	char *nf_packet;
 	struct in_addr in;
 
-	/*! extract ip header from packet payload 
-	    drop the packet if we cannot extract the payload */
-	if(nfq_get_payload(tb, &nf_packet) < 0)
+	/*! extract ip header from packet payload */
+	int size;
+	size = nfq_get_payload(tb, &nf_packet);
+	if(size < 0) {
 		return statement = 0;
+	}
 
 	in.s_addr=((struct iphdr*)nf_packet)->saddr;
 
-	g_printerr("%s New packet received from %s (proto: %d)\n", 
+	g_printerr("%s New packet received from %s (proto: %d, size: %d)\n", 
 		H(conn->id), 
 		inet_ntoa(in), 
-		((struct iphdr*)nf_packet)->protocol);	
+		((struct iphdr*)nf_packet)->protocol,
+		size);	
 
-	/*! Start by creating a tuple for this packet, and extract addresses/ports to generate the key */
 	/*! check if protocol is invalid (not TCP or UDP) */
-	if ( (((struct iphdr*)nf_packet)->protocol != 6) && (((struct iphdr*)nf_packet)->protocol != 17) )
+	if ((((struct iphdr*)nf_packet)->protocol != 6) && (((struct iphdr*)nf_packet)->protocol != 17)) {
+		g_printerr("%s Incorrect protocol: %d, packet dropped\n", H(conn->id), (((struct iphdr*)nf_packet)->protocol));
 		return statement = 0;
-
-
-
-
+	}
 
 	/*! Initialize the packet structure (into pkt) and find the origin of the packet */
-	if(init_pkt(nf_packet, pkt) == NOK)
+	if (init_pkt(nf_packet, pkt) == NOK) {
+		g_printerr("%s Packet structure couldn't be initialized, packet dropped\n", H(conn->id));
 		return statement = 0;
-
+	}
 
 	/*! Initialize the connection structure (into conn) and get the state of the connection */
-	init_conn(pkt, &conn);
-
-
-
+	if (init_conn(pkt, &conn) == NOK) {
+		g_printerr("%s Connection structure couldn't be initialized, packet dropped\n", H(conn->id));
+		return statement = 0;
+	}
 
 	#ifdef DEBUG
 	g_printerr("%s Origin: %i, State: %i, Data: %i\n", 
@@ -666,17 +546,14 @@ process_packet(struct nfq_data *tb)
 		&& (pkt->origin == EXT))
 		|| (conn->state < INVALID)) {	
 		///INIT == 1, INVALID == 0 and NOK == -1
-		/*! We drop the packet if there was a problem */
 		g_printerr("%s Packet not from a valid connection %s\n",
 			H(conn->id),
 			inet_ntoa(in));
-#ifdef RST_EXT
+		#ifdef RST_EXT
 		if(pkt->packet.ip->protocol==0x06)
 			reply_reset( pkt->packet );
-#endif
+		#endif
 		free_pkt(pkt);
-///		free(pkt->packet);
-///		free(pkt);
 		return statement = 0;
 	}
 
@@ -692,212 +569,130 @@ process_packet(struct nfq_data *tb)
 		return statement = 0;
 	}
 
-	/*! Switch according to the origin of the packet */
-	switch( pkt->origin )
-	{
-		/*! Packet is from the low interaction honeypot */
-		case LIH:
-			/*! Then we switch according to the state of the connection */
-			switch( conn->state )
-			{
-				case INIT:
-					if(pkt->packet.ip->protocol == 0x06)
-					{
-						if(pkt->packet.tcp->syn!=0) {
-							///g_static_rw_lock_writer_lock (&conn->lock);
-							conn->hih.lih_syn_seq = ntohl(pkt->packet.tcp->seq);
-							///g_static_rw_lock_writer_unlock (&conn->lock);
-						}
-					}
-					/*! store packet in memory */
-                                        store_pkt(conn, pkt);
-
-					/*! update statement to 1 (accept) */
-					statement = 1;
-					break;
-				case DECISION:
-					/*! When MIN_DECISION_DATA is 0, then the DECISION state is like the INIT state... to clarify */
-					if(MIN_DECISION_DATA == 0 && pkt->packet.ip->protocol == 0x06)
-					{
-						if(pkt->packet.tcp->syn!=0) {
-							///g_static_rw_lock_writer_lock (&conn->lock);
-							conn->hih.lih_syn_seq = ntohl(pkt->packet.tcp->seq);
-							///g_static_rw_lock_writer_unlock (&conn->lock);
-						}
-					}
-
-					/*! store packet in memory */
-                                        store_pkt(conn, pkt);
-
-					/*! \todo This is the part we need to change! By removing the thread. */
-					#ifdef DE_THREAD
-					DE_push_pkt(pkt);
-					#else
-					DE_process_packet(pkt);
-					#endif
-
-                                        break;		
-				case PROXY:
-					/*! we let the packet go */
-					#ifdef DEBUG
-					g_printerr("%s Packet from LIH proxied directly to its destination\n", H(conn->id));
-					#endif
-					statement = 1;
-					break;
-				default:
-					/*! reset the origin */
-					g_printerr("%s Packet from LIH at wrong state => reset %s\n", H(conn->id), inet_ntoa(in));
-					if(pkt->packet.ip->protocol==0x06)
-						reply_reset( pkt->packet );
-					free_pkt(pkt);
-///					free(pkt->packet);
-///					free(pkt);
-					break;
+	switch( pkt->origin ) {
+	/*! Packet is from the low interaction honeypot */
+	case LIH:
+		switch( conn->state ) {
+		case INIT:
+			if(pkt->packet.ip->protocol == 0x06 && pkt->packet.tcp->syn!=0) {
+				conn->hih.lih_syn_seq = ntohl(pkt->packet.tcp->seq);
 			}
+			store_pkt(conn, pkt);
+			//conn->state = CONTROL;	
+			//switch_state(conn, CONTROL); //Now it's when the connection is created that the state is on CONTROL for LIH
+			statement = 1;	//DE_process_packet(pkt);	/*! For now, we don't analyze packets from LIH */
 			break;
-
-		/*! Packet is from the high interaction honeypot */
-		case HIH:
-			/*! Then we switch according to the state of the connection */
-			switch( conn->state )
-			{
-				case REPLAY:
-					/*! push the packet to the synchronization list in conn_struct */
-					if(pkt->packet.ip->protocol == 0x06)
-					{
-						if(pkt->packet.tcp->syn == 1)
-						{
-							///g_static_rw_lock_writer_lock (&conn->lock);
-							conn->hih.delta = ~ntohl(pkt->packet.tcp->seq) + 1 + conn->hih.lih_syn_seq;
-							///g_static_rw_lock_writer_unlock (&conn->lock);
-						}
-					}
-                                        replay(conn, pkt );	
-					break;
-				case FORWARD:
-					/*! forward the packet from the high interaction to the attacker */
-                                        forward(pkt );
-					free_pkt(pkt);
-///					free(pkt->packet);
-///					free(pkt);
-                                        break;		
-				/*! This one should never occur because PROXY are only between EXT and LIH... but we never know! */
-				case PROXY:
-					/*! we let the packet go */
-					#ifdef DEBUG
-					g_printerr("%s Packet from EXT proxied directly to its destination\n", H(conn->id));
-					#endif
-					statement = 1;
-					break;
-				default:
-					/*! We are surely in the INIT state, so the HIH is initiating a connection to outside.
-					 *  Two strategies, either reset or accept... Since we're using Nepenthes, we'll go with accept	
-					 */
-					if (RESET_HIH > 0) {	
-						/*! reset the origin */
-						g_printerr("%s Packet from HIH at wrong state, so we reset %s\n", H(conn->id), inet_ntoa(in));
-						if(pkt->packet.ip->protocol==0x06) {
-							reply_reset( pkt->packet );
-						}
-						statement = 0;
-						conn->state = DROP;
-					} else {
-						g_printerr("%s Packet from HIH at wrong state, so we control it (%s)\n", H(conn->id), inet_ntoa(in));
-						if (control(pkt) == 0) {
-							#ifdef DEBUG
-							g_printerr("%s Packet from HIH accepted by control() (%s)\n", H(conn->id), inet_ntoa(in));
-                                        		#endif
-							statement = 1;
-							//conn->state = PROXY;	//ROBIN 2009-04-19 If we put proxy, the connection won't be control anymore!
-							conn->state = CONTROL;
-						} else {
-							#ifdef DEBUG
-							g_printerr("%s Packet from HIH rejected by control() (%s)\n",  H(conn->id), inet_ntoa(in));
-                                        		#endif
-							statement = 0;
-							conn->state = DROP;
-						}
-					}
-					free_pkt(pkt);
-///					free(pkt->packet);
-///					free(pkt);
-					break;
+		case DECISION:
+			if(pkt->packet.ip->protocol == 0x06 && pkt->packet.tcp->syn!=0) {
+				conn->hih.lih_syn_seq = ntohl(pkt->packet.tcp->seq);
 			}
+			store_pkt(conn, pkt);
+			statement = 1;	//DE_process_packet(pkt);	/*! For now, we don't analyze packets from LIH */
+			break;		
+		case PROXY:
+			#ifdef DEBUG
+			g_printerr("%s Packet from LIH proxied directly to its destination\n", H(conn->id));
+			#endif
+			statement = 1;
 			break;
-
-		/*! Packet is from the external attacker (origin == EXT) */
+		case CONTROL:
+			if(pkt->packet.ip->protocol == 0x06 && pkt->packet.tcp->syn!=0) {
+				conn->hih.lih_syn_seq = ntohl(pkt->packet.tcp->seq);
+			}
+			store_pkt(conn, pkt);
+			statement = DE_process_packet(pkt);
+			break;
 		default:
-			/*! Then we switch according to the state of the connection */
-			switch( conn->state )
-			{
-				case INIT:
-					/*! store the packet */
-					store_pkt(conn, pkt);
-					
-					/*! Test if the packet has data */
-					if (pkt->data >= MIN_DECISION_DATA) {
-						/*! Packet has data so we lock and then update the state of the connection */
-						///g_static_rw_lock_writer_lock (&conn->lock);
-						conn->state = DECISION;
-                                        	///sprintf(conn->decision_rule, "(submitted)");
-						///g_string_assign(conn->decision_rule, "Submitted");
-						g_string_assign(conn->decision_rule, ";");
-						///g_static_rw_lock_writer_unlock (&conn->lock);
+			g_printerr("%s Packet from LIH at wrong state => reset %s\n", H(conn->id), inet_ntoa(in));
+			if(pkt->packet.ip->protocol==0x06)
+				reply_reset( pkt->packet );
+			free_pkt(pkt);
+			break;
+		}
+		break;
 
-						/*! Then we submit the packet to the Decision Engine */
-						/*! \todo This is the part we need to change! By removing the thread. */
-						#ifdef DE_THREAD
-						DE_push_pkt(pkt);
-						#else
-						DE_process_packet(pkt);
-						#endif
-
-					} else {
-						/*! Packet has no data so we accept it */
-						statement = 1;
-					}
-
-					break;
-				case DECISION:
-					store_pkt(conn, pkt);
-					/*! \todo This is the part we need to change! By removing the thread. */
-					#ifdef DE_THREAD
-					DE_push_pkt(pkt);
-					#else
-					DE_process_packet(pkt);
-					#endif
-					break;
-				case FORWARD:
-					/*! forward the packet from the high interaction to the attacker */
-					forward(pkt );
-					free_pkt(pkt);
-///					free(pkt->packet);
-///					free(pkt);
-
-					break;		
-				case PROXY:
-					/*! we let the packet go */
-					#ifdef DEBUG
-					g_printerr("%s Packet from EXT proxied directly to its destination\n", H(conn->id));
-					#endif
-					statement = 1;
-					break;
-				case CONTROL:
-					/*! we let the packet go */
-					#ifdef DEBUG
-					g_printerr("%s Packet from EXT proxied directly to its destination\n", H(conn->id));
-					#endif
-					statement = 1;
-					break;
-				default:
-					/*! we store the packet for any other state (like REPLAY) */
-					store_pkt(conn, pkt);
-					break;
+	/*! Packet is from the high interaction honeypot */
+	case HIH:
+		switch( conn->state ) {
+		case REPLAY:
+			/*! push the packet to the synchronization list in conn_struct */
+			if(pkt->packet.ip->protocol == 0x06 && pkt->packet.tcp->syn == 1) {
+				conn->hih.delta = ~ntohl(pkt->packet.tcp->seq) + 1 + conn->hih.lih_syn_seq;
+			}
+			replay(conn, pkt );	
+			break;
+		case FORWARD:
+			forward(pkt );
+			free_pkt(pkt);
+			break;		
+		/*! This one should never occur because PROXY are only between EXT and LIH... but we never know! */
+		case PROXY:
+			#ifdef DEBUG
+			g_printerr("%s Packet from EXT proxied directly to its destination\n", H(conn->id));
+			#endif
+			statement = 1;
+			break;
+		case CONTROL:
+			statement = DE_process_packet(pkt);
+			break;
+		default:
+			/*! We are surely in the INIT state, so the HIH is initiating a connection to outside. We reset or control it */
+			if (RESET_HIH > 0) {	
+				g_printerr("%s Packet from HIH at wrong state, so we reset %s\n", H(conn->id), inet_ntoa(in));
+				if(pkt->packet.ip->protocol==0x06) {
+					reply_reset( pkt->packet );
+				}
+				statement = 0;
+				//conn->state = DROP;
+				switch_state(conn, DROP);
+				free_pkt(pkt);
+			} else {
+				g_printerr("%s Packet from HIH at wrong state, so we control it (%s)\n", H(conn->id), inet_ntoa(in));
+				//conn->state = CONTROL;
+				switch_state(conn, CONTROL);
+				statement = DE_process_packet(pkt);
 			}
 			break;
+		}
+			break;
+
+	/*! Packet is from the external attacker (origin == EXT) */
+	default:
+		switch( conn->state ) {
+		case INIT:
+			store_pkt(conn, pkt);
+			//conn->state = DECISION;
+			g_string_assign(conn->decision_rule, ";");
+			statement = DE_process_packet(pkt);
+
+			break;
+		case DECISION:
+			store_pkt(conn, pkt);
+			statement = DE_process_packet(pkt);
+			break;
+		case FORWARD:
+			forward(pkt );
+			free_pkt(pkt);
+			break;		
+		case PROXY:
+			#ifdef DEBUG
+			g_printerr("%s Packet from EXT proxied directly to its destination\n", H(conn->id));
+			#endif
+			statement = 1;
+			break;
+		case CONTROL:
+			#ifdef DEBUG
+			g_printerr("%s Packet from EXT proxied directly to its destination\n", H(conn->id));
+			#endif
+			statement = 1;
+			break;
+		default:
+			store_pkt(conn, pkt);
+			break;
+		}
+		break;
 	}
 
-	/*! reinit keys */
 	return statement;
 }
 
@@ -916,9 +711,7 @@ static int q_cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data
 	/*! launch process function */
 	u_int32_t statement = process_packet(nfa);
 
-	/*! ACCEPT the packet if the statement is 1 */
-	if(statement == 1)
-	{
+	if(statement == 1) {
 		/*! nfq_set_verdict_mark
 		\brief set a decision NF_ACCEPT or NF_DROP on the packet and put a mark on it
 		 *
@@ -930,18 +723,18 @@ static int q_cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data
 		\param[in] buf pointer to data buffer
 		 *
 		\return 0 on success, non-zore on failure */
+
+		/*! ACCEPT the packet if the statement is 1 */
 		return nfq_set_verdict_mark(qh, id, NF_ACCEPT, htonl(0), 0, NULL);
-	}
-	/*! DROP the packet if the statement is 0 (or something else than 1) */
-	else
-	{
+	} else {
+		/*! DROP the packet if the statement is 0 (or something else than 1) */
 		return nfq_set_verdict_mark(qh, id, NF_DROP, htonl(1), 0, NULL);
 	}
 
 }
 
+#ifndef USE_LIBEV
 /*! netlink loop
- *
  \brief Function to create and maintain the NF_QUEUE loop
  \param[in] queuenum the queue identifier
  \return status
@@ -987,6 +780,78 @@ short int netlink_loop(unsigned short int queuenum)
         nfq_close(h);
         return(0);	
 }
+
+#else
+
+static void
+nfqueue_ev_cb(struct ev_loop *loop, ev_io *w, int revents)
+{
+	int rv;
+        char buf[BUFSIZE];
+
+	rv = recv(w->fd, buf, sizeof(buf), 0);
+	if (rv >= 0 && running == OK) {
+	        //nfq_handle_packet((struct nfq_handle *)w->data, buf, rv);
+	        nfq_handle_packet(h, buf, rv);
+	}
+}
+
+/*! init_nfqueue
+ *
+ \brief Function to create the NF_QUEUE loop
+ \param[in] queuenum the queue identifier
+ \return file descriptor for queue
+ */
+int 
+//init_nfqueue(struct nfq_handle *h, struct nfq_q_handle *qh, unsigned short int queuenum)
+init_nfqueue(struct nfq_q_handle *qh, unsigned short int queuenum)
+{
+        struct nfnl_handle *nh;
+
+	running = OK;
+
+        h = nfq_open();
+        if (!h) 
+		errx(1,"%s Error during nfq_open()", __func__);	
+
+        if (nfq_unbind_pf(h, AF_INET) < 0) 
+		errx(1,"%s Error during nfq_unbind_pf()", __func__);	
+
+        if (nfq_bind_pf(h, AF_INET) < 0) 
+		errx(1,"%s Error during nfq_bind_pf()", __func__);	
+
+	syslog(LOG_INFO, "NFQUEUE: binding to queue '%hd'\n", queuenum);
+
+        qh = nfq_create_queue(h,  queuenum, &q_cb, NULL);
+        if (!qh) 
+		errx(1,"%s Error during nfq_create_queue()", __func__);	
+
+        if (nfq_set_mode(qh, NFQNL_COPY_PACKET, PAYLOADSIZE) < 0) 
+		errx(1,"%s Can't set packet_copy mode", __func__);	
+
+        nh = nfq_nfnlh(h);
+
+        return(nfnl_fd(nh));	
+}
+
+static void
+//close_nfqueue(struct nfq_handle *h, struct nfq_q_handle *qh, unsigned short int queuenum)
+close_nfqueue(struct nfq_q_handle *qh, unsigned short int queuenum)
+{
+	syslog(LOG_INFO, "NFQUEUE: unbinding from queue '%hd'\n", queuenum);
+        nfq_destroy_queue(qh);
+        nfq_close(h);
+}
+
+static void
+timeout_clean_cb (EV_P_ ev_timer *w, int revents)
+{
+     //g_printerr("%s timeout reach for ev_timer!\n", H(0));
+	clean();
+}
+#endif
+
+//End Test
 
 /*! init_signal
  \brief installs signal handlers
@@ -1066,78 +931,6 @@ init_signal()
 		errx(1, "%s: Failed to install sighandler for SIGUSR1", __func__);
 }
 
-//////////////////////////////// Test ///////////////////////////////////
-//To do: to put as non-global variables inside main();
-struct nfq_handle *h; 
-
-static void
-nfqueue_ev_cb(struct ev_loop *loop, ev_io *w, int revents)
-{
-	int rv;
-        char buf[BUFSIZE];
-
-	rv = recv(w->fd, buf, sizeof(buf), 0);
-	if (rv >= 0 && running == OK) {
-	        //nfq_handle_packet((struct nfq_handle *)w->data, buf, rv);
-	        nfq_handle_packet(h, buf, rv);
-	}
-}
-
-/*! init_nfqueue
- *
- \brief Function to create the NF_QUEUE loop
- \param[in] queuenum the queue identifier
- \return file descriptor for queue
- */
-int 
-//init_nfqueue(struct nfq_handle *h, struct nfq_q_handle *qh, unsigned short int queuenum)
-init_nfqueue(struct nfq_q_handle *qh, unsigned short int queuenum)
-{
-        struct nfnl_handle *nh;
-
-	running = OK;
-
-        h = nfq_open();
-        if (!h) 
-		errx(1,"%s Error during nfq_open()", __func__);	
-
-        if (nfq_unbind_pf(h, AF_INET) < 0) 
-		errx(1,"%s Error during nfq_unbind_pf()", __func__);	
-
-        if (nfq_bind_pf(h, AF_INET) < 0) 
-		errx(1,"%s Error during nfq_bind_pf()", __func__);	
-
-	syslog(LOG_INFO, "NFQUEUE: binding to queue '%hd'\n", queuenum);
-
-        qh = nfq_create_queue(h,  queuenum, &q_cb, NULL);
-        if (!qh) 
-		errx(1,"%s Error during nfq_create_queue()", __func__);	
-
-        if (nfq_set_mode(qh, NFQNL_COPY_PACKET, PAYLOADSIZE) < 0) 
-		errx(1,"%s Can't set packet_copy mode", __func__);	
-
-        nh = nfq_nfnlh(h);
-
-        return(nfnl_fd(nh));	
-}
-
-static void
-//close_nfqueue(struct nfq_handle *h, struct nfq_q_handle *qh, unsigned short int queuenum)
-close_nfqueue(struct nfq_q_handle *qh, unsigned short int queuenum)
-{
-	syslog(LOG_INFO, "NFQUEUE: unbinding from queue '%hd'\n", queuenum);
-        nfq_destroy_queue(qh);
-        nfq_close(h);
-}
-
-static void
-timeout_clean_cb (EV_P_ ev_timer *w, int revents)
-{
-     //g_printerr("%s timeout reach for ev_timer!\n", H(0));
-	clean();
-}
-
-//End Test
 
 /*! main
  \brief process arguments, daemonize, init variables, create QUEUE handler and process each packet
@@ -1155,9 +948,11 @@ main(int argc, char *argv[])
 	int fdebug;
 
 	unsigned short int queuenum=0;
+	#ifdef USE_LIBEV
 	//struct nfq_handle *h; 
 	struct nfq_q_handle *qh;
 	int my_nfq_fd;
+	#endif
 
 	#ifdef DEBUG
 	g_printerr("\n\n");
@@ -1252,7 +1047,6 @@ main(int argc, char *argv[])
 
 	/*! parse the configuration files and store values in memory */
 	init_parser(config_file_name);
-	//init_config(config_file_name);
 
 	/*! Create PID file, we might not be able to remove it */
         unlink(PIDFILE);
@@ -1291,14 +1085,6 @@ main(int argc, char *argv[])
 	mainpid = getpid();
 	open_connection_log();
 
-	#ifdef CLEAN_THREAD
-	/*! create a thread for the management, cleaning stuffs and so on */
-	if( ( thread_clean = g_thread_create_full ((void *)switch_clean, NULL, 0, TRUE, TRUE,G_THREAD_PRIORITY_LOW, NULL)) == NULL) 
-		errx(1, "%s: Unable to start the cleaning thread", __func__);
-	else
-		g_printerr("%s: Cleaning thread started\n", __func__);
-	#endif
-
 	#ifdef DE_THREAD
 	/*! init the Decision Engine thread */
 	if( ( thread_de = g_thread_create_full ((void *)DE_submit_packet, NULL, 0, TRUE, TRUE, 0, NULL)) == NULL) 
@@ -1307,10 +1093,11 @@ main(int argc, char *argv[])
 		g_printerr("%s: Decision engine thread started\n", __func__);
 	#endif
 
-	/*! initiate outgoing connection control */
-	init_control();
-	/*! initiate decision engine modules */
-	init_modules();
+	/*! initiate outgoing connection control => no longer needed
+	init_control(); */
+	/*! initiate decision engine modules => done automatically in rules.y, except for init_mod_hash: */
+	init_modules(); 
+
 	/*! create the two raw sockets for UDP/IP and TCP/IP */
 	init_raw_sockets();
 	if(tcp_rsd == 0 || udp_rsd == 0) 
@@ -1318,52 +1105,49 @@ main(int argc, char *argv[])
 
 
 
-
-	//Testing libev
-	struct    ev_loop  *loop = ev_default_loop (0);
-
-	ev_timer  timeout_clean_watcher;
-	ev_io     queue_watcher;
-
-	#ifndef CLEAN_THREAD
-	//Watcher for cleaning conn_tree every 10 seconds:
-	ev_timer_init  (&timeout_clean_watcher, timeout_clean_cb, 10., 10.);
-	ev_timer_start (loop, &timeout_clean_watcher);
-	#endif
-
-	//Watcher for processing packets received on NF_QUEUE:
-	//my_nfq_fd = init_nfqueue(h, qh, queuenum);
-	my_nfq_fd = init_nfqueue(qh, queuenum);
-	ev_io_init  (&queue_watcher, nfqueue_ev_cb, my_nfq_fd, EV_READ);
-	ev_io_start (loop, &queue_watcher);
-	//queue_watcher.data = (void *)h;
-
-
-	#ifdef NF_LOOP
-	/*! Starting the nfqueue loop to start processing packets */
-        netlink_loop(queuenum);
+	#ifdef USE_LIBEV
+		loop = ev_default_loop(0);
+		//Watcher for cleaning conn_tree every 10 seconds:
+		ev_timer  timeout_clean_watcher;
+		ev_timer_init  (&timeout_clean_watcher, timeout_clean_cb, 10., 10.);
+		ev_timer_start (loop, &timeout_clean_watcher);
+		/*! Watcher for processing packets received on NF_QUEUE: */
+		my_nfq_fd = 	init_nfqueue(qh, queuenum);
+		ev_io		queue_watcher;
+		ev_io_init  	(&queue_watcher, nfqueue_ev_cb, my_nfq_fd, EV_READ);
+		ev_io_start 	(loop, &queue_watcher);
+		g_printerr("%s Starting ev_loop\n", H(0));
+		//ev_loop (loop, EVLOOP_NONBLOCK);
+		ev_loop(loop, 0);
+		/*! To be moved inside close_all() */
+		close_nfqueue(qh, queuenum);
 	#else
-	g_printerr("%s Starting ev_loop\n", H(0));
-	ev_loop (loop, 0);
-
-	//close_nfqueue(h, qh, queuenum);
-	//To be moved inside close_all()
-	close_nfqueue(qh, queuenum);
+		/*! create a thread for the management, cleaning stuffs and so on */
+		if( ( thread_clean = g_thread_create_full ((void *)switch_clean, NULL, 0, TRUE, TRUE,G_THREAD_PRIORITY_LOW, NULL)) == NULL) {
+			errx(1, "%s: Unable to start the cleaning thread", __func__);
+		} else {
+			g_printerr("%s: Cleaning thread started\n", __func__);
+		}
+		/*! Starting the nfqueue loop to start processing packets */
+		g_printerr("%s Starting netlink_loop\n", H(0));
+		/*! sometimes netlink_loop exits by itself... so we have to restart it */
+		int i = 0;
+		while (running == OK) {
+	        	netlink_loop(queuenum);
+			g_usleep(1000000);	
+			i++;
+			if (i>100) {
+				running = NOK;
+			}
+		}
 	#endif
-
-	//ev_loop (loop, EVLOOP_NONBLOCK);
-	//g_printerr("%s ev_loop started\n", H(0));
-	//End test
 
 	close_all();
         g_printerr("%s: Halted\n", __func__);
-
 	exit(0);
 
-	/*!   Debugging changes   */
-	/*
-	\todo to include in programmer documentation:
-	//What we should use instead of L():
+	/* \todo to include in programmer documentation:
+	//What we should use to log messages:
 		//For debugging:
 		g_printerr("%smessage\n", H(30));
 
@@ -1379,6 +1163,4 @@ main(int argc, char *argv[])
 		errx(1,"%s message", __func__);
 
 	*/
-	/********** end **********/
-
 }

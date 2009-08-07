@@ -53,12 +53,11 @@ DIRS=$(BINDIR) $(CONFDIR) $(LOGDIR) $(SCRIPTDIR) $(RUNDIR)
 export BINDIR CONFDIR LOGDIR RUNDIR SCRIPTDIR LOGFILE DEBUGFILE
 
 CONF=$(BIN).conf
-RULE=rules.conf
 SCRIPT=$(BIN).sh# startup scripts
-SRC=honeybrid.c daemon.c err.c netcode.c tables.c log.c decision_engine.c modules.c mod_control.c mod_hash.c mod_counter.c mod_yesno.c mod_source.c mod_random.c mod_proxy.c# source files
+SRC=honeybrid.c daemon.c err.c netcode.c tables.c log.c decision_engine.c modules.c mod_control.c mod_counter.c mod_hash.c mod_random.c mod_source.c mod_yesno.c# source files
 OBJ=$(subst .c,.o,$(SRC)) rules.o syntax.o# object files
 
-export BIN CONF RULE SCRIPT
+export BIN CONF SCRIPT
 
 #### End of system configuration section ####
 
@@ -115,7 +114,6 @@ dir:
 install: all dir
 	$(INSTALL) -m 0755 $(BIN) $(BINDIR)/$(BIN)
 	$(INSTALL) -b -m 0644 $(CONF) $(CONFDIR)/$(CONF)
-	$(INSTALL) -b -m 0644 $(RULE) $(CONFDIR)/$(RULE)
 	$(INSTALL) -m 0755 $(SCRIPT) $(SCRIPTDIR)/$(SCRIPT)
 
 installbin: all dir
@@ -124,14 +122,11 @@ installbin: all dir
 
 installconfig: all dir
 	$(INSTALL) -b -m 0644 $(CONF) $(CONFDIR)/$(CONF)
-	$(INSTALL) -b -m 0644 $(RULE) $(CONFDIR)/$(RULE)
 
 uninstall:
 	rm -f $(BINDIR)/$(BIN)
 	rm -f $(CONFDIR)/$(CONF)
 	rm -f $(CONFDIR)/$(CONF)~
-	rm -f $(CONFDIR)/$(RULE)
-	rm -f $(CONFDIR)/$(RULE)~
 	rm -f $(SCRIPTDIR)/$(SCRIPT)
 	rmdir $(CONFDIR) 
 	rmdir $(LOGDIR) 
@@ -139,7 +134,8 @@ uninstall:
 
 #### Additionnal dependencies ####
 
-honeybrid.o: honeybrid.h netcode.h tables.h log.h decision_engine.h modules.h mod_control.h mod_counter.h mod_hash.h types.h mod_yesno.h mod_source.h mod_random.h mod_proxy.h rules.h
+#honeybrid.o: honeybrid.h netcode.h tables.h log.h decision_engine.h modules.h types.h mod_yesno.h rules.h
+honeybrid.o: honeybrid.h netcode.h tables.h log.h decision_engine.h modules.h types.h rules.h
 netcode.o: tables.h log.h types.h
 #pcap_tool.o: tables.h log.h netcode.h types.h
 tables.o: log.h netcode.h types.h
@@ -152,7 +148,6 @@ mod_counter.o: log.h tables.h modules.h types.h
 mod_yesno.o: log.h tables.h modules.h types.h
 mod_source.o: log.h tables.h modules.h types.h
 mod_random.o: log.h tables.h modules.h types.h
-mod_proxy.o: log.h tables.h modules.h types.h
 rules.o: honeybrid.h rules.h
 syntax.o: honeybrid.h
 
