@@ -133,8 +133,6 @@ void mod_hash(struct mod_args args)
 	char *ascii;	
 
 	gchar **key_dst;
-	char *position;
-	int j, h, pos;
 
 	GTimeVal t;
         g_get_current_time(&t);
@@ -150,8 +148,21 @@ void mod_hash(struct mod_args args)
 	memcpy( payload, args.pkt->packet.payload, args.pkt->data - 1);
 	payload[args.pkt->data] = '\0';
 
+	/*! replace all occurrences of IP addresses by a generic IP */
+	GRegex *ip_regex = g_regex_new("\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}", 0, 0, NULL);
+        if(TRUE == g_regex_match(ip_regex, payload, 0, NULL)) {
+		char *payload_tmp = g_strdup(payload);
+		g_printerr("%s found an IP in the payload! Replacing it...\n", H(args.pkt->conn->id));
+		payload = g_regex_replace(ip_regex, payload_tmp, -1, 0, "<0.0.0.0>", 0, NULL);
+		g_free(payload_tmp);
+	}
+	g_regex_unref(ip_regex);
+	
+
+	/* Old method: only taking care of the DST IP address
+	char *position;
+	int j, h, pos;
 	if (strlen(key_dst[0]) >= 7) {
-		/*! replacing occurrences of the destination IP by a generic string */
 		while(NULL != (position = strstr(payload, key_dst[0]))) {
 			g_printerr("%s found the dst ip in the payload! Replacing it...\n", H(args.pkt->conn->id));
 
@@ -173,6 +184,7 @@ void mod_hash(struct mod_args args)
 			payload[strlen(payload)-h] = '\0';
 		}
 	}
+	*/
 
 	if (strlen(payload) < ascii_len) {
 		ascii_len = strlen(payload);

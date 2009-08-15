@@ -31,7 +31,7 @@ CPPFLAGS+=# Preprocessor options
 
 #CFLAGS+=-Wall -D RST_EXT -O2 `pkg-config --cflags glib-2.0 gthread-2.0`# compilator options
 CFLAGS+=-Wall -D RST_EXT -O0 `pkg-config --cflags glib-2.0 gthread-2.0`# compilator options
-CFLAGS+=-Wall -g -ggdb -D DEBUG
+CFLAGS+=-Wall -g -ggdb -D DEBUG -pg
 LDFLAGS+=-lnetfilter_queue -lpcap -lev -ldumbnet `pkg-config --libs gthread-2.0 glib-2.0` -lcrypto# link editor options -lnetfilter_conntrack
 #LDFLAGS+=-lnetfilter_queue -lpcap `pkg-config --libs gthread-2.0 glib-2.0` -lcrypto# link editor options -lnetfilter_conntrack
 

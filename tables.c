@@ -1,5 +1,5 @@
 /*
- * $Id: tables.c 647 2009-08-07 03:01:56Z robin $
+ * $Id: tables.c 662 2009-08-13 16:18:40Z robin $
  *
  * This file is part of the honeybrid project.
  *
@@ -154,30 +154,64 @@ print_payload(const u_char *payload, int len)
 	return;
 }
 
-char *lookup_state(int state) {
-	switch(state) {
-	case 0:
-		return "INVALID";
-		break;
+char *lookup_proto(int proto) {
+	switch(proto) {
 	case 1:
-		return "INIT";
-		break;
-	case 2:
-		return "DECISION";
-		break;
-	case 3:
-		return "REPLAY";
-		break;
-	case 4:
-		return "FORWARD";
-		break;
-	case 5:
-		return "PROXY";
+		return "ICMP";
 		break;
 	case 6:
+		return "TCP";
+		break;
+	case 17:
+		return "UDP";
+		break;
+	default:
+		return g_strdup_printf("%d", proto);
+		break;
+	}
+}
+
+char *lookup_origin(int origin) {
+	switch(origin) {
+	case EXT:
+		return "EXT";
+		break;
+	case LIH:
+		return "LIH";
+		break;
+	case HIH:
+		return "HIH";
+		break;
+	default:
+		return "unknown";
+		break;
+	}
+}
+
+char *lookup_state(int state) {
+	switch(state) {
+	case INVALID:
+		return "INVALID";
+		break;
+	case INIT:
+		return "INIT";
+		break;
+	case DECISION:
+		return "DECISION";
+		break;
+	case REPLAY:
+		return "REPLAY";
+		break;
+	case FORWARD:
+		return "FORWARD";
+		break;
+	case PROXY:
+		return "PROXY";
+		break;
+	case DROP:
 		return "DROP";
 		break;
-	case 7:
+	case CONTROL:
 		return "CONTROL";
 		break;
 	default:

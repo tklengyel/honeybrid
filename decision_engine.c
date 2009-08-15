@@ -50,7 +50,8 @@ struct node *DE_build_subtree(const gchar *expr)
 	node = (struct node *) malloc(sizeof( struct node)); /// TODO: to be freed when destroying DE_rules
 	node->module = NULL;
 	char *modname;
-	void* function;
+	char *function;
+	void* function_pointer;
 
 	/*! test presence of AND operator */
 	GRegex *and_regex = g_regex_new("\\sAND\\s", G_REGEX_CASELESS, 0, NULL);
@@ -89,14 +90,19 @@ struct node *DE_build_subtree(const gchar *expr)
 	if ((function = (void *)g_hash_table_lookup(node->arg, "function")) == NULL) {	
 		errx(1, "%s: Module function undefined!", __func__);
 	}
+	if ((function_pointer = (void *)g_hash_table_lookup(node->arg, "function_pointer")) == NULL) {	
+		errx(1, "%s: Module function pointer undefined!", __func__);
+	}
 	//node->module = get_module(function);	
-	node->module = function;	
+	node->module = function_pointer;	
 	#ifdef DEBUG
-	g_print("\t\tModule function defined at address %p\n", node->module);
+	g_print("\t\tModule function '%s' defined at address %p\n", function, node->module);
 	#endif
 
 	node->module_name = g_string_new(NULL);
-	g_string_printf(node->module_name, "%s",modname);
+	node->function = g_string_new(NULL);
+	g_string_printf(node->module_name, "%s", modname);
+	g_string_printf(node->function, "%s", function);
 
 	//#ifdef DEBUG_
 	//g_print("\tmodule = '%s' -> %p\n",modname,node->module);
@@ -104,6 +110,7 @@ struct node *DE_build_subtree(const gchar *expr)
 	
 	g_regex_unref(and_regex);
 	g_free(modname);
+	g_free(function);
 
 	/*! return pointer to this leaf  */
 	return node;
@@ -216,9 +223,11 @@ int decide(struct pkt_struct *pkt)
 			g_printerr("%s Error! tree.node->module is NULL\n", H(pkt->conn->id));	
 			return -2;
 		} else {
-			//g_printerr("%s >> Calling module at address %p\n", H(pkt->conn->id), tree.node->module);
-	 		tree.node->module(args);
-			//g_printerr("%s >> Done\n", H(pkt->conn->id));
+			g_printerr("%s >> Calling module %s at address %p\n", H(pkt->conn->id), tree.node->module_name->str, tree.node->module);
+	 		//tree.node->module(args);
+			//Test of new function "run_module" to prevent segmentation fault occurring at the previous line
+			run_module(tree.node->function->str, args);
+			g_printerr("%s >> Done, result is %d\n", H(pkt->conn->id), tree.node->result);
 		}
 
 		switch(tree.node->result) {

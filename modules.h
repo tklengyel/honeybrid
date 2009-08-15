@@ -52,18 +52,29 @@ struct node
 	void (*module)(struct mod_args);
 	GHashTable *arg;
 	GString *module_name;
+	GString *function;
 	struct node *true;
 	struct node *false;
 	int result;
 	int info_result;
 };
 
+/*! \def list of module to save
+ */
+GHashTable *module_to_save;
+
 
 void init_modules();
 
+void run_module(char *module_name, struct mod_args args);
+
 void (*get_module(char *modname))(struct mod_args);
 
+void save_backup_handler();
+
 int save_backup(GKeyFile *data, char *filename);
+
+int write_backup(char *filename, GKeyFile *data, void *userdata);
 
 /*!************ [Basic Modules] **************/
 

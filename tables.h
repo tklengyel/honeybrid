@@ -92,6 +92,8 @@ unsigned c_id;
 /*! \brief pointer table for btree cleaning */
 GPtrArray *entrytoclean;
 
+char *lookup_proto(int proto);
+char *lookup_origin(int origin);
 char *lookup_state(int state);
 int switch_state(struct conn_struct *conn, int new_state);
 

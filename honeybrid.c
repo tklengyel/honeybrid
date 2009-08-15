@@ -1,5 +1,5 @@
 /*
- * $Id: honeybrid.c 647 2009-08-07 03:01:56Z robin $
+ * $Id: honeybrid.c 668 2009-08-14 19:23:54Z robin $
  *
  * This file is part of the honeybrid project.
  *
@@ -96,6 +96,7 @@
 #include <arpa/inet.h>
 #include <glib.h>
 #include <unistd.h>
+#include <execinfo.h>
 
 #include <ev.h>
 
@@ -129,6 +130,29 @@ void usage(char **argv)
 			argv[0]);
 	exit(1);
 }
+
+/*! print_trace
+ * \brief Obtain a backtrace and print it to stdout. 
+ */
+void
+print_trace (void)
+{
+  void *array[10];
+  size_t size;
+  char **strings;
+  size_t i;
+
+  size = backtrace (array, 10);
+  strings = backtrace_symbols (array, size);
+
+  printf ("Obtained %zd stack frames.\n", size);
+
+  for (i = 0; i < size; i++)
+     printf ("%s\n", strings[i]);
+
+  free (strings);
+}
+
 
 /*! close_thread
  \brief Function that waits for thread to close themselves */
@@ -337,7 +361,18 @@ close_all(void)
 int 
 term_signal_handler(int signal_nb, siginfo_t * siginfo, void *context)
 {
-	g_printerr("%s: Signal received, halting engine\n", __func__);
+	g_printerr("%s: Signal %d received, halting engine\n", __func__, signal_nb);
+	#ifdef DEBUG
+	g_printerr("* Signal number:\t%d\n", siginfo->si_signo);
+	g_printerr("* Signal code:  \t%d\n", siginfo->si_code);
+	g_printerr("* Signal error: \t%d '%s'\n", siginfo->si_errno, strerror(siginfo->si_errno));
+	g_printerr("* Sending pid:  \t%d\n", siginfo->si_pid);
+	g_printerr("* Sending uid:  \t%d\n", siginfo->si_uid);
+	g_printerr("* Fault address:\t%p\n", siginfo->si_addr);
+	g_printerr("* Exit value:   \t%d\n", siginfo->si_status);
+	/*! print backtrace */
+	print_trace();
+	#endif
 	running = NOK;	/*! this will cause the queue loop to stop */
 	/*
 	close_all();
@@ -509,10 +544,10 @@ process_packet(struct nfq_data *tb)
 
 	in.s_addr=((struct iphdr*)nf_packet)->saddr;
 
-	g_printerr("%s New packet received from %s (proto: %d, size: %d)\n", 
+	g_printerr("%s** NEW packet from %s %s, %d bytes **\n", 
 		H(conn->id), 
 		inet_ntoa(in), 
-		((struct iphdr*)nf_packet)->protocol,
+		lookup_proto(((struct iphdr*)nf_packet)->protocol),
 		size);	
 
 	/*! check if protocol is invalid (not TCP or UDP) */
@@ -534,9 +569,10 @@ process_packet(struct nfq_data *tb)
 	}
 
 	#ifdef DEBUG
-	g_printerr("%s Origin: %i, State: %i, Data: %i\n", 
+	g_printerr("%s Origin: %s %s, %i bytes\n", 
 		H(conn->id), 
-		pkt->origin,conn->state, 
+		lookup_origin(pkt->origin),
+		lookup_state(conn->state), 
 		pkt->data);
 	#endif
 	
@@ -744,7 +780,7 @@ short int netlink_loop(unsigned short int queuenum)
         struct nfq_handle *h;
         struct nfq_q_handle *qh;
         struct nfnl_handle *nh;
-        int fd,rv;
+        int fd, rv, watchdog;
         char buf[BUFSIZE];
 
 	running = OK;
@@ -771,11 +807,42 @@ short int netlink_loop(unsigned short int queuenum)
         nh = nfq_nfnlh(h);
         fd = nfnl_fd(nh);
 
-        while ((rv = recv(fd, buf, sizeof(buf), 0)) && rv >= 0 && running == OK) {
-                nfq_handle_packet(h, buf, rv);
-        }
+	watchdog = 0;
+	while (running == OK) {
+		memset(buf, 0, sizeof(buf));
+		rv = recv(fd, buf, sizeof(buf), 0);
+		if (rv < 0) {
+			g_printerr("%s Error %d: recv() returned %d '%s'\n", H(0), errno, rv, strerror(errno));
+			watchdog++;
+			if (watchdog > 100) {
+				g_printerr("%s Error: too many consecutive failures, giving up\n", H(0));
+                                running = NOK;
+			}
+		} else {
+			nfq_handle_packet(h, buf, rv);
+			if (watchdog > 0) {
+				watchdog = 0;
+			}
+		}
+		/*
+	        while ((rv = recv(fd, buf, sizeof(buf), 0)) && rv >= 0 && running == OK) {
+        	        nfq_handle_packet(h, buf, rv);
+			if (watchdog > 0)
+				watchdog = 0;
+	        }
+		if (running == OK) {
+			g_printerr("%s Error: recv() returned negative value: %d\n", H(0), rv);
+			g_printerr("%s Errno: %d, message: '%s'\n", H(0), errno, strerror(errno));
+			watchdog++;
+			if (watchdog > 100) {
+				g_printerr("%s Error: too many consecutive failures, giving up\n", H(0));
+				running = NOK;
+			}
+		}	
+		*/
+	}
 
-	syslog(LOG_INFO, "NFQUEUE: unbinding from queue '%hd'\n", queuenum);
+	syslog(LOG_INFO, "NFQUEUE: unbinding from queue '%hd' (running: %d, rv: %d)\n", queuenum, running, rv);
         nfq_destroy_queue(qh);
         nfq_close(h);
         return(0);	
@@ -838,7 +905,7 @@ static void
 //close_nfqueue(struct nfq_handle *h, struct nfq_q_handle *qh, unsigned short int queuenum)
 close_nfqueue(struct nfq_q_handle *qh, unsigned short int queuenum)
 {
-	syslog(LOG_INFO, "NFQUEUE: unbinding from queue '%hd'\n", queuenum);
+	syslog(LOG_INFO, "NFQUEUE: unbinding from queue '%hd' (running: %d)\n", queuenum, running);
         nfq_destroy_queue(qh);
         nfq_close(h);
 }
@@ -1130,16 +1197,20 @@ main(int argc, char *argv[])
 		}
 		/*! Starting the nfqueue loop to start processing packets */
 		g_printerr("%s Starting netlink_loop\n", H(0));
-		/*! sometimes netlink_loop exits by itself... so we have to restart it */
+        	netlink_loop(queuenum);
+		/*! sometimes netlink_loop exits by itself... so we have to restart it 
 		int i = 0;
 		while (running == OK) {
 	        	netlink_loop(queuenum);
+			g_printerr("%s Netlink loop exited (%d times so far)\n", H(0), i);
 			g_usleep(1000000);	
 			i++;
 			if (i>100) {
+				g_printerr("%s Reached maximum of 100 restarts... giving up\n", H(0));
 				running = NOK;
 			}
 		}
+		*/
 	#endif
 
 	close_all();

@@ -72,14 +72,8 @@ parameters to generate each of the following script and configuration files:
 
    * honeybrid.conf
 	Installed by default in "/etc/honeybrid/honeybrid.conf"
-	The general policy of honeybrid. THE FILE IS NOT CONTROLLED AT STARTUP, 
-	so make sure it doesn't contain any typos.
-
-   * rules.conf
-	This table contain the services correspondances between the low and 
-	the high interactions honeypots. Each time a connection has to be 
-	redirected, honeybrid searches the new destination in this file. 
-	If it doesn't find a destination, the redirection fails.
+	Include all parameters for honeybrid as well as definition of 
+	detection modules and honeynet targets.
 
 It is required before building honeybrid to edit the makefile and change
 the parameters according to your architecture.

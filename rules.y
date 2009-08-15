@@ -124,7 +124,8 @@ module: MODULE QUOTE WORD QUOTE OPEN settings END {
 			errx(1, "%s: Fatal error: missing parameter 'function' in module '%s'\n", __func__, $3);
 		} else {
 			//g_printerr("\tModule function defined as '%s'\n", (char *)g_hash_table_lookup((GHashTable *)$6, "function"));
-			g_hash_table_replace((GHashTable *)$6, "function", get_module((char *)g_hash_table_lookup((GHashTable *)$6, "function")));
+			////g_hash_table_replace((GHashTable *)$6, "function", get_module((char *)g_hash_table_lookup((GHashTable *)$6, "function")));
+			g_hash_table_insert((GHashTable *)$6, "function_pointer", get_module((char *)g_hash_table_lookup((GHashTable *)$6, "function")));
 			//g_printerr("\tModule function defined at address %p\n", g_hash_table_lookup((GHashTable *)$6, "function"));
 		}
 		
