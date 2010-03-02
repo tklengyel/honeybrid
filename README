@@ -1,22 +1,41 @@
-/*
- * This file is part of the honeybrid project.
- *
- * Copyright (C) 2007-2009 University of Maryland (http://www.umd.edu)
- * (Written by Robin Berthier <robinb@umd.edu>, Thomas Coquelin <coquelin@umd.edu> and Julien Vehent <jvehent@umd.edu> for the University of Maryland)
- *
- * Honeybrid is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, see <http://www.gnu.org/licenses/>.
- */
+Welcome to honeybrid.
+
+honeybrid is free software. Please see the file COPYING for details.
+For documentation, please see the files in the doc subdirectory.
+For building and installation instructions please see the INSTALL file.
+
+This readme file contains the following sections:
+ QUICK INSTALL  to dive in right away
+ OVERVIEW:      to understand what honeybrid can do
+ EXAMPLE:       to illustrate how to deploy honeybrid
+ DEPENDENCIES:  to list software and libraries required to build and use honeybrid
+ SCRIPT AND CONFIGURATION FILE: to explain starting script and default configuration file
+ DOCUMENTATION: where to find documentation for honeybrid
+ CONTACT: 	who to contact for help or bug report
+ DEVELOPMENT: 	to explain how to add a new module to honeybrid
+
+
+QUICK INSTALL
+
+ ./configure
+ make
+ sudo make install
+ sudo mkdir /etc/honeybrid
+ sudo mkdir /var/log/honeybrid
+ sudo cp honeybrid.conf /etc/honeybrid/
+ sudo cp honeybrid.sh /etc/init.d/
+
+Then edit /etc/honeybrid/honeybrid.conf to suit your needs, and start honeybrid with the command:
+ sudo /etc/init.d/honeybrid.sh start
+
+You can then bind honeybrid to your network and honeypots IP addresses with the command:
+ sudo /etc/init.d/honeybrid.sh add <lih_ip> <lih_mac> <hih_ip> <ext_if> <int_if>
+where:
+ lih_ip  = Low interaction honeypot IP address
+ lih_mac = Low interaction honeypot MAC addess
+ hih_ip  = High interaction honeypot IP
+ ext_if  = External interface (where Internet traffic will be received)
+ int_if  = Internal interface (where honeynet traffic will be received)
 
 
 OVERVIEW
@@ -37,7 +56,7 @@ Honeybrid has two main components:
  - a Redirection Engine that handles the network session to change dynamically and transparently the 
    destination IP.
 
-For more information about how to install and use Honeybrid, please refer to the detailed documentation
+For more information about how to install and use honeybrid, please refer to the detailed documentation
 available in the ./doc folder or online on http://honeybrid.sf.net
 
 
@@ -48,7 +67,7 @@ the queueing rules using iptables for honeybrid to receive the traffic it needs.
 For example, in an architecture like:
 							       ___________________
        	 __________                ___________		      / Low Int. Honeypot \ 
-	/          \              / Honeybrid \	      ,-----> |     10.0.0.2      |
+	/          \              / honeybrid \	      ,-----> |     10.0.0.2      |
 	| attacker | <----------> |eth0   eth1| <-----|	      \___________________/
 	\__________/              \___________/	      |	       ___________________
 	                                              |	      / High Int. Honeypot\
@@ -65,18 +84,62 @@ Don't forget to active the routing mode:
  echo 1 > /proc/sys/net/ipv4/ip_forward
 
 
-CONTACT
+DEPENDENCIES
 
-Send problems, bug reports, questions and comments to robinb@umd.edu
+Honeybrid is dependent on the following public domain packages:
+	gcc
+	make
+	binutils
+	pkg-config
+	openssl
+	libnetfilter-conntrack-dev
+	libnetfilter-conntrack1	(must be >= version 0.0.50-1)
+	libnetfilter-queue-dev
+	libnetfilter-queue1
+	libnfnetlink-dev
+	libnfnetlink0
+	libglib2.0-0 (must be >= 2.14 to have support for regexp)
+	libglib2.0-dev
+	libc6-dev
+	linux-libc-dev
+	libpcap0.8
+	libpcap0.8-dev
+	libssl-dev
+	libev
+	libdumbnet
+
+For Debian Lenny, running the following command will take care of all the dependencies:
+	% sudo apt-get install make binutils gcc libnetfilter-conntrack-dev libnetfilter-conntrack1 libnetfilter-queue-dev libnetfilter-queue1 libnfnetlink-dev libnfnetlink0 pkg-config libc6-dev libglib2.0-0 libglib2.0-dev linux-libc-dev libpcap0.8-dev libpcap0.8 openssl libssl-dev libev-dev libdumpnet-dev
+
+
+SCRIPT AND CONFIGURATION FILE
+
+   * honeybrid.conf
+	honeybrid will not run without a configuration file, given in argument after the flag "-c".
+	It is recommended to edit this file and then copy it into "/etc/honeybrid/honeybrid.conf"
+	Include all parameters for honeybrid as well as definition of 
+	detection modules and honeynet targets.
+
+   * honeybrid.sh		
+	The Start/Stop script
+	Should be installed in "/etc/init.d/honeybrid.sh"
+	Also includes "add" and "del" option to automatically add IP addresses
+	to the iptables queue
 
 
 DOCUMENTATION
 
-Documentation for Honeybrid is available:
- - in the folder "doc"
+Documentation for honeybrid is available:
  - online on http://honeybrid.sf.net
- - in the comments of the default configuration files
  - in the README and INSTALL files
+ - in the folder "doc" is the developer documentation generated using doxygen
+ - in the comments of the default configuration files
+
+
+
+CONTACT
+
+Send problems, bug reports, questions and comments to robinb@umd.edu
 
 
 DEVELOPMENT
@@ -166,7 +229,7 @@ module in the configuration of honeybrid, user should write the value parameter.
  ----------------------------------
 
 Another interesting parameter that can be defined is "backup". It is used by more complex modules that need
-to save results to an external file periodically (and that can load previously recorded results when Honeybrid
+to save results to an external file periodically (and that can load previously recorded results when honeybrid
 starts).
 Here is an example of module definition for the "hash" module that uses such backup functionality:
  --8<---(honeybrid.conf)-----------
@@ -201,6 +264,3 @@ from the source code of mod_hash.c that shows how to retrieve these two paramete
                 return;
         }
  ----------------------------------
-
-Please note that the parameter "backup_file" is created automatically and should not be added in the 
-configuration file of Honeybrid. 

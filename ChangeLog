@@ -1,0 +1,13 @@
+2010-02-10  Robin Berthier  <robinb@umd.edu>
+
+ * doc/Makefile.am: Developer documentation can be compiled using Doxygen and the configuration option --enable-doc=yes
+
+2009-12-22  Robin Berthier  <robinb@umd.edu>
+
+ * configure.ac: Autoconf now supported. Honeybrid version changed to 1.0
+
+ * makefile.am: Automake now supported
+ 
+ * src/makefile.am: Automake now supported
+
+ * src/honeybrid.h: Honeybrid version changed to 1.0
