@@ -574,8 +574,8 @@ SHELL=${CONFIG_SHELL-/bin/sh}
 # Identity of this package.
 PACKAGE_NAME='honeybrid'
 PACKAGE_TARNAME='honeybrid'
-PACKAGE_VERSION='0.1.0'
-PACKAGE_STRING='honeybrid 0.1.0'
+PACKAGE_VERSION='0.1.1'
+PACKAGE_STRING='honeybrid 0.1.1'
 PACKAGE_BUGREPORT='Robin Berthier robinb@umd.edu'
 
 ac_unique_file="config.h.in"
@@ -2075,7 +2075,7 @@ fi
 
 # Define the identity of the package.
  PACKAGE='honeybrid'
- VERSION='0.1.0'
+ VERSION='0.1.1'
 
 
 cat >>confdefs.h <<_ACEOF
