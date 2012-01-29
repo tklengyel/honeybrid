@@ -97,9 +97,9 @@ char *lookup_origin(int origin);
 char *lookup_state(int state);
 int switch_state(struct conn_struct *conn, int new_state);
 
-int init_pkt( char *nf_packet, struct pkt_struct *pkt);
+int init_pkt(unsigned char *nf_packet, struct pkt_struct *pk, u_int32_t mark);
 
-int free_pkt( struct pkt_struct *pkt );
+int free_pkt(struct pkt_struct *pkt);
 
 int init_conn(struct pkt_struct *pkt, struct conn_struct **conn);
 

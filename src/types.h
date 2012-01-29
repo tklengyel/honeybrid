@@ -192,6 +192,8 @@ struct conn_struct
 	GString *decision_rule;
 	int   replay_problem;
 	int   invalid_problem; //unused
+
+	 u_int32_t mark;	// adding support for multiple uplinks
 };
 
 /*! pkt_struct
@@ -214,6 +216,8 @@ struct pkt_struct
 	char *key_dst;
 	char *key;
 	int position;
+
+	 u_int32_t mark;	// adding support for multiple uplinks
 };
 
 

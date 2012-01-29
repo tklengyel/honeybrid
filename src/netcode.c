@@ -84,7 +84,7 @@ unsigned short in_cksum(unsigned short *addr,int len)
  \return OK if the packet has been succesfully sent
  */
 
-int send_raw(struct iphdr *p)
+int send_raw(struct iphdr *p,u_int32_t mark)
 {
 	/*
 	#ifdef DEBUG
@@ -93,46 +93,50 @@ int send_raw(struct iphdr *p)
 	*/
 	struct sockaddr_in dst;
 	int bytes_sent;
+	int sockettouse=0;
 	dst.sin_addr.s_addr = p->daddr;
 	dst.sin_family = AF_INET;
 
 	/// This line seg fault...
 	///sprintf(logbuf, "send_raw():\tSending raw packet from %s to %s\n", inet_ntoa(*(struct in_addr*)p->saddr), inet_ntoa(*(struct in_addr*)p->daddr));
-	g_printerr("%s Sending raw packet to %s\n", H(4), inet_ntoa(dst.sin_addr));
+	g_printerr("%s Sending raw packet to %s with mark %u\n", H(4), inet_ntoa(dst.sin_addr),mark);
 
-	/*!If TCP, use the TCP raw socket*/
-	if(p->protocol==0x06)
-	{
-///		dst.sin_port = ((struct tcp_packet*)p)->tcp.dest;
-		bytes_sent = sendto(tcp_rsd,
-					p,
-					ntohs(p->tot_len),
-					0,
-					(struct sockaddr *) &dst,
-					sizeof (struct sockaddr_in)
-					);
+	if(ICONFIG("multi_uplink")<=1 || mark==0) {
+			if(p->protocol==0x06)
+				sockettouse=tcp_rsd;
+			else if(p->protocol==0x11)
+				sockettouse=udp_rsd;
+			else
+				return NOK;
+	} else {
+		int link;
+		for(link=0;link<ICONFIG("multi_uplink");link++) {
+			if(uplinks[link].mark==mark) {
+				if(p->protocol==0x06)
+	                                sockettouse=uplinks[link].tcp_socket;
+        	                else if(p->protocol==0x11)
+                	                sockettouse=uplinks[link].udp_socket;
+                        	else
+                                	return NOK;
+				break;
+			}
+		}
 	}
-	/*!If UDP, use the UDP raw socket*/
-	else if(p->protocol==0x11)
-	{
-		bytes_sent = sendto(udp_rsd,
-					p,
-					ntohs(p->tot_len),
-					0,
-					(struct sockaddr *) &dst,
-					sizeof (struct sockaddr_in)
-					);
-	}
-	else
-	{
-		g_printerr("%s Incorrect protocol\n", H(4));
-		return NOK;
-	}
-	
-	if(bytes_sent <= 0) 
+
+	bytes_sent = sendto(sockettouse,
+				p,
+				ntohs(p->tot_len),
+				0,
+				(struct sockaddr *) &dst,
+				sizeof (struct sockaddr_in)
+				);
+
+	if(bytes_sent <= 0)
 	{
 		g_printerr("%s Packet not sent\n", H(4));
 		return NOK;
+	} else {
+		g_printerr("%s Packet sent on socket %i\n",H(4),sockettouse);
 	}
 	return OK;
 }
@@ -199,7 +203,7 @@ int forward(struct pkt_struct* pkt)
 
 	/*!we update the IP checksum and send the packect*/
 	hb_ip_checksum(fwd);
-	send_raw(fwd);
+	send_raw(fwd,pkt->mark);
 	free(fwd);
 	return OK;
 }
@@ -256,7 +260,7 @@ int reply_reset(struct packet p)
 	rst->tcp.check		= 0x00;
 	rst->tcp.urg_ptr	= 0x00;
 	tcp_checksum( rst );
-	res = send_raw((struct iphdr*)rst);
+	res = send_raw((struct iphdr*)rst,0);
 	free(rst);
 	return res;
 }
@@ -391,7 +395,7 @@ int define_expected_data(struct pkt_struct* pkt)
 	{
 		pkt->conn->expected_data.tcp_seq = ntohl(pkt->packet.tcp->seq) + ~pkt->conn->hih.delta + 1;
 		pkt->conn->expected_data.tcp_ack_seq = ntohl(pkt->packet.tcp->ack_seq);
-		
+
 	}
 	pkt->conn->expected_data.payload = pkt->packet.payload;
 	g_static_rw_lock_writer_unlock( &pkt->conn->lock );
@@ -419,8 +423,8 @@ int test_expected(struct conn_struct* conn, struct pkt_struct* pkt)
 	else if( (pkt->packet.ip->protocol == 0x06) && (pkt->packet.tcp->syn == 0) && (ntohl(pkt->packet.tcp->seq) != conn->expected_data.tcp_seq))
 	{
 		flag=NOK;
-		g_printerr("%s Unexpected TCP seq. number\n", H(conn->id));
-		
+		g_printerr("%s Unexpected TCP seq. number: %u. Expected: %u\n", H(conn->id),ntohl(pkt->packet.tcp->seq),conn->expected_data.tcp_seq);
+
 		conn->replay_problem =  conn->replay_problem | 4;
 	}
 	else if( (pkt->packet.ip->protocol == 0x06) && (ntohl(pkt->packet.tcp->ack_seq) != conn->expected_data.tcp_ack_seq))
@@ -456,6 +460,7 @@ int test_expected(struct conn_struct* conn, struct pkt_struct* pkt)
 
 int init_raw_sockets()
 {
+
 	int opt=1;
 	/*! create the two raw sockets for UDP/IP and TCP/IP
 	*/
@@ -464,6 +469,38 @@ int init_raw_sockets()
 
 	setsockopt(tcp_rsd,IPPROTO_IP,IP_HDRINCL,&opt,sizeof(opt));
 	setsockopt(udp_rsd,IPPROTO_IP,IP_HDRINCL,&opt,sizeof(opt));
+
+
+	/* Configure multi-uplink sockets */
+	if(ICONFIG("multi_uplink")>1) {
+
+		uplinks=(struct interface *)malloc(ICONFIG("multi_uplink")*sizeof(struct interface));
+
+		int init=0;
+		for(init=0;init<ICONFIG("multi_uplink") && init <10;init++) {
+			char *config_ifvar=(char*)malloc(13*sizeof(char));
+			snprintf(config_ifvar,13,"uplink%d_name",init+1);
+			uplinks[init].name=(char *)malloc(5*sizeof(char));
+			snprintf(uplinks[init].name,5,"%s",(char *)g_hash_table_lookup(config,config_ifvar));
+			snprintf(config_ifvar,13,"uplink%d_mark",init+1);
+			uplinks[init].mark=ICONFIG(config_ifvar);
+			free(config_ifvar);
+
+			g_printerr("Opening sockets on interface %s (routing with mark %i)\n", uplinks[init].name, uplinks[init].mark);
+			uplinks[init].tcp_socket = socket (PF_INET, SOCK_RAW,IPPROTO_TCP);
+			uplinks[init].udp_socket = socket (PF_INET, SOCK_RAW,IPPROTO_UDP);
+
+			setsockopt(uplinks[init].tcp_socket,IPPROTO_IP,IP_HDRINCL,&opt,sizeof(opt));
+                	setsockopt(uplinks[init].udp_socket,IPPROTO_IP,IP_HDRINCL,&opt,sizeof(opt));
+
+			if(setsockopt(uplinks[init].tcp_socket,SOL_SOCKET,SO_BINDTODEVICE, uplinks[init].name, 4)==0)
+                        	g_printerr("TCP socket init on %s with ID %i\n",uplinks[init].name,uplinks[init].tcp_socket);
+
+			if(setsockopt(uplinks[init].udp_socket,SOL_SOCKET,SO_BINDTODEVICE, uplinks[init].name, 4)==0)
+                                g_printerr("UDP socket init on %s with ID %i\n",uplinks[init].name,uplinks[init].udp_socket);
+		}
+
+	}
 	return OK;
 }
 
@@ -497,7 +534,7 @@ int tcp_checksum(struct tcp_packet* pkt)
 
 	memcpy(&chk_p.tcp, &pkt->tcp, sizeof(struct tcphdr));
 	memcpy(&chk_p.payload, &pkt->payload, len_tcp - sizeof(struct tcphdr));
-	 
+ 
 	pkt->tcp.check=(unsigned short)in_cksum((unsigned short *)&chk_p, sizeof(struct pseudotcphdr) + len_tcp);
 
 	return OK;

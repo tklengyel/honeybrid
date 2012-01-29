@@ -26,7 +26,7 @@ int	yyparse(void);
 extern	FILE *yyin;
 
 /*! Version (should always be in sync with the content of the VERSION file) */
-#define VERSION "1.0"
+#define VERSION "1.1"
 
 /*! File to store PID */
 #define PIDFILE "/var/run/honeybrid.pid"

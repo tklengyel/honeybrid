@@ -71,7 +71,7 @@ print_hex_ascii_line(const u_char *payload, int len, int offset)
 
 	/* offset */
 	printf("\t%05d   ", offset);
-	
+
 	/* hex */
 	ch = payload;
 	for(i = 0; i < len; i++) {
@@ -84,7 +84,7 @@ print_hex_ascii_line(const u_char *payload, int len, int offset)
 	/* print space to handle line less than 8 bytes */
 	if (len < 8)
 		printf(" ");
-	
+
 	/* fill hex gap with spaces if not full line */
 	if (len < 16) {
 		gap = 16 - len;
@@ -93,7 +93,7 @@ print_hex_ascii_line(const u_char *payload, int len, int offset)
 		}
 	}
 	printf("   ");
-	
+
 	/* ascii (if printable) */
 	ch = payload;
 	for(i = 0; i < len; i++) {
@@ -222,8 +222,8 @@ char *lookup_state(int state) {
 
 int switch_state(struct conn_struct *conn, int new_state) 
 {
-	int old = conn->state;
 	#ifdef DEBUG
+	int old = conn->state;
 	g_printerr("%s switching state from %s (%d) to %s (%d)\n", H(conn->id), lookup_state(old), old, lookup_state(new_state), new_state);
 	#endif
 	conn->state = new_state;
@@ -234,9 +234,10 @@ int switch_state(struct conn_struct *conn, int new_state)
  \brief init the current packet structure with meta-information such as the origin and the number of bytes of data
  \param[in] nf_packet: The raw packet from the queue
  \param[in] pkt: The packet metadata structure for this packet
+ \param[in] mark: Netfilter mark of the packet
  \return the origin of the packet
  */
-int init_pkt( char *nf_packet, struct pkt_struct *pkt)
+int init_pkt( unsigned char *nf_packet, struct pkt_struct *pkt, u_int32_t mark)
 {
 	/* Init a new structure for the current packet */
 	pkt->origin = EXT;
@@ -247,6 +248,7 @@ int init_pkt( char *nf_packet, struct pkt_struct *pkt)
 	pkt->key_dst = malloc(32);
 	pkt->position = 0;
 	pkt->size = ntohs(((struct iphdr*)nf_packet)->tot_len);
+	pkt->mark = mark;
 
 	if(pkt->size > 1500 || pkt->size <40)
 	{
@@ -257,28 +259,28 @@ int init_pkt( char *nf_packet, struct pkt_struct *pkt)
 	/*! Create fake ethernet header (used later by bpf_filter) */
 	pkt->packet.FRAME = malloc( ETHER_HDR_LEN + pkt->size );
 	struct ethernet_hdr *eth = malloc( ETHER_HDR_LEN );
-	memcpy (pkt->packet.FRAME, eth, ETHER_HDR_LEN );	
+	memcpy (pkt->packet.FRAME, eth, ETHER_HDR_LEN );
 	memcpy( pkt->packet.FRAME + ETHER_HDR_LEN, nf_packet, pkt->size );
 	g_free(eth);
-	
+
 	/*! The most important part is to give to this ethernet header the type "IP protocol" */
 	(pkt->packet.FRAME)[12] = 0x08;
 	(pkt->packet.FRAME)[13] = 0x00;
-	
+
 	/* DEBUG:
 	printf("Printing nf_packet:\n");
 	print_payload( (u_char *)nf_packet, pkt->size);
 	printf("Printing FRAME:\n");
 	print_payload( (u_char *)pkt->packet.FRAME, pkt->size + 14);
 	*/
-	
+
 	/*! Add the packet IP header and payload to the packet structure */
 	memcpy( pkt->packet.ip, nf_packet, pkt->size );///THOMAS:Let's save memory!
 	if( pkt->packet.ip->ihl < 0x5 || pkt->packet.ip->ihl > 0x08 ) {
 		g_printerr("%s Invalid IP header length: dropped\n", H(4));
 		return NOK;
 	}
-	
+
 	pkt->packet.tcp = (struct tcphdr*)(((char *)pkt->packet.ip) + (pkt->packet.ip->ihl<<2));
 	pkt->packet.udp = (struct udphdr*)pkt->packet.tcp;
 	if( pkt->packet.ip->protocol == 0x06 )
@@ -295,15 +297,15 @@ int init_pkt( char *nf_packet, struct pkt_struct *pkt)
 			return NOK;
 		}
 		pkt->packet.payload = (char*)pkt->packet.tcp + (pkt->packet.tcp->doff<<2);
-		
+
 		/*! key_src is the tuple with the source information
 		 * {Source IP}:{Source Port} */
 		sprintf( pkt->key_src,"%s:%d",inet_ntoa(*(struct in_addr*)&pkt->packet.ip->saddr),ntohs(pkt->packet.tcp->source) );
-		
+
 		/*! key_dst is the one with the destination information
 		 * {Dest IP}:{Dest Port} */
 		sprintf( pkt->key_dst,"%s:%d",inet_ntoa(*(struct in_addr*)&pkt->packet.ip->daddr),ntohs(pkt->packet.tcp->dest) );
-		
+
 		/* The volume of data is the total size of the packet minus the size of the IP and TCP headers */
 		pkt->data = ntohs(pkt->packet.ip->tot_len) - (pkt->packet.ip->ihl << 2) - (pkt->packet.tcp->doff << 2);
 	} else if( pkt->packet.ip->protocol == 0x11 ) 	/* 0x11 == 17 */
@@ -315,8 +317,8 @@ int init_pkt( char *nf_packet, struct pkt_struct *pkt)
 		/*! key_dst */
 		sprintf( pkt->key_dst,"%s:%u",inet_ntoa(*(struct in_addr*)&pkt->packet.ip->daddr),ntohs(pkt->packet.udp->dest) );
 		/* The volume of data is the value of udp->ulen minus the size of the UPD header (always 8 bytes) */
-		pkt->data = pkt->packet.udp->len - 8; 
-	} else 
+		pkt->data = pkt->packet.udp->len - 8;
+	} else
 	{
 		/*! Every other packets are ignored */
 		g_printerr("%s Invalid protocol: %d, packet dropped\n", H(4), pkt->packet.ip->protocol);
@@ -385,28 +387,41 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 	/* Check first if a structure already exists for direction 0 */
 	/* Assumption: connection structures are created only for direction EXT -> INT */
 	if (TRUE == g_tree_lookup_extended(conn_tree, key0, NULL,(gpointer *) conn)) {
-		/* Structure found! It means source is EXT */	
+		/* Structure found! It means source is EXT */
 		snprintf(pkt->key, 64, "%s", key0);
 		pkt->origin = EXT;
-		update = 1;	
+		update = 1;
 	/* Then we check for the opposite direction */
 	} else if (TRUE == g_tree_lookup_extended(conn_tree, key1, NULL,(gpointer *) conn)) {
 		/* Structure found! It means destination is EXT and source is INT */
 		snprintf(pkt->key, 64, "%s", key1);
 		pkt->origin = LIH;
-		update = 1;	
+		update = 1;
 	} else {
-		char *key_lih;	
+		char *value;
+
+		/* T0MA TODO: g_hash_table_lookup returns key_lih:mark as char*; parse into appropriate variables */
+
 		/* Nothing found, looking up in the redirection table */
 		if ( 	high_redirection_table != NULL &&
-			(key_lih = g_hash_table_lookup(high_redirection_table, key0)) != NULL) {
+			(value = g_hash_table_lookup(high_redirection_table, key0)) != NULL) {
 			g_printerr("%s ~~~~ This packet is part of a replayed connection ~~~~~\n", H(0));
 			/* Structure found! It means destination is EXT and source is INT */
-			snprintf(pkt->key, 64, "%s:%s", pkt->key_dst, key_lih);
+
+			char **split = g_strsplit( value, ":", 0 );
+			/* split[0]=IP, split[1]=port, split[2]=mark */
+			pkt->mark=(u_int32_t)atoi(split[2]);
+
+			snprintf(pkt->key, 64, "%s:%s:%s", pkt->key_dst, split[0],split[1]);
+
+			g_printerr("%s ====== Corresponding LIH session: %s, Mark: %u (%s)==== \n",H(0),pkt->key,pkt->mark,split[2]);
+
 			pkt->origin = HIH;
 			update = 1;
+
 			if (FALSE == g_tree_lookup_extended(conn_tree, pkt->key, NULL,(gpointer *) conn)) {
-				g_printerr("%s ~~~~ Error! Related connection structure can't be found ~~~~~\n", H(0));
+				g_printerr("%s ~~~~ Error! Related connection structure can't be found with key %s ~~~~~\n", H(0), pkt->key);
+				create=1; // segfaulted when this event occured and there was no create!
 			}
 		} else {
 			/* Still nothing found, we need to initiate a new structure. We don't know yet if the source is EXT or INT... 
@@ -444,16 +459,16 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 			#endif
 			*/
 			if(bpf_filter(
-			    ((struct target *)g_ptr_array_index(targets,i))->filter->bf_insns, 
-			    (u_char *)(pkt->packet.FRAME ), 
-			    pkt->size + ETHER_HDR_LEN, 
+			    ((struct target *)g_ptr_array_index(targets,i))->filter->bf_insns,
+			    (u_char *)(pkt->packet.FRAME ),
+			    pkt->size + ETHER_HDR_LEN,
 			    pkt->size + ETHER_HDR_LEN) != 0) {
 				g_printerr("%s This packet matches the filter of target %d\n", H(0), i);
 				found = i;
 				snprintf(pkt->key, 64, "%s:%s", pkt->key_src, pkt->key_dst);
 				pkt->origin = EXT;
 				break;
-			}	
+			}
 		}
 
 
@@ -484,7 +499,7 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 					break;
 					/* Note: this honeypot might be defined later in another target... */
 				}
-				
+
 			}
 
 			g_free(src_addr);
@@ -501,7 +516,7 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
                         addr_pton( inet_ntoa(*(struct in_addr*)&pkt->packet.ip->daddr), dst_addr);
 
 			if (    addr_cmp( ((struct target *)g_ptr_array_index(targets, found))->front_handler, dst_addr) == 0 ) {
-				/*! IPs match, we can proceed */	
+				/*! IPs match, we can proceed */
 				//g_printerr("%s Destination %s match the LIH, continuing...\n", H(0), addr_ntoa(dst_addr));
 			} else {
 				/*! destination address is not the LIH address, so we drop the packet (later we might NAT \todo) */
@@ -518,36 +533,39 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 
 		/*! fill the structure */
 		conn_init->target			= g_ptr_array_index(targets, found);
-	
+
 		//g_printerr("%s Assigning target %p to new connection\n", H(0), conn_init->target);
 		//g_printerr("%s (front end rule is: %s)\n", H(0), (conn_init->target->front_rule  == NULL) ? "(null)" : conn_init->target->front_rule->module_name->str);
 
 		//g_printerr("%s Initializing target to %p (%p) at index %d\n", H(0), g_ptr_array_index(targets, found), conn_init->target, found);
 
-		conn_init->key				= g_strdup(pkt->key);
+		/* T0MA TODO: copy mark from LIH connection*/
+
+		conn_init->key					= g_strdup(pkt->key);
 		conn_init->key_ext				= g_strdup(pkt->key_src);
 		conn_init->key_lih				= g_strdup(pkt->key_dst);
 		conn_init->key_hih				= NULL;
 		conn_init->protocol				= pkt->packet.ip->protocol;
-		conn_init->access_time			= curtime;
+		conn_init->access_time				= curtime;
+		conn_init->mark					= pkt->mark;
 		if (pkt->origin == LIH)
-			conn_init->state		 		= CONTROL;
+			conn_init->state		 	= CONTROL;
 		else
-			conn_init->state		 		= INIT;
+			conn_init->state		 	= INIT;
 		conn_init->count_data_pkt_from_lih 		= 0;
 		conn_init->count_data_pkt_from_intruder 	= 0;
 		conn_init->BUFFER				= NULL;
 		conn_init->hih.lih_syn_seq			= 0;
 		conn_init->hih.delta				= 0;
-		conn_init->id				= c_id++;
+		conn_init->id					= c_id++;
 		conn_init->replay_id				= 0;
 		g_static_rw_lock_init( &conn_init->lock );
 		int j;
 		for (j = INVALID; j<= CONTROL; j++) {
 			conn_init->stat_time[j]   = 0.0;
 			conn_init->stat_packet[j] = 0;
-			conn_init->stat_byte[j]   = 0;	
-		}	
+			conn_init->stat_byte[j]   = 0;
+		}
 
 		/*! statistics */
 		conn_init->start_microtime = microtime;
@@ -568,7 +586,6 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
                 tm=localtime(&tv.tv_sec);
 		conn_init->start_timestamp = g_string_new("");
                 g_string_printf(conn_init->start_timestamp,"%d-%02d-%02d %02d:%02d:%02d.%.6d", (1900+tm->tm_year), (1+tm->tm_mon), tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec, (int)tv.tv_usec);
-		
 
 		/*! insert entry in B-Tree
 		 * (set up a lock to protect the writing)
@@ -586,8 +603,9 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 		if (TRUE != g_tree_lookup_extended(conn_tree, pkt->key, NULL,(gpointer *) conn))
 			return NOK;
 
+		g_printerr("--- Key inserted to to conn_tree %s with mark %u \n", pkt->key, conn_init->mark);
 		pkt->conn = conn_init;
-	} 
+	}
 
 	if (update == 1) {
 
@@ -609,7 +627,8 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 		(*conn)->access_time = curtime;
 		if(pkt->origin == EXT)
 			(*conn)->count_data_pkt_from_intruder += 1;
-			//(*conn)->count_data_pkt_from_intruder += pkt->packet.tcp->psh;
+		else
+			(*conn)->mark=pkt->mark; /* We only take marks from internal IP's */
 
 		pkt->conn = *conn;
 
@@ -804,9 +823,9 @@ int store_pkt(struct conn_struct *conn, struct pkt_struct *pkt)
         pkt->position = (g_slist_length(conn->BUFFER) - 1);
 
 	/*! Unlock the structure */
-        ///g_static_rw_lock_writer_unlock (&conn->lock);	
-	
-	g_printerr("%s\t Packet stored in memory for connection %s\n", H(conn->id), conn->key);
+        ///g_static_rw_lock_writer_unlock (&conn->lock);
+
+	g_printerr("%s\t Packet stored in memory for connection %s Packet mark: %u connection mark %u\n", H(conn->id), conn->key, conn->mark, pkt->mark);
 
 	return OK;
 }
@@ -951,8 +970,13 @@ int setup_redirection(struct conn_struct *conn)
 			g_printerr("%s [** high_redirection_table created **]\n", H(conn->id));
 		}
 		if (g_hash_table_lookup(high_redirection_table, key_hih_ext->str) == NULL) {
-			g_hash_table_insert (high_redirection_table, key_hih_ext->str, conn->key_lih);
-			g_printerr("%s [** high_redirection_table updated **]\n", H(conn->id));
+
+			/* T0MA TODO: Insert as value: conn->key_lih:conn->mark */
+			GString *value = g_string_new("");
+			g_string_printf(value, "%s:%u", conn->key_lih, conn->mark);
+
+			g_hash_table_insert (high_redirection_table, key_hih_ext->str, value->str);
+			g_printerr("%s [** high_redirection_table updated: key %s value %s **]\n", H(conn->id),key_hih_ext->str, value->str);
 		} else {
 			g_string_free(key_hih_ext, TRUE);
 			g_printerr("%s [** HIH already busy with the same tuple, can't proceed **]\n", H(conn->id));

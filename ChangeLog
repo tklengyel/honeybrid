@@ -1,3 +1,12 @@
+2012-01-28	Tamas Lengyel	<tamas.k.lengyel@gmail.com>
+
+ * src/honeybrid.c
+   src/honeybrid.h
+   src/netcode.c
+   src/netcode.h
+   src/tables.c
+   src/tables.h: Added support for multiple uplinks through the MARK target of the mangle table (now require libnetfilter_conntrack >= 1.0.0 and libnetfilter_queue >= 1.0.0)
+
 2010-02-10  Robin Berthier  <robinb@umd.edu>
 
  * doc/Makefile.am: Developer documentation can be compiled using Doxygen and the configuration option --enable-doc=yes

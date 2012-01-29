@@ -11,7 +11,8 @@ This readme file contains the following sections:
  DEPENDENCIES:  to list software and libraries required to build and use honeybrid
  SCRIPT AND CONFIGURATION FILE: to explain starting script and default configuration file
  DOCUMENTATION: where to find documentation for honeybrid
- CONTACT: 	who to contact for help or bug report
+ KNOWN ISSUES:  to read before submitting a bug report
+ CONTACT: 	    who to contact for help or bug report
  DEVELOPMENT: 	to explain how to add a new module to honeybrid
 
 
@@ -25,7 +26,7 @@ QUICK INSTALL
  sudo cp honeybrid.conf /etc/honeybrid/
  sudo cp honeybrid.sh /etc/init.d/
 
-Then edit /etc/honeybrid/honeybrid.conf to suit your needs, and start honeybrid with the command:
+After successful compilation and install, edit /etc/honeybrid/honeybrid.conf to suit your needs, and start honeybrid with the command:
  sudo /etc/init.d/honeybrid.sh start
 
 You can then bind honeybrid to your network and honeypots IP addresses with the command:
@@ -93,9 +94,9 @@ Honeybrid is dependent on the following public domain packages:
 	pkg-config
 	openssl
 	libnetfilter-conntrack-dev
-	libnetfilter-conntrack1	(must be >= version 0.0.50-1)
+	libnetfilter-conntrack1	(must be >= version 1.0.0)
 	libnetfilter-queue-dev
-	libnetfilter-queue1
+	libnetfilter-queue1	(must be >= version 1.0.0)
 	libnfnetlink-dev
 	libnfnetlink0
 	libglib2.0-0 (must be >= 2.14 to have support for regexp)
@@ -110,6 +111,10 @@ Honeybrid is dependent on the following public domain packages:
 
 For Debian Lenny, running the following command will take care of all the dependencies:
 	% sudo apt-get install make binutils gcc libnetfilter-conntrack-dev libnetfilter-conntrack1 libnetfilter-queue-dev libnetfilter-queue1 libnfnetlink-dev libnfnetlink0 pkg-config libc6-dev libglib2.0-0 libglib2.0-dev linux-libc-dev libpcap0.8-dev libpcap0.8 openssl libssl-dev libev-dev libdumpnet-dev
+
+Latest version of libnetfilter_queue and libnetfilter_conntrack are available at:
+	http://www.netfilter.org/projects/libnetfilter_queue/downloads.html
+	http://www.netfilter.org/projects/libnetfilter_conntrack/downloads.html
 
 
 SCRIPT AND CONFIGURATION FILE
@@ -135,6 +140,13 @@ Documentation for honeybrid is available:
  - in the folder "doc" is the developer documentation generated using doxygen
  - in the comments of the default configuration files
 
+
+KNOWN ISSUES
+
+TCP timestamps can become inconsistent between the honeypots and the replay mechanism, causing packets to get rejected.
+A quick fix is to disable them on the honeypots through the command:
+
+ echo net.ipv4.tcp_timestamps = 0 >> /etc/sysctl.conf
 
 
 CONTACT

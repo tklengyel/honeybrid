@@ -50,7 +50,7 @@
  \brief Raw socket descriptor for TCP/IP raw socket
  *
  */
-int udp_rsd,tcp_rsd;
+int udp_rsd,tcp_rsd; // generic socket
 
 struct pseudotcphdr
 {
@@ -68,7 +68,17 @@ struct tcp_chk_packet
 	char payload[BUFSIZE];
 };
 
-int send_raw(struct iphdr *p);
+struct interface
+{
+	char *name;
+	int tcp_socket;
+	int udp_socket;
+	int mark;
+};
+
+struct interface *uplinks;
+
+int send_raw(struct iphdr *p, u_int32_t mark);
 
 int forward(struct pkt_struct* pkt);
 

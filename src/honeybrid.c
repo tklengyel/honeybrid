@@ -3,8 +3,11 @@
  *
  * This file is part of the honeybrid project.
  *
- * Copyright (C) 2007-2009 University of Maryland (http://www.umd.edu)
+ * 2007-2009 University of Maryland (http://www.umd.edu)
  * (Written by Robin Berthier <robinb@umd.edu>, Thomas Coquelin <coquelin@umd.edu> and Julien Vehent <julien@linuxwall.info> for the University of Maryland)
+ *
+ * 2012 University of Connecticut (http://www.uconn.edu)
+ * (Extended by Tamas K Lengyel <tamas.k.lengyel@gmail.com>
  *
  * Honeybrid is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -520,6 +523,7 @@ init_variables()
  *
  \brief Function called for each received packet, this is the core of the redirection engine
  \param[in] tb a Netfilter Queue structure that contain both the packet and the metadatas
+ \param[in] *mark a pointer to the mark field to be set on the packet
  \return statement = 1 if the packet should be accepted or 0 if the packet has to be dropped. Default is to drop. */
 static u_int32_t 
 process_packet(struct nfq_data *tb)
@@ -532,8 +536,9 @@ process_packet(struct nfq_data *tb)
 
 	struct pkt_struct * pkt = (struct pkt_struct *) malloc(sizeof(struct pkt_struct)); /* \todo TODO: check that it's correctly freed */
 	int statement = 0;		/* by default we reject this packet */
-	char *nf_packet;
+	unsigned char *nf_packet;
 	struct in_addr in;
+	u_int32_t mark=nfq_get_nfmark(tb);	/* initiliaze it to current packets mark, might get updated later */
 
 	/*! extract ip header from packet payload */
 	int size;
@@ -544,11 +549,12 @@ process_packet(struct nfq_data *tb)
 
 	in.s_addr=((struct iphdr*)nf_packet)->saddr;
 
-	g_printerr("%s** NEW packet from %s %s, %d bytes **\n", 
-		H(conn->id), 
-		inet_ntoa(in), 
+	g_printerr("%s** NEW packet from %s %s, %d bytes. Mark %u **\n",
+		H(conn->id),
+		inet_ntoa(in),
 		lookup_proto(((struct iphdr*)nf_packet)->protocol),
-		size);	
+		size,
+		mark);
 
 	/*! check if protocol is invalid (not TCP or UDP) */
 	if ((((struct iphdr*)nf_packet)->protocol != 6) && (((struct iphdr*)nf_packet)->protocol != 17)) {
@@ -557,7 +563,7 @@ process_packet(struct nfq_data *tb)
 	}
 
 	/*! Initialize the packet structure (into pkt) and find the origin of the packet */
-	if (init_pkt(nf_packet, pkt) == NOK) {
+	if (init_pkt(nf_packet, pkt, mark) == NOK) {
 		g_printerr("%s Packet structure couldn't be initialized, packet dropped\n", H(conn->id));
 		return statement = 0;
 	}
@@ -568,19 +574,22 @@ process_packet(struct nfq_data *tb)
 		return statement = 0;
 	}
 
+	if(conn->mark != pkt->mark)
+		g_printerr("%s Connection needs to be marked %u!\n",H(conn->id),conn->mark);
+
 	#ifdef DEBUG
-	g_printerr("%s Origin: %s %s, %i bytes\n", 
-		H(conn->id), 
+	g_printerr("%s Origin: %s %s, %i bytes\n",
+		H(conn->id),
 		lookup_origin(pkt->origin),
-		lookup_state(conn->state), 
+		lookup_state(conn->state),
 		pkt->data);
 	#endif
-	
+
 	/*! Check that there was no problem getting the current connection structure
 	 *  and make sure the STATE is valid */
 	if (((conn->state < INIT)
 		&& (pkt->origin == EXT))
-		|| (conn->state < INVALID)) {	
+		|| (conn->state < INVALID)) {
 		///INIT == 1, INVALID == 0 and NOK == -1
 		g_printerr("%s Packet not from a valid connection %s\n",
 			H(conn->id),
@@ -614,7 +623,7 @@ process_packet(struct nfq_data *tb)
 				conn->hih.lih_syn_seq = ntohl(pkt->packet.tcp->seq);
 			}
 			store_pkt(conn, pkt);
-			//conn->state = CONTROL;	
+			//conn->state = CONTROL;
 			//switch_state(conn, CONTROL); //Now it's when the connection is created that the state is on CONTROL for LIH
 			statement = 1;	//DE_process_packet(pkt);	/*! For now, we don't analyze packets from LIH */
 			break;
@@ -624,7 +633,7 @@ process_packet(struct nfq_data *tb)
 			}
 			store_pkt(conn, pkt);
 			statement = 1;	//DE_process_packet(pkt);	/*! For now, we don't analyze packets from LIH */
-			break;		
+			break;
 		case PROXY:
 			#ifdef DEBUG
 			g_printerr("%s Packet from LIH proxied directly to its destination\n", H(conn->id));
@@ -655,12 +664,12 @@ process_packet(struct nfq_data *tb)
 			if(pkt->packet.ip->protocol == 0x06 && pkt->packet.tcp->syn == 1) {
 				conn->hih.delta = ~ntohl(pkt->packet.tcp->seq) + 1 + conn->hih.lih_syn_seq;
 			}
-			replay(conn, pkt );	
+			replay(conn, pkt );
 			break;
 		case FORWARD:
 			forward(pkt );
 			free_pkt(pkt);
-			break;		
+			break;
 		/*! This one should never occur because PROXY are only between EXT and LIH... but we never know! */
 		case PROXY:
 			#ifdef DEBUG
@@ -673,7 +682,7 @@ process_packet(struct nfq_data *tb)
 			break;
 		default:
 			/*! We are surely in the INIT state, so the HIH is initiating a connection to outside. We reset or control it */
-			if (RESET_HIH > 0) {	
+			if (RESET_HIH > 0) {
 				g_printerr("%s Packet from HIH at wrong state, so we reset %s\n", H(conn->id), inet_ntoa(in));
 				if(pkt->packet.ip->protocol==0x06) {
 					reply_reset( pkt->packet );
@@ -709,7 +718,7 @@ process_packet(struct nfq_data *tb)
 		case FORWARD:
 			forward(pkt );
 			free_pkt(pkt);
-			break;		
+			break;
 		case PROXY:
 			#ifdef DEBUG
 			g_printerr("%s Packet from EXT proxied directly to its destination\n", H(conn->id));
@@ -729,6 +738,8 @@ process_packet(struct nfq_data *tb)
 		break;
 	}
 
+	//g_printerr("\nMark says %u and output device will be %u\n\n",*mark, nfq_get_outdev(tb));
+
 	return statement;
 }
 
@@ -744,27 +755,31 @@ static int q_cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data
 	ph = nfq_get_msg_packet_hdr(nfa);
 	int id = ntohl(ph->packet_id);
 
+	/* The NAT table only has information about the connection to LIH */
+	/* We need to duplicate whatever mark was set on the LIH connection to forwarded connections to HIH */
+
 	/*! launch process function */
 	u_int32_t statement = process_packet(nfa);
 
 	if(statement == 1) {
-		/*! nfq_set_verdict_mark
+		/*! nfq_set_verdict2
 		\brief set a decision NF_ACCEPT or NF_DROP on the packet and put a mark on it
 		 *
 		\param[in] qh netfilter queue handle obtained by call to nfq_create_queue
 		\param[in] id id of the packet
 		\param[in] verdict NF_ACCEPT or NF_DROP
-		\param[in] mark netfilter mark value to mark packet with (don't forget to convert it in network order)
+		\param[in] mark netfilter mark value to mark packet with
 		\param[in] data_len (optional) number of bytes of data pointer by buf
 		\param[in] buf pointer to data buffer
 		 *
 		\return 0 on success, non-zore on failure */
 
 		/*! ACCEPT the packet if the statement is 1 */
-		return nfq_set_verdict_mark(qh, id, NF_ACCEPT, htonl(0), 0, NULL);
+		/* Also copy whatever mark has been on the packet initially, required for multi-uplink setups */
+		return nfq_set_verdict2(qh, id, NF_ACCEPT, 0, 0, NULL);
 	} else {
 		/*! DROP the packet if the statement is 0 (or something else than 1) */
-		return nfq_set_verdict_mark(qh, id, NF_DROP, htonl(1), 0, NULL);
+		return nfq_set_verdict2(qh, id, NF_DROP, 11, 0, NULL);
 	}
 
 }
@@ -1024,7 +1039,7 @@ main(int argc, char *argv[])
 	#ifdef DEBUG
 	g_printerr("\n\n");
 	#endif
-        g_printerr("Honeybrid V%s Copyright (c) 2007-2009 University of Maryland\n", 
+        g_printerr("Honeybrid V%s Copyright (c)\n2007-2009 University of Maryland\n2012 University of Connecticut\n", 
 		VERSION);
 
 	/*! parsing arguments */
