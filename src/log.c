@@ -106,7 +106,7 @@ int honeylog(char *sdata, char *ddata, int level, unsigned id)
 		struct tm *tm;
 		struct timeval tv;
 		struct timezone tz;
-		struct log_event *event = malloc(sizeof(struct log_event));
+		struct log_event *event = (struct log_event *)malloc(sizeof(struct log_event));
 		gettimeofday(&tv, &tz);
 		tm=localtime(&tv.tv_sec);
 		if (tm == NULL) {
@@ -251,7 +251,7 @@ void rotate_connection_log(int signal_nb)
 		L(NULL, logbuf, LOG_HIGH, LOG_LOG);
 
 		chdir(g_hash_table_lookup(config,"log_directory"));
-		
+
 		if (rename(logfile_name->str, new_name->str)) {
 			L("rotate_connection_log()\tERROR: can't rename log file!\n", NULL, LOG_MED, LOG_LOG);
 		}
@@ -380,12 +380,12 @@ void connection_log(struct conn_struct *conn)
 		g_string_printf(decision_info, "%d:%s", conn->decision_packet_id, conn->decision_rule->str);
 	}
 	*/
-	
+
 	char *logbuf = malloc(1024);	//1024 might be too short!
 
 	/*! Output according to the format configured */
 	if ( NULL != g_hash_table_lookup(config,"log_format") && NULL != strstr(g_hash_table_lookup(config,"log_format"),"csv") ) {
-		sprintf(logbuf,"%s,%.3f,%s,%s,%s,%s,%s,%d,%d,%s,%d,%s,%s,%s,%s,%s\n", conn->start_timestamp->str, total_duration, proto->str, tuple[0], tuple[1], tuple[2], tuple[3], conn->total_packet, conn->total_byte, status->str, conn->id, 
+		sprintf(logbuf,"%s,%.3f,%d,%s,%s,%s,%s,%s,%d,%d,%s,%d,%s,%s,%s,%s,%s\n", conn->start_timestamp->str, total_duration, conn->mark, proto->str, tuple[0], tuple[1], tuple[2], tuple[3], conn->total_packet, conn->total_byte, status->str, conn->id, 
 		//status_info[INVALID]->str,
 		status_info[INIT]->str,
 		status_info[DECISION]->str,
@@ -394,7 +394,7 @@ void connection_log(struct conn_struct *conn)
 		status_info[PROXY]->str
 		);
         } else {
-		sprintf(logbuf,"%s %.3f %s %s:%s -> %s:%s %d %d %s ** %d %s %s %s %s %s\n", conn->start_timestamp->str, total_duration, proto->str, tuple[0], tuple[1], tuple[2], tuple[3], conn->total_packet, conn->total_byte, status->str, conn->id, 
+		sprintf(logbuf,"%s %.3f %d %s %s:%s -> %s:%s %d %d %s ** %d %s %s %s %s %s\n", conn->start_timestamp->str, total_duration, conn->mark, proto->str, tuple[0], tuple[1], tuple[2], tuple[3], conn->total_packet, conn->total_byte, status->str, conn->id, 
 		//status_info[INVALID]->str,
 		status_info[INIT]->str,
 		status_info[DECISION]->str,
@@ -402,10 +402,10 @@ void connection_log(struct conn_struct *conn)
 		status_info[FORWARD]->str,
 		status_info[PROXY]->str
 		);
-	}	
-	///g_printerr("%s",logbuf);	
+	}
+	///g_printerr("%s",logbuf);
 	fprintf(logfd, "%s", logbuf);
-	
+
 	g_free(logbuf);
 	g_strfreev(tuple);	/// ROBIN - 20090326-1007 according to valgrind output
 	//g_free(status_info);	/// seg fault

@@ -776,10 +776,10 @@ static int q_cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data
 
 		/*! ACCEPT the packet if the statement is 1 */
 		/* Also copy whatever mark has been on the packet initially, required for multi-uplink setups */
-		return nfq_set_verdict2(qh, id, NF_ACCEPT, 0, 0, NULL);
+		return nfq_set_verdict2(qh, id, NF_ACCEPT, nfq_get_nfmark(nfa), 0, NULL);
 	} else {
 		/*! DROP the packet if the statement is 0 (or something else than 1) */
-		return nfq_set_verdict2(qh, id, NF_DROP, 11, 0, NULL);
+		return nfq_set_verdict2(qh, id, NF_DROP, nfq_get_nfmark(nfa), 0, NULL);
 	}
 
 }
@@ -1039,8 +1039,7 @@ main(int argc, char *argv[])
 	#ifdef DEBUG
 	g_printerr("\n\n");
 	#endif
-        g_printerr("Honeybrid V%s Copyright (c)\n2007-2009 University of Maryland\n2012 University of Connecticut\n", 
-		VERSION);
+        g_printerr("Honeybrid V%s Copyright (c)\n2007-2009 University of Maryland\n2012 University of Connecticut\n", VERSION);
 
 	/*! parsing arguments */
 	if(argc < 2)
