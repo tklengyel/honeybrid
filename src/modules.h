@@ -27,6 +27,8 @@
 #include <openssl/evp.h>
 //#endif
 
+#include<ctype.h>
+
 #include "log.h"
 #include "tables.h"
 
@@ -100,5 +102,8 @@ void mod_source(struct mod_args args);
 /*!** MODULE CONTROL **/
 void mod_control(struct mod_args args);
 //int control(struct pkt_struct *pkt);
+
+/*!** MODULE TIMED SOURCE **/
+void mod_source_time(struct mod_args args);
 
 #endif //_MODULES_H_

@@ -11,3 +11,7 @@ Thomas Coquelin:
 
 Julien Vehent:
   entire files  -> decision_engine.c , decision_engine.h , honeybrid.c , honeybrid.h , modules.c , modules.h , pcap_tool.c , pcap_tool.h , tables.c , tables.h , types.h , mod_counter.c , mod_hash.c , mod_yesno.c
+
+Tamas K Lengyel:
+  entire files  -> mod_source_time.c, mod_xmpp.c
+  modifications -> honeybrid.c, honeybrid.h, types.h, tables.c, tables.h, netcode.c, netcode.h, log.c

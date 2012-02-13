@@ -56,6 +56,8 @@ void init_modules()
 	g_printerr("%s Initiate modules\n", H(6));
 	init_mod_hash();
 
+	init_mod_xmpp();
+
 	/*! create a thread that will save module memory every minute */
 	module_to_save = g_hash_table_new(g_str_hash, g_str_equal);
         if(g_thread_create_full((void *)save_backup_handler, NULL, 0, FALSE, TRUE,G_THREAD_PRIORITY_LOW, NULL) == NULL) {
@@ -82,6 +84,8 @@ void run_module(char *module_name, struct mod_args args)
                 mod_yesno(args);
         } else if (g_strcmp0(module_name, "random") == 0) {
                 mod_random(args);
+	} else if (g_strcmp0(module_name, "source_time") ==0) {
+                mod_source_time(args);
         } else  {
                 g_printerr("%s module name invalid\n", H(args.pkt->conn->id));
                 args.node->result = -1;
@@ -96,7 +100,7 @@ void run_module(char *module_name, struct mod_args args)
  */
 void (*get_module(char *modname))(struct mod_args)
 {
-	
+
 	     if(!strncmp(modname,"hash",6))
 		return mod_hash;
 	else if(!strncmp(modname,"counter",7))
@@ -109,6 +113,8 @@ void (*get_module(char *modname))(struct mod_args)
 		return mod_random;
 	else if(!strncmp(modname,"control",6))
 		return mod_control;
+        else if(!strncmp(modname,"source_time",11))
+                return mod_source_time;
 
 	errx(1, "%s No module could be found with the name: %s", H(6), modname);
 }
@@ -121,7 +127,7 @@ int write_backup(char *filename, GKeyFile *data, void *userdata)
 {
 	g_printerr("%s saving backup module %p to %s\n", H(6), data, filename);
 	gchar *buf;
-	buf = g_key_file_to_data(data, NULL, NULL);	
+	buf = g_key_file_to_data(data, NULL, NULL);
 
 	FILE *file_fd;
 	if (NULL == (file_fd = fopen(filename, (char *) "w+"))) {
@@ -147,9 +153,9 @@ void save_backup_handler()
         {
 		/*! saving module every 60 seconds */
                 g_usleep(60000000);
-		removed = g_hash_table_foreach_steal(module_to_save, (GHRFunc) write_backup, NULL);	
+		removed = g_hash_table_foreach_steal(module_to_save, (GHRFunc) write_backup, NULL);
 		g_printerr("%s %d entries saved and removed from module_to_save\n", H(0), removed);
-	} 
+	}
 
 	if (threading != OK) {
 		g_hash_table_destroy(module_to_save);
@@ -160,21 +166,23 @@ void save_backup_handler()
 /*! save_backup
  *  \brief This function adds a module backup memory to a queue in order to be written to a file later
  */
-int save_backup(GKeyFile *data, char *filename) 
+int save_backup(GKeyFile *data, char *filename)
 {
 	g_printerr("%s called for %p (%s)\n", H(0), data, filename);
 	if (FALSE == g_hash_table_lookup_extended(module_to_save, filename, NULL, NULL)) {
 		g_printerr("%s adding a new entry in module_to_save\n", H(0));
 		g_hash_table_insert(module_to_save, filename, data);
+		return 1;
 	} else {
-		g_printerr("%s module_to_save already has this entry\n", H(0));
+		g_hash_table_replace(module_to_save, filename, data);
+		g_printerr("%s module_to_save already had this entry, updated\n", H(0));
+		return 0;
 	}
-	return 0;
 }
 
 //	int len;
 //	g_printerr("%s Preparing to write:\n%s\n", H(0), buf);
-	
+
 	/*
 	GError *error = NULL;
 	if (!g_file_set_contents(filename, buf, len, &error)) {
