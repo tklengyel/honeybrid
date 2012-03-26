@@ -145,8 +145,18 @@ KNOWN ISSUES
 
 TCP timestamps can become inconsistent between the honeypots and the replay mechanism, causing packets to get rejected.
 A quick fix is to disable them on the honeypots through the command:
-
  echo net.ipv4.tcp_timestamps = 0 >> /etc/sysctl.conf
+
+On Red Hat, libdumbnet is called libdnet. You can replace occurrences of "dumbnet" by "dnet" in the following files to be able to compile:
+ src/Makefile.am:AM_LDFLAGS = -lnetfilter_queue -lpcap -lev -ldumbnet `pkg-config --libs gthread-2.0 glib-2.0` -lcrypto
+ src/Makefile.in:AM_LDFLAGS = -lnetfilter_queue -lpcap -lev -ldumbnet `pkg-config --libs gthread-2.0 glib-2.0` -lcrypto
+ src/rules.c:#include <dumbnet.h>
+ src/rules.y:#include <dumbnet.h>
+ src/syntax.c:#include <dumbnet.h>
+ src/syntax.l:#include <dumbnet.h>
+ src/tables.c:#include <dumbnet.h>
+ src/types.h:#include <dumbnet.h>
+
 
 
 CONTACT
