@@ -194,7 +194,7 @@ settings: {
                 g_printerr("\t'%s' => '%s'\n", $2, $4);
 	}
 	| settings WORD EQ NUMBER SEMICOLON {
-		char *s = malloc(sizeof($4));
+		char *s = malloc(sizeof(double));
                 sprintf(s, "%d",$4);
                 g_hash_table_insert((GHashTable *)$$, $2, s);
                 g_printerr("\t'%s' => '%d'\n", $2, $4);
@@ -218,11 +218,12 @@ target: TARGET OPEN rule END {
 		g_printerr("\tGoing to add new element to target array...\n");
 		g_ptr_array_add(targets, $3);
 		g_printerr("\t...done\n");
-		g_printerr("\tAdded a new target with the following values:\n\tfront_handler: %s\n\tfront_rule: %s\n\tback_handler: %s\n\tback_rule: %s\n",
+		g_printerr("\tAdded a new target with the following values:\n\tfront_handler: %s\n\tfront_rule: %s\n\tback_handler: %s\n\tback_rule: %s\n\tcontrol: %s\n",
 				//addr_ntoa($3->front_handler), "-", //$3->front_rule->module_name->str,
 				//addr_ntoa($3->back_handler), "-"); //$3->back_rule->module_name->str);
 				addr_ntoa($3->front_handler),($3->front_rule == NULL) ? "(null)" : $3->front_rule->module_name->str,
-				addr_ntoa($3->back_handler), ($3->back_rule  == NULL) ? "(null)" : $3->back_rule->module_name->str);
+				addr_ntoa($3->back_handler), ($3->back_rule  == NULL) ? "(null)" : $3->back_rule->module_name->str,
+				($3->control_rule  == NULL) ? "(null)" : $3->control_rule->module_name->str);
 	}
 	;
 
