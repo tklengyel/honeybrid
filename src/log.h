@@ -24,6 +24,8 @@
 
 #include <glib.h>
 
+#include <mysql.h>
+
 /*! 
  \def verbosity channel
   1 errors only
@@ -115,6 +117,9 @@ void rotate_connection_log(int signal_nb);
 
 //void connection_stat(struct conn_struct *conn);
 void connection_log();
+
+MYSQL *mysqlConn;
+int init_mysql_log();
 
 #endif ///_LOG_H_
 

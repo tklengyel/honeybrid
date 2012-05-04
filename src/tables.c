@@ -400,8 +400,6 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 	} else {
 		char *value;
 
-		/* T0MA TODO: g_hash_table_lookup returns key_lih:mark as char*; parse into appropriate variables */
-
 		/* Nothing found, looking up in the redirection table */
 		if ( 	high_redirection_table != NULL &&
 			(value = g_hash_table_lookup(high_redirection_table, key0)) != NULL) {
@@ -539,8 +537,6 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 
 		//g_printerr("%s Initializing target to %p (%p) at index %d\n", H(0), g_ptr_array_index(targets, found), conn_init->target, found);
 
-		/* T0MA TODO: copy mark from LIH connection*/
-
 		conn_init->key					= g_strdup(pkt->key);
 		conn_init->key_ext				= g_strdup(pkt->key_src);
 		conn_init->key_lih				= g_strdup(pkt->key_dst);
@@ -587,6 +583,10 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 		conn_init->start_timestamp = g_string_new("");
                 g_string_printf(conn_init->start_timestamp,"%d-%02d-%02d %02d:%02d:%02d.%.6d", (1900+tm->tm_year), (1+tm->tm_mon), tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec, (int)tv.tv_usec);
 
+		/* Dionaea (updated by mod_xmpp) */
+		conn_init->dionaeaDownload=0;
+		conn_init->dionaeaDownloadTime=0;
+
 		/*! insert entry in B-Tree
 		 * (set up a lock to protect the writing)
 		 */
@@ -603,7 +603,7 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 		if (TRUE != g_tree_lookup_extended(conn_tree, pkt->key, NULL,(gpointer *) conn))
 			return NOK;
 
-		g_printerr("--- Key inserted to to conn_tree %s with mark %u \n", pkt->key, conn_init->mark);
+		g_printerr("%s Key inserted to to conn_tree %s with mark %u \n", H(0),pkt->key, conn_init->mark);
 		pkt->conn = conn_init;
 	}
 
@@ -617,6 +617,7 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 			state = PROXY;
 		}
 
+		g_static_rw_lock_writer_lock (&((*conn)->lock));
 		/*! statistics */
 		(*conn)->stat_time[   state ]  = microtime;
 		(*conn)->stat_packet[ state ] += 1;
@@ -631,6 +632,7 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 			(*conn)->mark=pkt->mark; /* We only take marks from internal IP's */
 
 		pkt->conn = *conn;
+		g_static_rw_lock_writer_unlock (&((*conn)->lock));
 
 	}
 

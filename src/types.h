@@ -193,7 +193,10 @@ struct conn_struct
 	int   replay_problem;
 	int   invalid_problem; //unused
 
-	 u_int32_t mark;	// adding support for multiple uplinks
+	u_int32_t mark;	// adding support for multiple uplinks
+
+	unsigned short int dionaeaDownload;
+	int dionaeaDownloadTime;
 };
 
 /*! pkt_struct

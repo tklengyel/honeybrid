@@ -56,7 +56,7 @@ void init_modules()
 	g_printerr("%s Initiate modules\n", H(6));
 	init_mod_hash();
 
-	init_mod_xmpp();
+	init_mod_dionaea();
 
 	/*! create a thread that will save module memory every minute */
 	module_to_save = g_hash_table_new(g_str_hash, g_str_equal);
@@ -84,6 +84,8 @@ void run_module(char *module_name, struct mod_args args)
                 mod_yesno(args);
         } else if (g_strcmp0(module_name, "random") == 0) {
                 mod_random(args);
+	} else if (g_strcmp0(module_name, "dionaea") ==0) {
+		mod_dionaea(args);
 	} else if (g_strcmp0(module_name, "source_time") ==0) {
                 mod_source_time(args);
         } else  {
@@ -113,6 +115,8 @@ void (*get_module(char *modname))(struct mod_args)
 		return mod_random;
 	else if(!strncmp(modname,"control",6))
 		return mod_control;
+	else if(!strncmp(modname,"dionaea",7))
+		return mod_dionaea;
         else if(!strncmp(modname,"source_time",11))
                 return mod_source_time;
 

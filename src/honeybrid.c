@@ -128,6 +128,7 @@ void usage(char **argv)
 			"  -x <pid>: halt the engine using its PID\n"
 			"  -q <queuenum>: select a specific queue number for NF_QUEUE to listen to\n"
 			"  -s: show status information\n"
+			"  -d: daemonize Honeybrid (send it to the background)\n"
 			"  -h: print the help\n\n",
 			VERSION,
 			argv[0]);
@@ -1028,6 +1029,8 @@ main(int argc, char *argv[])
 	threading = OK;
 	FILE *fp;
 	int fdebug;
+	int daemonize=0;
+
 
 	unsigned short int queuenum=0;
 	#ifdef USE_LIBEV
@@ -1044,7 +1047,7 @@ main(int argc, char *argv[])
 	/*! parsing arguments */
 	if(argc < 2)
 		usage(argv);
-	while ((argument = getopt(argc, argv, "sc:x:V:q:h?")) != -1)
+	while ((argument = getopt(argc, argv, "sc:x:V:q:h:d:?")) != -1)
 	{
 		switch (argument)
 		{
@@ -1109,6 +1112,10 @@ main(int argc, char *argv[])
 				 - top ports?
 				 - top IP addresses?
 				 */
+			case 'd' :
+                                g_printerr("Daemonizing honeybrid\n");
+                                daemonize=1;
+                                break;
 			case 'h' :
 			case '?' :
 			default :
@@ -1136,16 +1143,23 @@ main(int argc, char *argv[])
 	}
 
         /* Start Honeybrid in the background if necessary */
-        if (ICONFIG("output") != 2) {
+	if(daemonize) {
+                g_printerr("Honeybrid starting as background process\n");
+
+		if (daemon(1, 0) < 0) {
+                        unlink(PIDFILE);
+                        err(1, "daemon");
+                }
+	}
+
+	/* Setting debug file */
+        if (ICONFIG("output") != 2 && ICONFIG("output") != 4) {
                 setlogmask(LOG_UPTO(LOG_INFO));
 
-                g_printerr("Honeybrid starting as background process\n");
-                if (daemon(1, 0) < 0) {
-                        unlink(PIDFILE);
-			err(1, "daemon");
-                } else {
 			/*! reopening file descriptor now that we're a daemon */
 			//if ((fdebug = open("/tmp/honeybrid.debug", O_CREAT | O_RDWR, 0744)) != -1) {
+
+		if(daemonize) {
 			if ((fdebug = open_debug_log()) != -1) {
 		                (void)dup2(fdebug, STDIN_FILENO);
 		                (void)dup2(fdebug, STDOUT_FILENO);
@@ -1159,12 +1173,17 @@ main(int argc, char *argv[])
 		}
         }
 
+	if(ICONFIG("output")==4)
+                init_mysql_log();
+	else
+		open_connection_log();
+
+
         fprintf(fp, "%d\n", getpid());
         fclose(fp);
 
         chmod(PIDFILE, 0644);
 	mainpid = getpid();
-	open_connection_log();
 
 	#ifdef DE_THREAD
 	/*! init the Decision Engine thread */
@@ -1183,8 +1202,6 @@ main(int argc, char *argv[])
 	init_raw_sockets();
 	if(tcp_rsd == 0 || udp_rsd == 0) 
 		errx(1, "%s: failed to create the raw sockets", __func__);
-
-
 
 	#ifdef USE_LIBEV
 		loop = ev_default_loop(0);

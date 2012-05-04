@@ -103,6 +103,10 @@ void mod_source(struct mod_args args);
 void mod_control(struct mod_args args);
 //int control(struct pkt_struct *pkt);
 
+/*!** MODULE DIONAEA **/
+int init_mod_dionaea();
+void mod_dionaea(struct mod_args args);
+
 /*!** MODULE TIMED SOURCE **/
 void mod_source_time(struct mod_args args);
 

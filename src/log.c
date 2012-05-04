@@ -381,33 +381,137 @@ void connection_log(struct conn_struct *conn)
 	}
 	*/
 
-	char *logbuf = malloc(1024);	//1024 might be too short!
+	char *logbuf = malloc(5024);	//1024 might be too short!
 
 	/*! Output according to the format configured */
+	if ( ICONFIG("output")==4 ) {
+		if(init_mysql_log()==0) {
+			snprintf(logbuf,5024,"INSERT INTO log VALUES('', %.3f,%.3f,%i,'%s','%s','%s','%s','%s',%d,%d,'%s',%d,'%s','%s','%s','%s','%s',%i,%i);",
+               		conn->start_microtime,
+               	 	total_duration,
+               	 	(int)conn->mark,
+                	proto->str,
+                	tuple[0],
+                	tuple[1],
+                	tuple[2],
+                	tuple[3],
+                	conn->total_packet,
+                	conn->total_byte,
+                	status->str,
+                	conn->id,
+                	//status_info[INVALID]->str,
+                	status_info[INIT]->str,
+                	status_info[DECISION]->str,
+                	status_info[REPLAY]->str,
+                	status_info[FORWARD]->str,
+                	status_info[PROXY]->str,
+                	conn->dionaeaDownload,
+        	        conn->dionaeaDownloadTime
+	                );
+
+			if(mysql_query(mysqlConn, logbuf)) {
+				g_printerr("Logging to MySQL failed: %s\n", mysql_error(mysqlConn));
+			}
+		}
+	} else
 	if ( NULL != g_hash_table_lookup(config,"log_format") && NULL != strstr(g_hash_table_lookup(config,"log_format"),"csv") ) {
-		sprintf(logbuf,"%s,%.3f,%d,%s,%s,%s,%s,%s,%d,%d,%s,%d,%s,%s,%s,%s,%s\n", conn->start_timestamp->str, total_duration, conn->mark, proto->str, tuple[0], tuple[1], tuple[2], tuple[3], conn->total_packet, conn->total_byte, status->str, conn->id, 
+		sprintf(logbuf,"%s,%.3f,%d,%s,%s,%s,%s,%s,%d,%d,%s,%d,%s,%s,%s,%s,%s,%i,%i\n",
+		conn->start_timestamp->str,
+		total_duration,
+		conn->mark,
+		proto->str,
+		tuple[0],
+		tuple[1],
+		tuple[2],
+		tuple[3],
+		conn->total_packet,
+		conn->total_byte,
+		status->str,
+		conn->id,
 		//status_info[INVALID]->str,
 		status_info[INIT]->str,
 		status_info[DECISION]->str,
 		status_info[REPLAY]->str,
 		status_info[FORWARD]->str,
-		status_info[PROXY]->str
+		status_info[PROXY]->str,
+		conn->dionaeaDownload,
+		conn->dionaeaDownloadTime
 		);
+		fprintf(logfd, "%s", logbuf);
         } else {
-		sprintf(logbuf,"%s %.3f %d %s %s:%s -> %s:%s %d %d %s ** %d %s %s %s %s %s\n", conn->start_timestamp->str, total_duration, conn->mark, proto->str, tuple[0], tuple[1], tuple[2], tuple[3], conn->total_packet, conn->total_byte, status->str, conn->id, 
+		sprintf(logbuf,"%s %.3f %d %s %s:%s -> %s:%s %d %d %s ** %d %s %s %s %s %s | %i %i \n",
+		conn->start_timestamp->str,
+		total_duration,
+		conn->mark,
+		proto->str,
+		tuple[0],
+		tuple[1],
+		tuple[2],
+		tuple[3],
+		conn->total_packet,
+		conn->total_byte,
+		status->str,
+		conn->id,
 		//status_info[INVALID]->str,
 		status_info[INIT]->str,
 		status_info[DECISION]->str,
 		status_info[REPLAY]->str,
 		status_info[FORWARD]->str,
-		status_info[PROXY]->str
+		status_info[PROXY]->str,
+		conn->dionaeaDownload,
+		conn->dionaeaDownloadTime
 		);
+		fprintf(logfd, "%s", logbuf);
 	}
 	///g_printerr("%s",logbuf);
-	fprintf(logfd, "%s", logbuf);
 
 	g_free(logbuf);
 	g_strfreev(tuple);	/// ROBIN - 20090326-1007 according to valgrind output
 	//g_free(status_info);	/// seg fault
         //L(NULL,logbuf,1,conn->id);
+}
+
+int init_mysql_log() {
+	if(mysqlConn==NULL) {
+
+		if(g_hash_table_lookup(config,"mysql_host") == NULL ||
+			g_hash_table_lookup(config,"mysql_user") == NULL ||
+			g_hash_table_lookup(config,"mysql_password") == NULL ||
+			g_hash_table_lookup(config,"mysql_db") == NULL) {
+
+			g_printerr("MySQL is not configured properly, check the mysql_* settings in the configuration file!\n");
+			return 1;
+		}
+
+  		mysqlConn = mysql_init(NULL);
+		my_bool reconnect = 1;
+		mysql_options(mysqlConn,MYSQL_OPT_RECONNECT,&reconnect);
+
+  		if (!mysql_real_connect(
+			mysqlConn,
+			(char *)g_hash_table_lookup(config,"mysql_host"),
+			(char *)g_hash_table_lookup(config,"mysql_user"),
+			(char *)g_hash_table_lookup(config,"mysql_password"),
+			(char *)g_hash_table_lookup(config,"mysql_db"),
+			ICONFIG("mysql_port"),
+			NULL,
+			0)) {
+				g_printerr("Failed to connect to MySQL database: Error: %s\n",
+         				mysql_error(mysqlConn));
+				return 1;
+			}
+
+		return 0;
+
+	} else {
+		if(mysql_ping(mysqlConn)) {
+			g_printerr("Connection to the MySQL has gone away database: Error: %s\n",
+                                        mysql_error(mysqlConn));
+
+			mysql_close(mysqlConn);
+			return 1;
+		}
+
+		return 0;
+	}
 }

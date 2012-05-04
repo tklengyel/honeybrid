@@ -480,24 +480,32 @@ int init_raw_sockets()
 		for(init=0;init<ICONFIG("multi_uplink") && init <10;init++) {
 			char *config_ifvar=(char*)malloc(13*sizeof(char));
 			snprintf(config_ifvar,13,"uplink%d_name",init+1);
-			uplinks[init].name=(char *)malloc(5*sizeof(char));
-			snprintf(uplinks[init].name,5,"%s",(char *)g_hash_table_lookup(config,config_ifvar));
+			uplinks[init].name=(char *)malloc(32*sizeof(char));
+			snprintf(uplinks[init].name,32,"%s",(char *)g_hash_table_lookup(config,config_ifvar));
 			snprintf(config_ifvar,13,"uplink%d_mark",init+1);
 			uplinks[init].mark=ICONFIG(config_ifvar);
 			free(config_ifvar);
 
-			g_printerr("Opening sockets on interface %s (routing with mark %i)\n", uplinks[init].name, uplinks[init].mark);
+			g_printerr("%s Opening sockets on interface %s (routing with mark %i)\n", H(0),uplinks[init].name, uplinks[init].mark);
 			uplinks[init].tcp_socket = socket (PF_INET, SOCK_RAW,IPPROTO_TCP);
 			uplinks[init].udp_socket = socket (PF_INET, SOCK_RAW,IPPROTO_UDP);
 
 			setsockopt(uplinks[init].tcp_socket,IPPROTO_IP,IP_HDRINCL,&opt,sizeof(opt));
                 	setsockopt(uplinks[init].udp_socket,IPPROTO_IP,IP_HDRINCL,&opt,sizeof(opt));
 
-			if(setsockopt(uplinks[init].tcp_socket,SOL_SOCKET,SO_BINDTODEVICE, uplinks[init].name, 4)==0)
-                        	g_printerr("TCP socket init on %s with ID %i\n",uplinks[init].name,uplinks[init].tcp_socket);
+			if(setsockopt(uplinks[init].tcp_socket,SOL_SOCKET,SO_BINDTODEVICE, uplinks[init].name, strlen(uplinks[init].name))==0)
+                        	g_printerr("%s TCP socket binding on %s with ID %i successfull\n",H(0),uplinks[init].name,uplinks[init].tcp_socket);
+			else {
+				g_printerr("%s TCP socket binding failed on %s with ID %i\n",H(0),uplinks[init].name,uplinks[init].tcp_socket);
+				return NOK;
+			}
 
-			if(setsockopt(uplinks[init].udp_socket,SOL_SOCKET,SO_BINDTODEVICE, uplinks[init].name, 4)==0)
-                                g_printerr("UDP socket init on %s with ID %i\n",uplinks[init].name,uplinks[init].udp_socket);
+			if(setsockopt(uplinks[init].udp_socket,SOL_SOCKET,SO_BINDTODEVICE, uplinks[init].name, strlen(uplinks[init].name))==0)
+                                g_printerr("%s UDP socket binding on %s with ID %i successfull\n",H(0),uplinks[init].name,uplinks[init].udp_socket);
+			else {
+				g_printerr("%s UDP socket binding failed on %s with ID %i\n",H(0),uplinks[init].name,uplinks[init].tcp_socket);
+				return NOK;
+			}
 		}
 
 	}
