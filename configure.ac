@@ -47,7 +47,7 @@ CORE_LIBS=""
 AC_CHECK_LIB(ev, ev_loop, [
 	AC_DEFINE([HAVE_LIBEV], [1], [libev enabled])
 	AC_MSG_NOTICE([Using libev for event handling])
-	HONEYBRID_LIBS="$CORE_LIBS -lev"
+	CORE_LIBS="$CORE_LIBS -lev"
 	], [AC_MSG_NOTICE([Not using libev for event handling])])
 AC_CHECK_LIB(netfilter_queue, nfq_set_verdict2, [CORE_LIBS="$CORE_LIBS -lnetfilter_queue"],[AC_ERROR(Netfilter Queue library is too old)])
 AC_CHECK_LIB(pcap, pcap_compile_nopcap, [CORE_LIBS="$CORE_LIBS -lpcap"], [AC_ERROR(PCAP library missing)])
