@@ -107,13 +107,16 @@ int store_pkt(struct conn_struct *conn, struct pkt_struct *pkt);
 
 void clean();
 
-int setup_redirection(struct conn_struct *conn);
+int setup_redirection(struct conn_struct *conn, char *hih_id);
 
 int expire_conn(gpointer key, struct conn_struct *cur_conn, gint *expiration_delay);
 
 void free_conn(gpointer key, gpointer trash);
 
 char * config_lookup(char * parameter);
+
+gint IntComp(gconstpointer a,gconstpointer b);
+void IntDest(void* a);
 
 /*! \brief constants to define the origin of a packet
  */

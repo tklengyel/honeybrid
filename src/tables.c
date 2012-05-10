@@ -489,7 +489,9 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 					/* Note: this honeypot might be defined later in another target... */
 				}
 
-				if (	addr_cmp( ((struct target *)g_ptr_array_index(targets,i))->back_handler, src_addr) == 0 )
+				
+				/* T0MA FIX */
+				if ( g_tree_lookup( ((struct target *)g_ptr_array_index(targets,i))->back_handlers,src_addr) != NULL )
 				{
 					g_printerr("%s This packet matches a HIH honeypot IP address for target %d\n", H(0), i);
 					found = i;
@@ -952,10 +954,15 @@ void clean()
  \param[in] conn: redirected connection metadata
  \return OK when done, NOK in case of failure
  */
-int setup_redirection(struct conn_struct *conn)
+int setup_redirection(struct conn_struct *conn, char *hih_use)
 {
+	/* Check if decision engine gave me wrong HIH ID */
+	if(hih_use == NULL) {
+		return NOK;
+	}
+	
 	g_printerr("%s [** Starting... **]\n", H(conn->id));
-	struct addr *hihaddr = conn->target->back_handler;
+	struct addr *hihaddr = (struct addr *)g_tree_lookup(conn->target->back_handlers, hih_use);
 
 	if ( hihaddr != NULL ) {
 		gchar **tmp;
@@ -1044,4 +1051,11 @@ config_lookup(char * parameter) {
 	}
 	return (char *)g_hash_table_lookup(config, parameter);
 }
+
+gint IntComp(gconstpointer a, gconstpointer b) {
+  if( *(unsigned int*)a > *(unsigned int*)b) return(1);
+  if( *(unsigned int*)a < *(unsigned int*)b) return(-1);
+  return(0);
+}
+void IntDest(void* a) { free((unsigned int*)a); }
 

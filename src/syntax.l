@@ -37,6 +37,7 @@ filter		{ return FILTER; }
 frontend 	{ return FRONTEND; }
 backend  	{ return BACKEND; }
 limit 	 	{ return LIMIT; }
+backpick	{ return BACKPICK; }
 
 	/* Delimiters */
 "{"		{ return OPEN; }

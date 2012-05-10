@@ -40,17 +40,17 @@
  *
  \param[out] set result to 1 when 'arg' is "yes", 0 otherwise
  */
-void mod_yesno(struct mod_args args)
+void mod_yesno(struct mod_args *args)
 {
-	g_printerr("%s Module called\n", H(args.pkt->conn->id));
+	g_printerr("%s Module called\n", H(args->pkt->conn->id));
 
 	int value = 0;
 	gchar *param;
 
-	if ((param = (char *)g_hash_table_lookup(args.node->arg, "value")) == NULL) {
+	if ((param = (char *)g_hash_table_lookup(args->node->arg, "value")) == NULL) {
                 /*! We can't decide */
-                args.node->result = -1;
-                g_printerr("%s mandatory argument 'value' undefined!\n", H(args.pkt->conn->id));
+                args->node->result = -1;
+                g_printerr("%s mandatory argument 'value' undefined!\n", H(args->pkt->conn->id));
                 return;
         } else {
 		value = atoi(param);
@@ -58,12 +58,12 @@ void mod_yesno(struct mod_args args)
 
 	if(0 == value) {
 		/*! We accept this packet */
-		args.node->result = 1;
-		g_printerr("%s PACKET MATCH RULE for yesno(%d)\n", H(args.pkt->conn->id), value);
+		args->node->result = 1;
+		g_printerr("%s PACKET MATCH RULE for yesno(%d)\n", H(args->pkt->conn->id), value);
 	} else {
 		/*! We reject this packet */
-		args.node->result = 0;
-		g_printerr("%s PACKET DOES NOT MATCH RULE for yesno(%d)\n", H(args.pkt->conn->id), value);
+		args->node->result = 0;
+		g_printerr("%s PACKET DOES NOT MATCH RULE for yesno(%d)\n", H(args->pkt->conn->id), value);
 	}
 }
 

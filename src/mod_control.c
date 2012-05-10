@@ -45,17 +45,17 @@
  \param[in] pkts, struct that contain the packet to control
  \param[out] set result to 1 if rate limit reached, 0 otherwise
  */
-void mod_control(struct mod_args args)
+void mod_control(struct mod_args *args)
 {
 	gchar *backup_file;
 
-	if (args.pkt == NULL) {
+	if (args->pkt == NULL) {
 		g_printerr("%s Error, NULL packet\n", H(6));
-		args.node->result = -1;
+		args->node->result = -1;
 		return;
 	}
 
-	g_printerr("%s Module called\n", H(args.pkt->conn->id));
+	g_printerr("%s Module called\n", H(args->pkt->conn->id));
 
 	int expiration;
 	int max_packet;
@@ -68,40 +68,40 @@ void mod_control(struct mod_args args)
         g_get_current_time(&t);
         gint now = (t.tv_sec);
 
-	if ( args.pkt->key_src == NULL ) {
-		g_printerr("%s Error, key_src is NULL\n", H(args.pkt->conn->id));
-		args.node->result = -1;
+	if ( args->pkt->key_src == NULL ) {
+		g_printerr("%s Error, key_src is NULL\n", H(args->pkt->conn->id));
+		args->node->result = -1;
 		return;
 	}
 
 	/*! get the IP address from the packet */
-        key_src = g_strsplit( args.pkt->key_src, ":", 0 );
+        key_src = g_strsplit( args->pkt->key_src, ":", 0 );
 
-	g_printerr("%s source IP is %s\n", H(args.pkt->conn->id), key_src[0]);
+	g_printerr("%s source IP is %s\n", H(args->pkt->conn->id), key_src[0]);
 
         /*! get the backup file for this module */
-        if ( NULL ==    (backup = (GKeyFile *)g_hash_table_lookup(args.node->arg, "backup"))) {
+        if ( NULL ==    (backup = (GKeyFile *)g_hash_table_lookup(args->node->arg, "backup"))) {
                 /*! We can't decide */
-                args.node->result = -1;
-                g_printerr("%s mandatory argument 'backup' undefined!\n", H(args.pkt->conn->id));
+                args->node->result = -1;
+                g_printerr("%s mandatory argument 'backup' undefined!\n", H(args->pkt->conn->id));
                 return;
         }
 	/*! get the backup file path for this module */
-        if ( NULL ==    (backup_file = (gchar *)g_hash_table_lookup(args.node->arg, "backup_file"))) {
+        if ( NULL ==    (backup_file = (gchar *)g_hash_table_lookup(args->node->arg, "backup_file"))) {
                 /*! We can't decide */
-                args.node->result = -1;
-                g_printerr("%s error, backup file path missing\n", H(args.pkt->conn->id));
+                args->node->result = -1;
+                g_printerr("%s error, backup file path missing\n", H(args->pkt->conn->id));
                 return;
         }
 
 	/*! get control parameters */
-	if ( NULL ==    (param = (gchar *)g_hash_table_lookup(args.node->arg, "expiration"))) {
+	if ( NULL ==    (param = (gchar *)g_hash_table_lookup(args->node->arg, "expiration"))) {
 		/*! no value set for expiration, we go with the default one */
 		expiration = 600;
         } else {
 		expiration = atoi(param);
 	}
-	if ( NULL ==    (param = (gchar *)g_hash_table_lookup(args.node->arg, "max_packet"))) {
+	if ( NULL ==    (param = (gchar *)g_hash_table_lookup(args->node->arg, "max_packet"))) {
 		/*! no value set for expiration, we go with the default one */
 		max_packet = 1000;
         } else {
@@ -116,7 +116,7 @@ void mod_control(struct mod_args args)
                                         NULL)
                         )
            ) {
-                g_printerr("%s IP not found... new entry created\n", H(args.pkt->conn->id));
+                g_printerr("%s IP not found... new entry created\n", H(args->pkt->conn->id));
 
 		info = malloc(3 * sizeof(char *));
 
@@ -132,13 +132,13 @@ void mod_control(struct mod_args args)
                 /*! We check if we need to expire this entry */
                 int age = atoi(info[2]);
                 if ( age > expiration ) {
-                        g_printerr("%s IP found but expired... entry renewed\n", H(args.pkt->conn->id));
+                        g_printerr("%s IP found but expired... entry renewed\n", H(args->pkt->conn->id));
 
                         g_snprintf(info[0], 20, "1");          /*! counter */
                         g_snprintf(info[1], 20, "%d", now);    /*! first seen */
                         g_snprintf(info[2], 20, "0");          /*! duration */
                 } else {
-                        g_printerr("%s IP found... entry updated\n", H(args.pkt->conn->id));
+                        g_printerr("%s IP found... entry updated\n", H(args->pkt->conn->id));
 
                         g_snprintf(info[0], 20, "%d", atoi(info[0]) + 1);       /*! counter */
                         g_snprintf(info[2], 20, "%d", now - atoi(info[1]));     /*! duration */
@@ -148,11 +148,11 @@ void mod_control(struct mod_args args)
         }
 
 	if (atoi(info[0]) > max_packet) {
-		g_printerr("%s Rate limit reached! Packet rejected\n", H(args.pkt->conn->id));
-		args.node->result = 0;
+		g_printerr("%s Rate limit reached! Packet rejected\n", H(args->pkt->conn->id));
+		args->node->result = 0;
 	} else {
-		g_printerr("%s Rate limit not reached. Packet accepted\n", H(args.pkt->conn->id));
-		args.node->result = 1;
+		g_printerr("%s Rate limit not reached. Packet accepted\n", H(args->pkt->conn->id));
+		args->node->result = 1;
 	}
 
         g_key_file_set_string_list(

@@ -41,6 +41,7 @@ struct mod_args
 {
 	struct node *node;
 	struct pkt_struct *pkt;
+	char *backend_test, *backend_use;
 };
 
 
@@ -68,9 +69,9 @@ GHashTable *module_to_save;
 
 void init_modules();
 
-void run_module(char *module_name, struct mod_args args);
+void run_module(char *module_name, struct mod_args *args);
 
-void (*get_module(char *modname))(struct mod_args);
+void (*get_module(char *modname))(struct mod_args *);
 
 void save_backup_handler();
 
@@ -81,33 +82,42 @@ int write_backup(char *filename, GKeyFile *data, void *userdata);
 /*!************ [Basic Modules] **************/
 
 /*!** MODULE YESNO **/
-void mod_yesno(struct mod_args args);
+void mod_yesno(struct mod_args *args);
 
 /*!** MODULE COUNTER **/
-void mod_counter(struct mod_args args);
+void mod_counter(struct mod_args *args);
 
 /*!** MODULE RANDOM **/
-void mod_random(struct mod_args args);
+void mod_random(struct mod_args *args);
 
 /*!*********** [Advanced Modules] ************/
 
 /*!** MODULE HASH **/
 const EVP_MD *md;
 int init_mod_hash();
-void mod_hash(struct mod_args args);
+void mod_hash(struct mod_args *args);
 
 /*!** MODULE SOURCE **/
-void mod_source(struct mod_args args);
+void mod_source(struct mod_args *args);
 
 /*!** MODULE CONTROL **/
-void mod_control(struct mod_args args);
+void mod_control(struct mod_args *args);
 //int control(struct pkt_struct *pkt);
 
+#ifdef HAVE_XMPP
 /*!** MODULE DIONAEA **/
 int init_mod_dionaea();
-void mod_dionaea(struct mod_args args);
+void mod_dionaea(struct mod_args *args);
+#endif
 
 /*!** MODULE TIMED SOURCE **/
-void mod_source_time(struct mod_args args);
+void mod_source_time(struct mod_args *args);
+
+/*!** MODULE BACKPICK RANDOM **/
+void mod_backpick_random(struct mod_args *args);
+
+/*!** MODULE VMI **/
+int init_mod_vmi();
+void mod_vmi(struct mod_args *args);
 
 #endif //_MODULES_H_

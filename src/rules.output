@@ -27,16 +27,18 @@
   18       | rule FILTER QUOTE equation QUOTE SEMICOLON
   19       | rule FRONTEND honeynet SEMICOLON
   20       | rule FRONTEND honeynet QUOTE equation QUOTE SEMICOLON
-  21       | rule BACKEND honeynet QUOTE equation QUOTE SEMICOLON
-  22       | rule LIMIT QUOTE equation QUOTE SEMICOLON
+  21       | rule BACKPICK QUOTE equation QUOTE SEMICOLON
+  22       | rule BACKEND honeynet SEMICOLON
+  23       | rule BACKEND honeynet QUOTE equation QUOTE SEMICOLON
+  24       | rule LIMIT QUOTE equation QUOTE SEMICOLON
 
-  23  honeynet : EXPR
+  25  honeynet : EXPR
 
-  24  equation :
-  25           | equation WORD
-  26           | equation NUMBER
-  27           | equation EXPR
-  28           | equation EQ
+  26  equation :
+  27           | equation WORD
+  28           | equation NUMBER
+  29           | equation EXPR
+  30           | equation EQ
 
 state 0
 	$accept : . configuration $end  (0)
@@ -151,21 +153,24 @@ state 13
 	rule : rule . FILTER QUOTE equation QUOTE SEMICOLON  (18)
 	rule : rule . FRONTEND honeynet SEMICOLON  (19)
 	rule : rule . FRONTEND honeynet QUOTE equation QUOTE SEMICOLON  (20)
-	rule : rule . BACKEND honeynet QUOTE equation QUOTE SEMICOLON  (21)
-	rule : rule . LIMIT QUOTE equation QUOTE SEMICOLON  (22)
+	rule : rule . BACKPICK QUOTE equation QUOTE SEMICOLON  (21)
+	rule : rule . BACKEND honeynet SEMICOLON  (22)
+	rule : rule . BACKEND honeynet QUOTE equation QUOTE SEMICOLON  (23)
+	rule : rule . LIMIT QUOTE equation QUOTE SEMICOLON  (24)
 
 	END  shift 18
 	FILTER  shift 19
 	FRONTEND  shift 20
 	BACKEND  shift 21
-	LIMIT  shift 22
+	BACKPICK  shift 22
+	LIMIT  shift 23
 	.  error
 
 
 state 14
 	module : MODULE QUOTE WORD QUOTE . OPEN settings END  (11)
 
-	OPEN  shift 23
+	OPEN  shift 24
 	.  error
 
 
@@ -180,14 +185,14 @@ state 16
 	parameter : WORD . EQ EXPR  (9)
 	parameter : WORD . EQ NUMBER  (10)
 
-	EQ  shift 24
+	EQ  shift 25
 	.  error
 
 
 state 17
 	parameters : parameters parameter . SEMICOLON  (7)
 
-	SEMICOLON  shift 25
+	SEMICOLON  shift 26
 	.  error
 
 
@@ -200,7 +205,7 @@ state 18
 state 19
 	rule : rule FILTER . QUOTE equation QUOTE SEMICOLON  (18)
 
-	QUOTE  shift 26
+	QUOTE  shift 27
 	.  error
 
 
@@ -208,347 +213,400 @@ state 20
 	rule : rule FRONTEND . honeynet SEMICOLON  (19)
 	rule : rule FRONTEND . honeynet QUOTE equation QUOTE SEMICOLON  (20)
 
-	EXPR  shift 27
-	.  error
-
-	honeynet  goto 28
-
-
-state 21
-	rule : rule BACKEND . honeynet QUOTE equation QUOTE SEMICOLON  (21)
-
-	EXPR  shift 27
+	EXPR  shift 28
 	.  error
 
 	honeynet  goto 29
 
 
-state 22
-	rule : rule LIMIT . QUOTE equation QUOTE SEMICOLON  (22)
+state 21
+	rule : rule BACKEND . honeynet SEMICOLON  (22)
+	rule : rule BACKEND . honeynet QUOTE equation QUOTE SEMICOLON  (23)
 
-	QUOTE  shift 30
+	EXPR  shift 28
+	.  error
+
+	honeynet  goto 30
+
+
+state 22
+	rule : rule BACKPICK . QUOTE equation QUOTE SEMICOLON  (21)
+
+	QUOTE  shift 31
 	.  error
 
 
 state 23
+	rule : rule LIMIT . QUOTE equation QUOTE SEMICOLON  (24)
+
+	QUOTE  shift 32
+	.  error
+
+
+state 24
 	module : MODULE QUOTE WORD QUOTE OPEN . settings END  (11)
 	settings : .  (12)
 
 	.  reduce 12
 
-	settings  goto 31
+	settings  goto 33
 
 
-state 24
+state 25
 	parameter : WORD EQ . WORD  (8)
 	parameter : WORD EQ . EXPR  (9)
 	parameter : WORD EQ . NUMBER  (10)
 
-	NUMBER  shift 32
-	WORD  shift 33
-	EXPR  shift 34
+	NUMBER  shift 34
+	WORD  shift 35
+	EXPR  shift 36
 	.  error
 
 
-state 25
+state 26
 	parameters : parameters parameter SEMICOLON .  (7)
 
 	.  reduce 7
 
 
-state 26
-	rule : rule FILTER QUOTE . equation QUOTE SEMICOLON  (18)
-	equation : .  (24)
-
-	.  reduce 24
-
-	equation  goto 35
-
-
 state 27
-	honeynet : EXPR .  (23)
+	rule : rule FILTER QUOTE . equation QUOTE SEMICOLON  (18)
+	equation : .  (26)
 
-	.  reduce 23
+	.  reduce 26
+
+	equation  goto 37
 
 
 state 28
-	rule : rule FRONTEND honeynet . SEMICOLON  (19)
-	rule : rule FRONTEND honeynet . QUOTE equation QUOTE SEMICOLON  (20)
+	honeynet : EXPR .  (25)
 
-	SEMICOLON  shift 36
-	QUOTE  shift 37
-	.  error
+	.  reduce 25
 
 
 state 29
-	rule : rule BACKEND honeynet . QUOTE equation QUOTE SEMICOLON  (21)
+	rule : rule FRONTEND honeynet . SEMICOLON  (19)
+	rule : rule FRONTEND honeynet . QUOTE equation QUOTE SEMICOLON  (20)
 
-	QUOTE  shift 38
+	SEMICOLON  shift 38
+	QUOTE  shift 39
 	.  error
 
 
 state 30
-	rule : rule LIMIT QUOTE . equation QUOTE SEMICOLON  (22)
-	equation : .  (24)
+	rule : rule BACKEND honeynet . SEMICOLON  (22)
+	rule : rule BACKEND honeynet . QUOTE equation QUOTE SEMICOLON  (23)
 
-	.  reduce 24
-
-	equation  goto 39
+	SEMICOLON  shift 40
+	QUOTE  shift 41
+	.  error
 
 
 state 31
+	rule : rule BACKPICK QUOTE . equation QUOTE SEMICOLON  (21)
+	equation : .  (26)
+
+	.  reduce 26
+
+	equation  goto 42
+
+
+state 32
+	rule : rule LIMIT QUOTE . equation QUOTE SEMICOLON  (24)
+	equation : .  (26)
+
+	.  reduce 26
+
+	equation  goto 43
+
+
+state 33
 	module : MODULE QUOTE WORD QUOTE OPEN settings . END  (11)
 	settings : settings . WORD EQ WORD SEMICOLON  (13)
 	settings : settings . WORD EQ EXPR SEMICOLON  (14)
 	settings : settings . WORD EQ NUMBER SEMICOLON  (15)
 
-	END  shift 40
-	WORD  shift 41
+	END  shift 44
+	WORD  shift 45
 	.  error
 
 
-state 32
+state 34
 	parameter : WORD EQ NUMBER .  (10)
 
 	.  reduce 10
 
 
-state 33
+state 35
 	parameter : WORD EQ WORD .  (8)
 
 	.  reduce 8
 
 
-state 34
+state 36
 	parameter : WORD EQ EXPR .  (9)
 
 	.  reduce 9
 
 
-state 35
+state 37
 	rule : rule FILTER QUOTE equation . QUOTE SEMICOLON  (18)
-	equation : equation . WORD  (25)
-	equation : equation . NUMBER  (26)
-	equation : equation . EXPR  (27)
-	equation : equation . EQ  (28)
+	equation : equation . WORD  (27)
+	equation : equation . NUMBER  (28)
+	equation : equation . EXPR  (29)
+	equation : equation . EQ  (30)
 
-	QUOTE  shift 42
-	NUMBER  shift 43
-	WORD  shift 44
-	EQ  shift 45
-	EXPR  shift 46
+	QUOTE  shift 46
+	NUMBER  shift 47
+	WORD  shift 48
+	EQ  shift 49
+	EXPR  shift 50
 	.  error
 
 
-state 36
+state 38
 	rule : rule FRONTEND honeynet SEMICOLON .  (19)
 
 	.  reduce 19
 
 
-state 37
-	rule : rule FRONTEND honeynet QUOTE . equation QUOTE SEMICOLON  (20)
-	equation : .  (24)
-
-	.  reduce 24
-
-	equation  goto 47
-
-
-state 38
-	rule : rule BACKEND honeynet QUOTE . equation QUOTE SEMICOLON  (21)
-	equation : .  (24)
-
-	.  reduce 24
-
-	equation  goto 48
-
-
 state 39
-	rule : rule LIMIT QUOTE equation . QUOTE SEMICOLON  (22)
-	equation : equation . WORD  (25)
-	equation : equation . NUMBER  (26)
-	equation : equation . EXPR  (27)
-	equation : equation . EQ  (28)
+	rule : rule FRONTEND honeynet QUOTE . equation QUOTE SEMICOLON  (20)
+	equation : .  (26)
 
-	QUOTE  shift 49
-	NUMBER  shift 43
-	WORD  shift 44
-	EQ  shift 45
-	EXPR  shift 46
-	.  error
+	.  reduce 26
+
+	equation  goto 51
 
 
 state 40
+	rule : rule BACKEND honeynet SEMICOLON .  (22)
+
+	.  reduce 22
+
+
+state 41
+	rule : rule BACKEND honeynet QUOTE . equation QUOTE SEMICOLON  (23)
+	equation : .  (26)
+
+	.  reduce 26
+
+	equation  goto 52
+
+
+state 42
+	rule : rule BACKPICK QUOTE equation . QUOTE SEMICOLON  (21)
+	equation : equation . WORD  (27)
+	equation : equation . NUMBER  (28)
+	equation : equation . EXPR  (29)
+	equation : equation . EQ  (30)
+
+	QUOTE  shift 53
+	NUMBER  shift 47
+	WORD  shift 48
+	EQ  shift 49
+	EXPR  shift 50
+	.  error
+
+
+state 43
+	rule : rule LIMIT QUOTE equation . QUOTE SEMICOLON  (24)
+	equation : equation . WORD  (27)
+	equation : equation . NUMBER  (28)
+	equation : equation . EXPR  (29)
+	equation : equation . EQ  (30)
+
+	QUOTE  shift 54
+	NUMBER  shift 47
+	WORD  shift 48
+	EQ  shift 49
+	EXPR  shift 50
+	.  error
+
+
+state 44
 	module : MODULE QUOTE WORD QUOTE OPEN settings END .  (11)
 
 	.  reduce 11
 
 
-state 41
+state 45
 	settings : settings WORD . EQ WORD SEMICOLON  (13)
 	settings : settings WORD . EQ EXPR SEMICOLON  (14)
 	settings : settings WORD . EQ NUMBER SEMICOLON  (15)
 
-	EQ  shift 50
+	EQ  shift 55
 	.  error
 
 
-state 42
+state 46
 	rule : rule FILTER QUOTE equation QUOTE . SEMICOLON  (18)
 
-	SEMICOLON  shift 51
+	SEMICOLON  shift 56
 	.  error
 
 
-state 43
-	equation : equation NUMBER .  (26)
-
-	.  reduce 26
-
-
-state 44
-	equation : equation WORD .  (25)
-
-	.  reduce 25
-
-
-state 45
-	equation : equation EQ .  (28)
+state 47
+	equation : equation NUMBER .  (28)
 
 	.  reduce 28
 
 
-state 46
-	equation : equation EXPR .  (27)
+state 48
+	equation : equation WORD .  (27)
 
 	.  reduce 27
 
 
-state 47
-	rule : rule FRONTEND honeynet QUOTE equation . QUOTE SEMICOLON  (20)
-	equation : equation . WORD  (25)
-	equation : equation . NUMBER  (26)
-	equation : equation . EXPR  (27)
-	equation : equation . EQ  (28)
-
-	QUOTE  shift 52
-	NUMBER  shift 43
-	WORD  shift 44
-	EQ  shift 45
-	EXPR  shift 46
-	.  error
-
-
-state 48
-	rule : rule BACKEND honeynet QUOTE equation . QUOTE SEMICOLON  (21)
-	equation : equation . WORD  (25)
-	equation : equation . NUMBER  (26)
-	equation : equation . EXPR  (27)
-	equation : equation . EQ  (28)
-
-	QUOTE  shift 53
-	NUMBER  shift 43
-	WORD  shift 44
-	EQ  shift 45
-	EXPR  shift 46
-	.  error
-
-
 state 49
-	rule : rule LIMIT QUOTE equation QUOTE . SEMICOLON  (22)
+	equation : equation EQ .  (30)
 
-	SEMICOLON  shift 54
-	.  error
+	.  reduce 30
 
 
 state 50
-	settings : settings WORD EQ . WORD SEMICOLON  (13)
-	settings : settings WORD EQ . EXPR SEMICOLON  (14)
-	settings : settings WORD EQ . NUMBER SEMICOLON  (15)
+	equation : equation EXPR .  (29)
 
-	NUMBER  shift 55
-	WORD  shift 56
-	EXPR  shift 57
-	.  error
+	.  reduce 29
 
 
 state 51
-	rule : rule FILTER QUOTE equation QUOTE SEMICOLON .  (18)
+	rule : rule FRONTEND honeynet QUOTE equation . QUOTE SEMICOLON  (20)
+	equation : equation . WORD  (27)
+	equation : equation . NUMBER  (28)
+	equation : equation . EXPR  (29)
+	equation : equation . EQ  (30)
 
-	.  reduce 18
+	QUOTE  shift 57
+	NUMBER  shift 47
+	WORD  shift 48
+	EQ  shift 49
+	EXPR  shift 50
+	.  error
 
 
 state 52
-	rule : rule FRONTEND honeynet QUOTE equation QUOTE . SEMICOLON  (20)
+	rule : rule BACKEND honeynet QUOTE equation . QUOTE SEMICOLON  (23)
+	equation : equation . WORD  (27)
+	equation : equation . NUMBER  (28)
+	equation : equation . EXPR  (29)
+	equation : equation . EQ  (30)
 
-	SEMICOLON  shift 58
+	QUOTE  shift 58
+	NUMBER  shift 47
+	WORD  shift 48
+	EQ  shift 49
+	EXPR  shift 50
 	.  error
 
 
 state 53
-	rule : rule BACKEND honeynet QUOTE equation QUOTE . SEMICOLON  (21)
+	rule : rule BACKPICK QUOTE equation QUOTE . SEMICOLON  (21)
 
 	SEMICOLON  shift 59
 	.  error
 
 
 state 54
-	rule : rule LIMIT QUOTE equation QUOTE SEMICOLON .  (22)
-
-	.  reduce 22
-
-
-state 55
-	settings : settings WORD EQ NUMBER . SEMICOLON  (15)
+	rule : rule LIMIT QUOTE equation QUOTE . SEMICOLON  (24)
 
 	SEMICOLON  shift 60
 	.  error
 
 
-state 56
-	settings : settings WORD EQ WORD . SEMICOLON  (13)
+state 55
+	settings : settings WORD EQ . WORD SEMICOLON  (13)
+	settings : settings WORD EQ . EXPR SEMICOLON  (14)
+	settings : settings WORD EQ . NUMBER SEMICOLON  (15)
 
-	SEMICOLON  shift 61
+	NUMBER  shift 61
+	WORD  shift 62
+	EXPR  shift 63
 	.  error
 
 
-state 57
-	settings : settings WORD EQ EXPR . SEMICOLON  (14)
+state 56
+	rule : rule FILTER QUOTE equation QUOTE SEMICOLON .  (18)
 
-	SEMICOLON  shift 62
+	.  reduce 18
+
+
+state 57
+	rule : rule FRONTEND honeynet QUOTE equation QUOTE . SEMICOLON  (20)
+
+	SEMICOLON  shift 64
 	.  error
 
 
 state 58
-	rule : rule FRONTEND honeynet QUOTE equation QUOTE SEMICOLON .  (20)
+	rule : rule BACKEND honeynet QUOTE equation QUOTE . SEMICOLON  (23)
 
-	.  reduce 20
+	SEMICOLON  shift 65
+	.  error
 
 
 state 59
-	rule : rule BACKEND honeynet QUOTE equation QUOTE SEMICOLON .  (21)
+	rule : rule BACKPICK QUOTE equation QUOTE SEMICOLON .  (21)
 
 	.  reduce 21
 
 
 state 60
+	rule : rule LIMIT QUOTE equation QUOTE SEMICOLON .  (24)
+
+	.  reduce 24
+
+
+state 61
+	settings : settings WORD EQ NUMBER . SEMICOLON  (15)
+
+	SEMICOLON  shift 66
+	.  error
+
+
+state 62
+	settings : settings WORD EQ WORD . SEMICOLON  (13)
+
+	SEMICOLON  shift 67
+	.  error
+
+
+state 63
+	settings : settings WORD EQ EXPR . SEMICOLON  (14)
+
+	SEMICOLON  shift 68
+	.  error
+
+
+state 64
+	rule : rule FRONTEND honeynet QUOTE equation QUOTE SEMICOLON .  (20)
+
+	.  reduce 20
+
+
+state 65
+	rule : rule BACKEND honeynet QUOTE equation QUOTE SEMICOLON .  (23)
+
+	.  reduce 23
+
+
+state 66
 	settings : settings WORD EQ NUMBER SEMICOLON .  (15)
 
 	.  reduce 15
 
 
-state 61
+state 67
 	settings : settings WORD EQ WORD SEMICOLON .  (13)
 
 	.  reduce 13
 
 
-state 62
+state 68
 	settings : settings WORD EQ EXPR SEMICOLON .  (14)
 
 	.  reduce 14
 
 
-18 terminals, 11 nonterminals
-29 grammar rules, 63 states
+19 terminals, 11 nonterminals
+31 grammar rules, 69 states

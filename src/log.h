@@ -24,7 +24,9 @@
 
 #include <glib.h>
 
+#ifdef HAVE_MYSQL
 #include <mysql.h>
+#endif
 
 /*! 
  \def verbosity channel
@@ -118,8 +120,10 @@ void rotate_connection_log(int signal_nb);
 //void connection_stat(struct conn_struct *conn);
 void connection_log();
 
+#ifdef HAVE_MYSQL
 MYSQL *mysqlConn;
 int init_mysql_log();
+#endif
 
 #endif ///_LOG_H_
 

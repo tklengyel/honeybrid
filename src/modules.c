@@ -39,7 +39,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-
+#include "../config.h"
 #include "modules.h"
 #include "log.h"
 
@@ -56,7 +56,11 @@ void init_modules()
 	g_printerr("%s Initiate modules\n", H(6));
 	init_mod_hash();
 
+	#ifdef HAVE_XMPP
 	init_mod_dionaea();
+	#endif
+
+	init_mod_vmi();
 
 	/*! create a thread that will save module memory every minute */
 	module_to_save = g_hash_table_new(g_str_hash, g_str_equal);
@@ -68,9 +72,9 @@ void init_modules()
 /*! run_module
  * \brief test of a new function to run module based on module name (without calling get_module)
  */
-void run_module(char *module_name, struct mod_args args)
+void run_module(char *module_name, struct mod_args *args)
 {
-        g_printerr("%s called\n", H(args.pkt->conn->id));
+        g_printerr("%s %s called\n", H(args->pkt->conn->id), module_name);
 
                if (g_strcmp0(module_name, "hash") == 0) {
                 mod_hash(args);
@@ -84,13 +88,19 @@ void run_module(char *module_name, struct mod_args args)
                 mod_yesno(args);
         } else if (g_strcmp0(module_name, "random") == 0) {
                 mod_random(args);
+        #ifdef HAVE_XMPP
 	} else if (g_strcmp0(module_name, "dionaea") ==0) {
 		mod_dionaea(args);
+	#endif
 	} else if (g_strcmp0(module_name, "source_time") ==0) {
                 mod_source_time(args);
+        } else if (g_strcmp0(module_name, "backpick_random") ==0) {
+                mod_backpick_random(args);
+        } else if (g_strcmp0(module_name, "vmi") ==0) {
+                mod_vmi(args);
         } else  {
-                g_printerr("%s module name invalid\n", H(args.pkt->conn->id));
-                args.node->result = -1;
+                g_printerr("%s module name invalid (%s)\n", H(args->pkt->conn->id), module_name);
+                args->node->result = -1;
         }
 }
 
@@ -100,7 +110,7 @@ void run_module(char *module_name, struct mod_args args)
  \param[in] modname: module name
  \return function pointer to the module
  */
-void (*get_module(char *modname))(struct mod_args)
+void (*get_module(char *modname))(struct mod_args *)
 {
 
 	     if(!strncmp(modname,"hash",6))
@@ -115,10 +125,16 @@ void (*get_module(char *modname))(struct mod_args)
 		return mod_random;
 	else if(!strncmp(modname,"control",6))
 		return mod_control;
+	#ifdef HAVE_XMPP
 	else if(!strncmp(modname,"dionaea",7))
 		return mod_dionaea;
+	#endif
         else if(!strncmp(modname,"source_time",11))
                 return mod_source_time;
+        else if(!strncmp(modname,"backpick_random",16))
+                return mod_backpick_random;
+        else if(!strncmp(modname,"vmi",3))
+                return mod_vmi;
 
 	errx(1, "%s No module could be found with the name: %s", H(6), modname);
 }

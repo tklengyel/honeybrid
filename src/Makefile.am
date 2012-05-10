@@ -18,17 +18,23 @@ sbin_PROGRAMS = honeybrid
 honeybrid_SOURCES = rules.y syntax.l \
  daemon.c decision_engine.c err.c honeybrid.c log.c mod_control.c mod_counter.c \
  mod_hash.c mod_random.c mod_source.c modules.c mod_yesno.c netcode.c tables.c \
- mod_dionaea.c mod_dionaea.h mod_source_time.c mod_vmi.c \
+ mod_source_time.c mod_vmi.c mod_dionaea.c mod_dionaea.h mod_backpick_random.c \
  decision_engine.h honeybrid.h log.h modules.h netcode.h pcap_tool.h tables.h types.h
 
 # Compiler flags:
-AM_CFLAGS = -Wall -D RST_EXT -O0 `pkg-config --cflags glib-2.0 gthread-2.0` `pkg-config --cflags libxml++-2.6`
-AM_CFLAGS += `mysql_config --cflags --libs`
-AM_CFLAGS += -g -ggdb -pg
-#AM_CFLAGS += -g -ggdb -D DEBUG -pg
+AM_CFLAGS = -Wall -D RST_EXT -O0
+AM_CFLAGS += -g -ggdb -pg -std=gnu99
+AM_CFLAGS += $(CRYPTO_CFLAGS)
+AM_CFLAGS += $(GLIB_CFLAGS)
+AM_CFLAGS += $(XML2_CFLAGS)
+AM_CFLAGS += $(MYSQL_CFLAGS)
+#AM_CFLAGS += -g -ggdb -D DEBUG -pg -std=gnu99
+
+AM_LDFLAGS = $(CRYPTO_LIBS)
+AM_LDFLAGS += $(GLIB_LIBS)
+AM_LDFLAGS += $(XML2_LIBS)
+AM_LDFLAGS += $(MYSQL_LIBS)
+AM_LDFLAGS += $(CORE_LIBS)
+
 AM_YFLAGS= -tvy -d -v
 AM_LFLAGS=-i
-
-# Linker flags:
-AM_LDFLAGS = -lnetfilter_queue -lpcap -lev -ldumbnet `pkg-config --libs gthread-2.0 glib-2.0` -lcrypto -lxml2
-#AM_LDFLAGS += -lnetfilter_conntrack

@@ -95,44 +95,45 @@ extern int YYLEX_DECL();
 #define FILTER 263
 #define FRONTEND 264
 #define BACKEND 265
-#define LIMIT 266
-#define CONFIGURATION 267
-#define TARGET 268
-#define NUMBER 269
-#define WORD 270
-#define EQ 271
-#define EXPR 272
+#define BACKPICK 266
+#define LIMIT 267
+#define CONFIGURATION 268
+#define TARGET 269
+#define NUMBER 270
+#define WORD 271
+#define EQ 272
+#define EXPR 273
 #define YYERRCODE 256
 static const short yylhs[] = {                           -1,
     0,    0,    0,    0,    5,    8,    8,    9,    9,    9,
     6,    1,    1,    1,    1,    7,    2,    2,    2,    2,
-    2,    2,    4,    3,    3,    3,    3,    3,
+    2,    2,    2,    2,    4,    3,    3,    3,    3,    3,
 };
 static const short yylen[] = {                            2,
     0,    2,    2,    2,    4,    0,    3,    3,    3,    3,
     7,    0,    5,    5,    5,    4,    0,    6,    4,    7,
-    7,    6,    1,    0,    2,    2,    2,    2,
+    6,    4,    7,    6,    1,    0,    2,    2,    2,    2,
 };
 static const short yydefred[] = {                         1,
     0,    0,    0,    0,    2,    3,    4,    0,    6,   17,
     0,    0,    0,    0,    5,    0,    0,   16,    0,    0,
-    0,    0,   12,    0,    7,   24,   23,    0,    0,   24,
-    0,   10,    8,    9,    0,   19,   24,   24,    0,   11,
-    0,    0,   26,   25,   28,   27,    0,    0,    0,    0,
-   18,    0,    0,   22,    0,    0,    0,   20,   21,   15,
-   13,   14,
+    0,    0,    0,   12,    0,    7,   26,   25,    0,    0,
+   26,   26,    0,   10,    8,    9,    0,   19,   26,   22,
+   26,    0,    0,   11,    0,    0,   28,   27,   30,   29,
+    0,    0,    0,    0,    0,   18,    0,    0,   21,   24,
+    0,    0,    0,   20,   23,   15,   13,   14,
 };
 static const short yydgoto[] = {                          1,
-   31,   13,   35,   28,    5,    6,    7,   12,   17,
+   33,   13,   37,   29,    5,    6,    7,   12,   17,
 };
 static const short yysindex[] = {                         0,
- -261, -234, -220, -218,    0,    0,    0, -230,    0,    0,
- -213, -236, -222, -209,    0, -221, -210,    0, -208, -219,
- -219, -206,    0, -267,    0,    0,    0, -231, -205,    0,
- -235,    0,    0,    0, -260,    0,    0,    0, -256,    0,
- -215, -202,    0,    0,    0,    0, -252, -239, -201, -245,
-    0, -200, -199,    0, -198, -197, -196,    0,    0,    0,
-    0,    0,
+ -239, -259, -226, -211,    0,    0,    0, -224,    0,    0,
+ -209, -231, -210, -208,    0, -214, -200,    0, -199, -213,
+ -213, -198, -197,    0, -268,    0,    0,    0, -235, -215,
+    0,    0, -230,    0,    0,    0, -260,    0,    0,    0,
+    0, -256, -252,    0, -207, -195,    0,    0,    0,    0,
+ -238, -234, -193, -192, -264,    0, -191, -190,    0,    0,
+ -189, -188, -187,    0,    0,    0,    0,    0,
 };
 static const short yyrindex[] = {                         0,
     0,    0,    0,    0,    0,    0,    0,    0,    0,    0,
@@ -141,35 +142,37 @@ static const short yyrindex[] = {                         0,
     0,    0,    0,    0,    0,    0,    0,    0,    0,    0,
     0,    0,    0,    0,    0,    0,    0,    0,    0,    0,
     0,    0,    0,    0,    0,    0,    0,    0,    0,    0,
-    0,    0,
+    0,    0,    0,    0,    0,    0,    0,    0,
 };
 static const short yygindex[] = {                         0,
-    0,    0,    8,   30,    0,    0,    0,    0,    0,
+    0,    0,   11,   52,    0,    0,    0,    0,    0,
 };
-#define YYTABLESIZE 63
-static const short yytable[] = {                         42,
-    2,   32,   33,   49,   34,    3,    4,   52,   43,   44,
-   45,   46,   43,   44,   45,   46,   43,   44,   45,   46,
-   53,   15,   40,   55,   56,    8,   57,   36,   37,   43,
-   44,   45,   46,   16,   41,   18,    9,   39,   10,   11,
-   19,   20,   21,   22,   47,   48,   14,   23,   25,   24,
-   29,   26,   27,   30,   38,   50,   51,   54,   58,   59,
-   60,   61,   62,
+#define YYTABLESIZE 73
+static const short yytable[] = {                         46,
+    8,   34,   35,   53,   36,   61,   62,   54,   63,   47,
+   48,   49,   50,   47,   48,   49,   50,   47,   48,   49,
+   50,   57,    2,   38,   39,   58,   15,   44,    3,    4,
+    9,   47,   48,   49,   50,   47,   48,   49,   50,   16,
+   45,   42,   43,   40,   41,   10,   11,   18,   24,   51,
+   14,   52,   19,   20,   21,   22,   23,   25,   26,   28,
+   27,   31,   32,   56,   55,   59,   60,   64,   65,   66,
+   67,   68,   30,
 };
 static const short yycheck[] = {                        260,
-  262,  269,  270,  260,  272,  267,  268,  260,  269,  270,
-  271,  272,  269,  270,  271,  272,  269,  270,  271,  272,
-  260,  258,  258,  269,  270,  260,  272,  259,  260,  269,
-  270,  271,  272,  270,  270,  258,  257,   30,  257,  270,
-  263,  264,  265,  266,   37,   38,  260,  257,  259,  271,
-   21,  260,  272,  260,  260,  271,  259,  259,  259,  259,
-  259,  259,  259,
+  260,  270,  271,  260,  273,  270,  271,  260,  273,  270,
+  271,  272,  273,  270,  271,  272,  273,  270,  271,  272,
+  273,  260,  262,  259,  260,  260,  258,  258,  268,  269,
+  257,  270,  271,  272,  273,  270,  271,  272,  273,  271,
+  271,   31,   32,  259,  260,  257,  271,  258,  257,   39,
+  260,   41,  263,  264,  265,  266,  267,  272,  259,  273,
+  260,  260,  260,  259,  272,  259,  259,  259,  259,  259,
+  259,  259,   21,
 };
 #define YYFINAL 1
 #ifndef YYDEBUG
 #define YYDEBUG 1
 #endif
-#define YYMAXTOKEN 272
+#define YYMAXTOKEN 273
 #if YYDEBUG
 static const char *yyname[] = {
 
@@ -180,8 +183,8 @@ static const char *yyname[] = {
 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,"OPEN","END","SEMICOLON","QUOTE",
-"DOT","MODULE","FILTER","FRONTEND","BACKEND","LIMIT","CONFIGURATION","TARGET",
-"NUMBER","WORD","EQ","EXPR",
+"DOT","MODULE","FILTER","FRONTEND","BACKEND","BACKPICK","LIMIT","CONFIGURATION",
+"TARGET","NUMBER","WORD","EQ","EXPR",
 };
 static const char *yyrule[] = {
 "$accept : configuration",
@@ -205,6 +208,8 @@ static const char *yyrule[] = {
 "rule : rule FILTER QUOTE equation QUOTE SEMICOLON",
 "rule : rule FRONTEND honeynet SEMICOLON",
 "rule : rule FRONTEND honeynet QUOTE equation QUOTE SEMICOLON",
+"rule : rule BACKPICK QUOTE equation QUOTE SEMICOLON",
+"rule : rule BACKEND honeynet SEMICOLON",
 "rule : rule BACKEND honeynet QUOTE equation QUOTE SEMICOLON",
 "rule : rule LIMIT QUOTE equation QUOTE SEMICOLON",
 "honeynet : EXPR",
@@ -249,7 +254,7 @@ YYSTYPE  yylval;
 
 /* variables for the parser stack */
 static YYSTACKDATA yystack;
-#line 318 "rules.y"
+#line 341 "rules.y"
 
 static void  yyerror(const char *msg) {
         errx(1,"line %d: %s at '%s'", yylineno, msg, yytext);
@@ -280,7 +285,7 @@ char* int_append(char * root, int number) {
 		return root;
 }
 
-#line 283 "rules.c"
+#line 288 "rules.c"
 
 #if YYDEBUG
 #include <stdio.h>		/* needed for printf */
@@ -549,7 +554,7 @@ case 11:
 			/*g_printerr("\tModule function defined as '%s'\n", (char *)g_hash_table_lookup((GHashTable *)$6, "function"));*/
 			/*//g_hash_table_replace((GHashTable *)$6, "function", get_module((char *)g_hash_table_lookup((GHashTable *)$6, "function")));*/
 			g_hash_table_insert((GHashTable *)yystack.l_mark[-1].hash, "function_pointer", get_module((char *)g_hash_table_lookup((GHashTable *)yystack.l_mark[-1].hash, "function")));
-			/*g_printerr("\tModule function defined at address %p\n", g_hash_table_lookup((GHashTable *)$6, "function"));*/
+			g_printerr("\tModule function defined at address %p\n", g_hash_table_lookup((GHashTable *)yystack.l_mark[-1].hash, "function_pointer"));
 		}
 		
 		gchar *backup_file;
@@ -645,29 +650,30 @@ case 16:
 		g_printerr("\tGoing to add new element to target array...\n");
 		g_ptr_array_add(targets, yystack.l_mark[-1].target);
 		g_printerr("\t...done\n");
-		g_printerr("\tAdded a new target with the following values:\n\tfront_handler: %s\n\tfront_rule: %s\n\tback_handler: %s\n\tback_rule: %s\n\tlimit: %s\n",
-				/*addr_ntoa($3->front_handler), "-", //$3->front_rule->module_name->str,*/
-				/*addr_ntoa($3->back_handler), "-"); //$3->back_rule->module_name->str);*/
-				addr_ntoa(yystack.l_mark[-1].target->front_handler),(yystack.l_mark[-1].target->front_rule == NULL) ? "(null)" : yystack.l_mark[-1].target->front_rule->module_name->str,
-				addr_ntoa(yystack.l_mark[-1].target->back_handler), (yystack.l_mark[-1].target->back_rule  == NULL) ? "(null)" : yystack.l_mark[-1].target->back_rule->module_name->str,
-				(yystack.l_mark[-1].target->control_rule  == NULL) ? "(null)" : yystack.l_mark[-1].target->control_rule->module_name->str);
+		/*g_printerr("\tAdded a new target with the following values:\n\tfront_handler: %s\n\tfront_rule: %s\n\tback_handler: %s\n\tback_rule: %s\n\tcontrol: %s\n",
+				//addr_ntoa($3->front_handler), "-", //$3->front_rule->module_name->str,
+				//addr_ntoa($3->back_handler), "-"); //$3->back_rule->module_name->str);
+				addr_ntoa($3->front_handler),($3->front_rule == NULL) ? "(null)" : $3->front_rule->module_name->str,
+				addr_ntoa($3->back_handler), ($3->back_rule  == NULL) ? "(null)" : $3->back_rule->module_name->str,
+				($3->control_rule  == NULL) ? "(null)" : $3->control_rule->module_name->str);
+		*/
 	}
 break;
 case 17:
-#line 230 "rules.y"
+#line 231 "rules.y"
 	{
 		g_printerr("\tAllocating memory for new structure 'target'\n");
-		yyval.target = malloc(sizeof(struct target));
+		yyval.target = (struct target *)g_malloc0(sizeof(struct target));
 		yyval.target->front_handler = (struct addr *)g_malloc0(sizeof(struct addr));
-		yyval.target->back_handler = (struct addr *)g_malloc0(sizeof(struct addr));
+		yyval.target->back_picker = NULL;
 		yyval.target->front_rule = NULL;
-		yyval.target->back_rule = NULL;
 		yyval.target->control_rule = NULL;
-
+		yyval.target->back_handlers = g_tree_new((GCompareFunc)strcmp);
+		yyval.target->back_rules = g_tree_new((GCompareFunc)strcmp);
 	}
 break;
 case 18:
-#line 240 "rules.y"
+#line 241 "rules.y"
 	{
 		/*g_printerr("Read pcap filter: '%s'\n", $4);*/
 		/*g_printerr("Read pcap filter: '%s'\n", g_string_free($4, FALSE));*/
@@ -682,7 +688,7 @@ case 18:
 	}
 break;
 case 19:
-#line 252 "rules.y"
+#line 253 "rules.y"
 	{
 		yyval.target->front_handler = yystack.l_mark[-1].addr;
 		g_printerr("\tIP %s (%d) copied to handler\n", addr_ntoa(yystack.l_mark[-1].addr), yystack.l_mark[-1].addr->addr_ip);
@@ -691,69 +697,80 @@ case 19:
 	}
 break;
 case 20:
-#line 258 "rules.y"
+#line 259 "rules.y"
 	{
-		yyval.target->front_handler = yystack.l_mark[-4].addr;
 		g_printerr("\tIP %s (%d) copied to handler\n", addr_ntoa(yystack.l_mark[-4].addr), yystack.l_mark[-4].addr->addr_ip);
+		yyval.target->front_handler = yystack.l_mark[-4].addr;
 		yyval.target->front_rule = DE_create_tree(yystack.l_mark[-2].gstring->str);
+		g_printerr("\tFront decision module is at %p\n", yyval.target->front_rule->module);
 		g_string_free(yystack.l_mark[-2].gstring, TRUE);
 	}
 break;
 case 21:
-#line 264 "rules.y"
+#line 266 "rules.y"
 	{
-		yyval.target->back_handler = yystack.l_mark[-4].addr;
-		g_printerr("\tIP %s (%d) copied to handler\n", addr_ntoa(yystack.l_mark[-4].addr), yystack.l_mark[-4].addr->addr_ip);
-		yyval.target->back_rule = DE_create_tree(yystack.l_mark[-2].gstring->str);
+                g_printerr("\tCreating backend picking rule: %s\n", yystack.l_mark[-2].gstring->str);
+		yyval.target->back_picker = DE_create_tree(yystack.l_mark[-2].gstring->str);		
 		g_string_free(yystack.l_mark[-2].gstring, TRUE);
-	}
+        }
 break;
 case 22:
-#line 270 "rules.y"
+#line 271 "rules.y"
+	{
+		if(yyval.target->back_picker == NULL) {
+			yyerror("Backend needs a rule if no backend picking rule is defined!\n");
+		}
+		if( NULL != g_tree_lookup(yyval.target->back_handlers, addr_ntoa(yystack.l_mark[-1].addr)) ) {
+			yyerror("Backend needs a unique IP!\n");
+		}
+		
+		g_tree_insert(yyval.target->back_handlers, addr_ntoa(yystack.l_mark[-1].addr), yystack.l_mark[-1].addr);
+		
+		g_printerr("\tIP %s copied to handler without rule\n", addr_ntoa(yystack.l_mark[-1].addr));
+        }
+break;
+case 23:
+#line 283 "rules.y"
+	{
+		if(NULL != g_tree_lookup(yyval.target->back_handlers, addr_ntoa(yystack.l_mark[-4].addr)) || NULL != g_tree_lookup(yyval.target->back_rules, addr_ntoa(yystack.l_mark[-4].addr))) {
+			yyerror("Backend needs a unique IP!\n");
+		}
+		
+		g_tree_insert(yyval.target->back_handlers, addr_ntoa(yystack.l_mark[-4].addr), yystack.l_mark[-4].addr);
+		g_tree_insert(yyval.target->back_rules, addr_ntoa(yystack.l_mark[-4].addr), yystack.l_mark[-2].gstring);
+	
+       		g_printerr("\tIP %s copied to handler with rule: %s\n", addr_ntoa(yystack.l_mark[-4].addr), yystack.l_mark[-2].gstring->str);
+       		g_string_free(yystack.l_mark[-2].gstring, TRUE);	
+        }
+break;
+case 24:
+#line 294 "rules.y"
 	{
 		yyval.target->control_rule = DE_create_tree(yystack.l_mark[-2].gstring->str);
 		g_string_free(yystack.l_mark[-2].gstring, TRUE);
 	}
 break;
-case 23:
-#line 276 "rules.y"
+case 25:
+#line 299 "rules.y"
 	{ 
 		if (addr_pton(yystack.l_mark[0].string, yyval.addr) < 0)
                         yyerror("\tIllegal IP address");
-		else 
-			g_printerr("\tIP %s (%d) added as honeypot\n", addr_ntoa(yyval.addr), yyval.addr->addr_ip);
+		/*else */
+		/*	g_printerr("\tIP %s (%d) added as honeypot\n", addr_ntoa($$), $$->addr_ip);*/
                 /*g_free($1);*/
 	}
 break;
-case 24:
-#line 286 "rules.y"
+case 26:
+#line 309 "rules.y"
 	{ 
 		/*$$ = malloc(sizeof(char));*/
 		/*snprintf($$, 1, " ");*/
 		yyval.gstring = g_string_new("");
 	}
 break;
-case 25:
-#line 291 "rules.y"
-	{
-		if (yyval.gstring->len > 0) { g_string_append_printf(yyval.gstring, " "); }
-		yyval.gstring = g_string_append(yyval.gstring, yystack.l_mark[0].string);
-		/*$$ = str_append($$, " ");*/
-		/*$$ = str_append($$, $2);*/
-	 }
-break;
-case 26:
-#line 297 "rules.y"
-	{ 
-		if (yyval.gstring->len > 0) { g_string_append_printf(yyval.gstring, " "); }
-		g_string_append_printf(yyval.gstring, "%d", yystack.l_mark[0].number);
-		/*$$ = str_append($$, " ");*/
-		/*$$ = int_append($$, $2);*/
-	 }
-break;
 case 27:
-#line 303 "rules.y"
-	{ 
+#line 314 "rules.y"
+	{
 		if (yyval.gstring->len > 0) { g_string_append_printf(yyval.gstring, " "); }
 		yyval.gstring = g_string_append(yyval.gstring, yystack.l_mark[0].string);
 		/*$$ = str_append($$, " ");*/
@@ -761,7 +778,16 @@ case 27:
 	 }
 break;
 case 28:
-#line 309 "rules.y"
+#line 320 "rules.y"
+	{ 
+		if (yyval.gstring->len > 0) { g_string_append_printf(yyval.gstring, " "); }
+		g_string_append_printf(yyval.gstring, "%d", yystack.l_mark[0].number);
+		/*$$ = str_append($$, " ");*/
+		/*$$ = int_append($$, $2);*/
+	 }
+break;
+case 29:
+#line 326 "rules.y"
 	{ 
 		if (yyval.gstring->len > 0) { g_string_append_printf(yyval.gstring, " "); }
 		yyval.gstring = g_string_append(yyval.gstring, yystack.l_mark[0].string);
@@ -769,7 +795,16 @@ case 28:
 		/*$$ = str_append($$, $2);*/
 	 }
 break;
-#line 772 "rules.c"
+case 30:
+#line 332 "rules.y"
+	{ 
+		if (yyval.gstring->len > 0) { g_string_append_printf(yyval.gstring, " "); }
+		yyval.gstring = g_string_append(yyval.gstring, yystack.l_mark[0].string);
+		/*$$ = str_append($$, " ");*/
+		/*$$ = str_append($$, $2);*/
+	 }
+break;
+#line 807 "rules.c"
     }
     yystack.s_mark -= yym;
     yystate = *yystack.s_mark;

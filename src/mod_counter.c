@@ -41,30 +41,30 @@
  \param[in] args, struct that contain the node and the datas to process
  \param[out] set result to 1 packet position match arg, 0 otherwise
  */
-void mod_counter(struct mod_args args)
+void mod_counter(struct mod_args *args)
 {
 	int pktval = 0;
 	gchar *param;
 
-	g_printerr("%s Module called\n", H(args.pkt->conn->id));
+	g_printerr("%s Module called\n", H(args->pkt->conn->id));
 
-	if ((param = (char *)g_hash_table_lookup(args.node->arg, "counter")) == NULL) {
+	if ((param = (char *)g_hash_table_lookup(args->node->arg, "counter")) == NULL) {
 		/*! We can't decide */
-		args.node->result = -1;
-		g_printerr("%s mandatory argument 'counter' undefined!\n", H(args.pkt->conn->id));
+		args->node->result = -1;
+		g_printerr("%s mandatory argument 'counter' undefined!\n", H(args->pkt->conn->id));
 		return;
         } else {
 		pktval = atoi(param);
 	}
 
-	if(pktval <= args.pkt->conn->count_data_pkt_from_intruder) {
+	if(pktval <= args->pkt->conn->count_data_pkt_from_intruder) {
 		/*! We accept this packet */
-		args.node->result = 1;
-		g_printerr("%s PACKET MATCH RULE for counter(%d) with value %d\n", H(args.pkt->conn->id), pktval, args.pkt->conn->count_data_pkt_from_intruder);
+		args->node->result = 1;
+		g_printerr("%s PACKET MATCH RULE for counter(%d) with value %d\n", H(args->pkt->conn->id), pktval, args->pkt->conn->count_data_pkt_from_intruder);
 	} else 	{
 		/*! We reject this packet */
-		args.node->result = 0;
-		g_printerr("%s PACKET DOES NOT MATCH RULE for counter(%d) with value %d\n", H(args.pkt->conn->id), pktval, args.pkt->conn->count_data_pkt_from_intruder);
+		args->node->result = 0;
+		g_printerr("%s PACKET DOES NOT MATCH RULE for counter(%d) with value %d\n", H(args->pkt->conn->id), pktval, args->pkt->conn->count_data_pkt_from_intruder);
 	}
 }
 

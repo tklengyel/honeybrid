@@ -25,8 +25,6 @@ int     daemon(int, int);
 int	yyparse(void);
 extern	FILE *yyin;
 
-/*! Version (should always be in sync with the content of the VERSION file) */
-#define VERSION "1.1"
 
 /*! File to store PID */
 #define PIDFILE "/var/run/honeybrid.pid"
@@ -41,14 +39,14 @@ extern	FILE *yyin;
 //#define DE_THREAD
 
 /*! Two strategies: with thread or with libev 
- *  If USE_LIBEV is defined, the program loops on the main libev loop:
+ *  If HAVE_LIBEV is defined, the program loops on the main libev loop:
  *	- packets on queue are processed through libev callback
  *	- connection structures are cleaned by libev timer
  *  If not, then the program loops on nfqueue:
  *	- packets on queue are processed through nfqueue callback
  *	- connection structures are cleaned by a thread
  */
-//#define USE_LIBEV
+//#define HAVE_LIBEV
 
 /*!
   \def DESTSIZE

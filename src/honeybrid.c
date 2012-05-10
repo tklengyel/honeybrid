@@ -102,7 +102,7 @@
 #include <execinfo.h>
 
 #include <ev.h>
-
+#include "../config.h"
 #include "tables.h"
 #include "honeybrid.h"
 #include "netcode.h"
@@ -112,7 +112,7 @@
 #include "modules.h"
 //#include "rules.h"
 
-#ifdef USE_LIBEV
+#ifdef HAVE_LIBEV
 struct nfq_handle	*h; 
 struct ev_loop		*loop;
 #endif
@@ -165,7 +165,7 @@ int close_thread()
 
 	threading = NOK;
 
-	#ifndef USE_LIBEV
+	#ifndef HAVE_LIBEV
 	g_printerr("%s: Waiting for thread_clean to terminate\n", __func__);
 	g_thread_join(thread_clean);
 	#endif
@@ -304,11 +304,10 @@ free_target(struct target *t, gpointer user_data)
 {
 	g_free(t->filter);
 	g_free(t->front_handler);
-	g_free(t->back_handler);
+	g_tree_destroy(t->back_handlers);
+	g_tree_destroy(t->back_rules);
 	if (t->front_rule != NULL)
 		g_free(t->front_rule);
-	if (t->back_rule != NULL)
-		g_free(t->back_rule);
 	if (t->control_rule != NULL)
 		g_free(t->control_rule);
 	g_free(t);
@@ -383,7 +382,7 @@ term_signal_handler(int signal_nb, siginfo_t * siginfo, void *context)
 	g_printerr("%s: Halted\n", __func__);
 	exit(signal_nb);
 	*/
-	#ifdef USE_LIBEV
+	#ifdef HAVE_LIBEV
 	ev_unloop (loop, EVUNLOOP_ALL);
 	#endif
 	return 0;
@@ -785,7 +784,7 @@ static int q_cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data
 
 }
 
-#ifndef USE_LIBEV
+#ifndef HAVE_LIBEV
 /*! netlink loop
  \brief Function to create and maintain the NF_QUEUE loop
  \param[in] queuenum the queue identifier
@@ -1033,7 +1032,7 @@ main(int argc, char *argv[])
 
 
 	unsigned short int queuenum=0;
-	#ifdef USE_LIBEV
+	#ifdef HAVE_LIBEV
 	//struct nfq_handle *h; 
 	struct nfq_q_handle *qh;
 	int my_nfq_fd;
@@ -1173,8 +1172,13 @@ main(int argc, char *argv[])
 		}
         }
 
+	
 	if(ICONFIG("output")==4)
+		#ifdef HAVE_MYSQL
                 init_mysql_log();
+                #else
+                errx(1, "%s: Honeybrid wasn't compiled with MySQL!", __func__);
+                #endif
 	else
 		open_connection_log();
 
@@ -1203,7 +1207,7 @@ main(int argc, char *argv[])
 	if(tcp_rsd == 0 || udp_rsd == 0) 
 		errx(1, "%s: failed to create the raw sockets", __func__);
 
-	#ifdef USE_LIBEV
+	#ifdef HAVE_LIBEV
 		loop = ev_default_loop(0);
 		//Watcher for cleaning conn_tree every 10 seconds:
 		ev_timer  timeout_clean_watcher;

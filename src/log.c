@@ -36,6 +36,7 @@
 #include <sys/time.h>
 #include <err.h>
 
+#include "../config.h"
 #include "tables.h"
 #include "log.h"
 
@@ -384,6 +385,7 @@ void connection_log(struct conn_struct *conn)
 	char *logbuf = malloc(5024);	//1024 might be too short!
 
 	/*! Output according to the format configured */
+	#ifdef HAVE_MYSQL
 	if ( ICONFIG("output")==4 ) {
 		if(init_mysql_log()==0) {
 			snprintf(logbuf,5024,"INSERT INTO log VALUES('', %.3f,%.3f,%i,'%s','%s','%s','%s','%s',%d,%d,'%s',%d,'%s','%s','%s','%s','%s',%i,%i);",
@@ -414,6 +416,7 @@ void connection_log(struct conn_struct *conn)
 			}
 		}
 	} else
+	#endif
 	if ( NULL != g_hash_table_lookup(config,"log_format") && NULL != strstr(g_hash_table_lookup(config,"log_format"),"csv") ) {
 		sprintf(logbuf,"%s,%.3f,%d,%s,%s,%s,%s,%s,%d,%d,%s,%d,%s,%s,%s,%s,%s,%i,%i\n",
 		conn->start_timestamp->str,
@@ -471,6 +474,7 @@ void connection_log(struct conn_struct *conn)
         //L(NULL,logbuf,1,conn->id);
 }
 
+#ifdef HAVE_MYSQL
 int init_mysql_log() {
 	if(mysqlConn==NULL) {
 
@@ -515,3 +519,4 @@ int init_mysql_log() {
 		return 0;
 	}
 }
+#endif

@@ -18,17 +18,17 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-/*! \file mod_hash.c
+/*! 
  * \brief XMPP Module for honeybrid Decision Engine
  *
  * This module is called by a boolean decision tree to process a message digest and try to find it in a search table
  *
- *
- \author Julien Vehent, 2007
- \author Thomas Coquelin, 2008
  \author Tamas K Lengyel, 2012
  */
 
+#include "../config.h"
+
+#ifdef HAVE_XMPP
 #include <string.h>
 #include <unistd.h>
 #include <ctype.h>
@@ -40,8 +40,8 @@
 #include <unistd.h>
 #include <stdio.h>
 
-#include <libxml/parser.h>
-#include <libxml/tree.h>
+#include <libxml2/libxml/parser.h>
+#include <libxml2/libxml/tree.h>
 
 #include "tables.h"
 #include "modules.h"
@@ -58,12 +58,6 @@ GKeyFile *xmpp_backup_file;
 GList *cleanup;
 char *xmpp_fifo;
 
-int IntComp(const void* a,const void* b) {
-  if( *(unsigned int*)a > *(unsigned int*)b) return(1);
-  if( *(unsigned int*)a < *(unsigned int*)b) return(-1);
-  return(0);
-}
-void IntDest(void* a) { free((unsigned int*)a); }
 void InfoDest(void *a){
 	g_printerr("%s Destroying element in dionaea connection tree!\n",H(0));
 	free(((struct dionaeaSession*)a)->incident);
@@ -511,20 +505,20 @@ int init_mod_dionaea()
 }
 
 
-void mod_dionaea(struct mod_args args)
+void mod_dionaea(struct mod_args *args)
 {
 
 	// Check if module is configured properly
 	if(xmpp_fifo==NULL) {
 		// It's not, can't decide
-		g_printerr("%s Dionaea module is not configured properly, can't decide!!\n", H(args.pkt->conn->id));
-		args.node->result = -1;
+		g_printerr("%s Dionaea module is not configured properly, can't decide!!\n", H(args->pkt->conn->id));
+		args->node->result = -1;
 		return;
 	}
 
 	//! get the IP address from the packet
-	gchar **key_src = g_strsplit( args.pkt->key_src, ":", 0 );
-        gchar **key_dst = g_strsplit(args.pkt->key_dst, ":", 2);
+	gchar **key_src = g_strsplit( args->pkt->key_src, ":", 0 );
+        gchar **key_dst = g_strsplit(args->pkt->key_dst, ":", 2);
 	//! get the destination port
 	gchar *srcport = key_src[1];
 	gchar *dstport = key_dst[1];
@@ -535,16 +529,16 @@ void mod_dionaea(struct mod_args args)
         //g_get_current_time(&t);
         //gint now = (t.tv_sec);
 
-	u_short protocol =  args.pkt->packet.ip->protocol;
+	u_short protocol =  args->pkt->packet.ip->protocol;
 
-	g_printerr("%s: Protocol: %u | %i | %s:%s -> %s:%s | M:%u\n", H(args.pkt->conn->id), protocol, args.pkt->origin, key_src[0], srcport, key_dst[0], dstport,args.pkt->conn->mark);
+	g_printerr("%s: Protocol: %u | %i | %s:%s -> %s:%s | M:%u\n", H(args->pkt->conn->id), protocol, args->pkt->origin, key_src[0], srcport, key_dst[0], dstport,args->pkt->conn->mark);
 
 	gchar *mode;
 	 /*! get the backup file for this module */
-        if ( NULL ==    (mode = (gchar *)g_hash_table_lookup(args.node->arg, "mode"))) {
+        if ( NULL ==    (mode = (gchar *)g_hash_table_lookup(args->node->arg, "mode"))) {
                 /*! We can't decide */
-                args.node->result = -1;
-                g_printerr("%s mandatory argument 'mode' undefined (front/back)!\n", H(args.pkt->conn->id));
+                args->node->result = -1;
+                g_printerr("%s mandatory argument 'mode' undefined (front/back)!\n", H(args->pkt->conn->id));
                 return;
         }
 
@@ -568,7 +562,7 @@ void mod_dionaea(struct mod_args args)
                                         NULL)
                         )
            ) {
-		g_printerr("%s XMPP Backup info found: %s\n", H(args.pkt->conn->id),info[0]);
+		g_printerr("%s XMPP Backup info found: %s\n", H(args->pkt->conn->id),info[0]);
 		if( strcmp(info[0],"1")==0 ) {
 			// According to backup dionaea handled this in the past successfully
 			dionaeaBackupSuccess=1;
@@ -592,27 +586,27 @@ void mod_dionaea(struct mod_args args)
 	}
 
 	/*if(dionaeaBTreeSuccess==1 || dionaeaBackupSuccess!=0)
-		args.node->result=0;
+		args->node->result=0;
 	else
 	if(dionaeaBackupSuccess==0 && now-atoi(info[2])<expiration)
-		args.node->result=1;
+		args->node->result=1;
 	else
-		args.node->result=0;*/
+		args->node->result=0;*/
 
 	if(strcmp(mode,"front") == 0) {
 
 		// Only allow it till we get a payload
 		if(dionaeaBackupSuccess==1 || dionaeaBTreeSuccess==1)
-			args.node->result=0;
+			args->node->result=0;
 		else
-			args.node->result=1;
+			args->node->result=1;
 
 	} else {
 		// Only switch it if we didn't get a payload
 		if(dionaeaBackupSuccess==1 || dionaeaBTreeSuccess==1 || ( dionaeaBackupSuccess==-1 && dionaeaBTreeSuccess==-1 ) )
-			args.node->result=0;
+			args->node->result=0;
 		else
-			args.node->result=1;
+			args->node->result=1;
 	}
 
 	free(connection_key);
@@ -620,4 +614,5 @@ void mod_dionaea(struct mod_args args)
 
 	return;
 }
+#endif
 

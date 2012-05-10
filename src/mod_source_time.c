@@ -47,9 +47,9 @@
  *
  \param[out] set result to 0 if attacker ip is found in search table, 1 if not
  */
-void mod_source_time(struct mod_args args)
+void mod_source_time(struct mod_args *args)
 {
-	g_printerr("%s Module called\n", H(args.pkt->conn->id));
+	g_printerr("%s Module called\n", H(args->pkt->conn->id));
 
 	int expiration = 24*3600; /* a day */
 	int deny_after=1200; /* 20 minutes */
@@ -64,44 +64,44 @@ void mod_source_time(struct mod_args args)
         gint now = (t.tv_sec);
 
 	/*! get the IP address from the packet */
-	key_src = g_strsplit( args.pkt->key_src, ":", 0 );
+	key_src = g_strsplit( args->pkt->key_src, ":", 0 );
 
-	g_printerr("%s source IP is %s\n", H(args.pkt->conn->id), key_src[0]);
+	g_printerr("%s source IP is %s\n", H(args->pkt->conn->id), key_src[0]);
 
 	/*! get the backup file for this module */
-	if ( NULL == 	(backup = (GKeyFile *)g_hash_table_lookup(args.node->arg, "backup"))) {
+	if ( NULL == 	(backup = (GKeyFile *)g_hash_table_lookup(args->node->arg, "backup"))) {
 		/*! We can't decide */
-                args.node->result = -1;
-                g_printerr("%s mandatory argument 'backup' undefined!\n", H(args.pkt->conn->id));
+                args->node->result = -1;
+                g_printerr("%s mandatory argument 'backup' undefined!\n", H(args->pkt->conn->id));
                 return;
 	}
 	/*! get the backup file path for this module */
-        if ( NULL ==    (backup_file = (gchar *)g_hash_table_lookup(args.node->arg, "backup_file"))) {
+        if ( NULL ==    (backup_file = (gchar *)g_hash_table_lookup(args->node->arg, "backup_file"))) {
                 /*! We can't decide */
-                args.node->result = -1;
-                g_printerr("%s error, backup file path missing\n", H(args.pkt->conn->id));
+                args->node->result = -1;
+                g_printerr("%s error, backup file path missing\n", H(args->pkt->conn->id));
                 return;
         }
 
-	if ((exp = (char *)g_hash_table_lookup(args.node->arg, "expiration")) != NULL) {
+	if ((exp = (char *)g_hash_table_lookup(args->node->arg, "expiration")) != NULL) {
                 expiration = atoi(exp);
         }
 
-	if ((timef = (char *)g_hash_table_lookup(args.node->arg, "deny_after")) != NULL) {
+	if ((timef = (char *)g_hash_table_lookup(args->node->arg, "deny_after")) != NULL) {
                 deny_after = atoi(timef);
         }
 
-	if ((timea = (char *)g_hash_table_lookup(args.node->arg, "allow_after")) != NULL) {
+	if ((timea = (char *)g_hash_table_lookup(args->node->arg, "allow_after")) != NULL) {
                 allow_after = atoi(timea);
         }
 
 
 	if(allow_after>=deny_after) {
-		g_printerr("%s Misconfiguration: allow_after is greater then deny_after!\n", H(args.pkt->conn->id));
-		args.node->result=-1;
+		g_printerr("%s Misconfiguration: allow_after is greater then deny_after!\n", H(args->pkt->conn->id));
+		args->node->result=-1;
 	}
 
-	g_printerr("%s searching for this IP in the database...\n", H(args.pkt->conn->id));
+	g_printerr("%s searching for this IP in the database...\n", H(args->pkt->conn->id));
 
 	if ( NULL == 	(info = g_key_file_get_string_list(
 					backup,
@@ -112,7 +112,7 @@ void mod_source_time(struct mod_args args)
 			)
 	   ) {
 		/*! Unknown IP */
-		g_printerr("%s IP not found... new entry created\n", H(args.pkt->conn->id));
+		g_printerr("%s IP not found... new entry created\n", H(args->pkt->conn->id));
 
 		info = malloc(3 * sizeof(char *));
 
@@ -126,34 +126,34 @@ void mod_source_time(struct mod_args args)
 
 
 		if(allow_after==0)
-			args.node->result=1;
+			args->node->result=1;
 		else
-			args.node->result=0;
+			args->node->result=0;
 
 	} else {
 		/*! We check if we need to expire this entry */
 		int age = atoi(info[2]);
 		if ( age > expiration ) {
 			/*! Known IP but entry expired */
-			g_printerr("%s IP found but expired... entry renewed\n", H(args.pkt->conn->id));
+			g_printerr("%s IP found but expired... entry renewed\n", H(args->pkt->conn->id));
 
 			g_snprintf(info[0], 20, "1");          /*! counter */
 			g_snprintf(info[1], 20, "%d", now);    /*! first seen */
 			g_snprintf(info[2], 20, "0");          /*! duration */
 
 			if(allow_after==0)
-				args.node->result=1;
+				args->node->result=1;
 			else
-				args.node->result=0;
+				args->node->result=0;
 
 		} else {
 			/*! Known IP, check time allowed */
 			if( atoi(info[1])+deny_after>=now && atoi(info[1])+allow_after<=now) {
-				g_printerr("%s IP found within allowed time-frame\n",H(args.pkt->conn->id));
-				args.node->result=1;
+				g_printerr("%s IP found within allowed time-frame\n",H(args->pkt->conn->id));
+				args->node->result=1;
 			} else {
-				args.node->result = 0;
-				g_printerr("%s IP found not withing allowed time-frame\n", H(args.pkt->conn->id));
+				args->node->result = 0;
+				g_printerr("%s IP found not withing allowed time-frame\n", H(args->pkt->conn->id));
 			}
 
 			g_snprintf(info[0], 20, "%d", atoi(info[0]) + 1);	/*! counter */

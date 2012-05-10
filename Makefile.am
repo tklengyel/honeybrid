@@ -9,15 +9,12 @@
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
 EXTRA_DIST = reconf configure honeybrid.conf honeybrid.sh
-SUBDIRS = m4 src @doc@
+SUBDIRS = m4 src @doc@ @xmpp_listener@
 
 install-data-am:
 	@echo
 	@echo "========================================="
 	@echo "     Thanks for using honeybrid!"
-	@echo 
-	@echo "The honeybrid binary was installed in"
-	@echo " /usr/local/sbin/"
 	@echo
 	@echo "To complete the installation on Linux,"
 	@echo "you can type the following commands:"

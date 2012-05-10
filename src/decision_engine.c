@@ -82,35 +82,33 @@ struct node *DE_build_subtree(const gchar *expr)
 		node->false = NULL;
 	}
 
-	/*! get module structure from DE_mod
+	/*! get module structure from DE_rules
 	 */
 	if ((node->arg = (GHashTable *)g_hash_table_lookup(module, modname)) == NULL) {
 		errx(1, "%s: Module '%s' unknown!", __func__, modname);
 	}
-	if ((function = (void *)g_hash_table_lookup(node->arg, "function")) == NULL) {	
+	if ((function = (char *)g_hash_table_lookup(node->arg, "function")) == NULL) {	
 		errx(1, "%s: Module function undefined!", __func__);
 	}
 	if ((function_pointer = (void *)g_hash_table_lookup(node->arg, "function_pointer")) == NULL) {	
 		errx(1, "%s: Module function pointer undefined!", __func__);
 	}
-	//node->module = get_module(function);	
-	node->module = function_pointer;	
-	#ifdef DEBUG
-	g_print("\t\tModule function '%s' defined at address %p\n", function, node->module);
-	#endif
 
+	node->module = function_pointer;
 	node->module_name = g_string_new(NULL);
 	node->function = g_string_new(NULL);
 	g_string_printf(node->module_name, "%s", modname);
 	g_string_printf(node->function, "%s", function);
+	
+	//#ifdef DEBUG
+	g_print("\t\tModule table %p (node arg: %p): Module function at %p '%s' defined at address %p\n", module, node->arg, function, function, node->module);
+	//#endif
 
 	//#ifdef DEBUG_
-	//g_print("\tmodule = '%s' -> %p\n",modname,node->module);
+	//g_print("\tmodule = %s.%s()\n",node->module_name->str, node->function->str);
 	//#endif
 	
 	g_regex_unref(and_regex);
-	g_free(modname);
-	g_free(function);
 
 	/*! return pointer to this leaf  */
 	return node;
@@ -125,11 +123,8 @@ struct node *DE_build_subtree(const gchar *expr)
  *
  \return tree_root a pointer to the root of the boolean decision tree
  */
-void *DE_create_tree(const gchar *equation)
+struct node *DE_create_tree(const gchar *equation)
 {
-	#ifdef DEBUG
-	g_print("\t\tcreating tree for equation -> %s\n", equation);
-	#endif
 
 	/*! create a glib table to store the equation */
 	gchar **subgroups;
@@ -137,26 +132,19 @@ void *DE_create_tree(const gchar *equation)
 	GRegex *or_regex = g_regex_new("\\sOR\\s", G_REGEX_CASELESS, 0, NULL);
 	subgroups = g_regex_split(or_regex, equation, 0);
 
-	tree.globalresult = -1;
-	tree.proxy = 0;
-	tree.drop = 0;
+	#ifdef DEBUG
+	g_print("\t\tcreating tree at %p for equation -> %s\n", tree, equation);
+	#endif
 
-	g_static_rw_lock_init( &tree.lock );
-
-	/*! first subgroup */
-	tree.node = DE_build_subtree(subgroups[0]);
-	
-	/*! store address of the root */
-	void *tree_root;
-	tree_root = (void *) tree.node;
+	struct node *node = DE_build_subtree(subgroups[0]);
 
 	/*! for all the other subgroups */
 	int n=1;
 	for (n=1;subgroups[n] != NULL; n++)
 	{
-		#ifdef DEBUG
+		//#ifdef DEBUG
 		g_print("\t\tAnalyzing subgroup %i: '%s'\n", n, subgroups[n]);
-		#endif
+		//#endif
 
 		/*! get the pointer to the beginning of the new subtree */
 		struct node *headsubgroup;
@@ -164,25 +152,26 @@ void *DE_create_tree(const gchar *equation)
 
 		/*! connect new subtree to the previous one
 		 * subtree (n) is a son of subtree(n-1) */
-		tree.node->false = headsubgroup;
+		node->false = headsubgroup;
 
-		while(tree.node->true != NULL)
+		while(node->true != NULL)
 		{
 			/*! and go to the next one */
-			if(tree.node->true != NULL)
-				tree.node = tree.node->true;
+			if(node->true != NULL)
+				node = node->true;
 
 			/*! in subtree (n-1), each FALSE branch is
 			 * connected to the head of subtree(n) */
-			tree.node->false = headsubgroup;
+			node->false = headsubgroup;
 
 		}
 
 		/*! this subtree is done, so n become n-1 */
-		tree.node = headsubgroup;
+		node = headsubgroup;
 	}
 	g_strfreev(subgroups);
-	return tree_root;
+	
+	return node;
 
 }
 
@@ -190,14 +179,17 @@ void *DE_create_tree(const gchar *equation)
 /*! decide
  \brief decide upon a given paken if the connection is to be redirected or not
  \param[in] pkt: packet used to decide
+ \param[in] hih_search: which HIH are we testing (if it's a HIH, -1 otherwise)
  \return decision
  */
 
-int decide(struct pkt_struct *pkt)
+void decide(struct decision_holder *decision)
 {
 
 	struct mod_args args;
-	args.pkt = pkt;
+	args.pkt = decision->pkt;
+	args.backend_test=decision->backend_test;
+	args.backend_use = decision->backend_use;
 
 	/*! globalresult is used to store the final result of the boolean equation of module 
 	    3 possible outcome:
@@ -205,76 +197,119 @@ int decide(struct pkt_struct *pkt)
  	        "0" means "reject"
 		"1" means "accept"
 	 */
-	
-	tree.globalresult = -2;
+
+	decision->result = -2;
 
  	/*! start processing the tree from the root */
- 	while (tree.globalresult == -2)
+ 	while (decision->result == -2)
  	{
  		/*! node->result is used to store the outcome of an individual module */
- 		tree.node->result = -1;
+ 		decision->node->result = -1;
 		/*! node->info_result is used to store additional information about the decision */
- 		tree.node->info_result = 0;
+ 		decision->node->info_result = 0;
 
-		args.node = tree.node;
+		args.node = decision->node;
 
   		/*! call module */
-		if (tree.node->module == NULL) {
-			g_printerr("%s Error! tree.node->module is NULL\n", H(pkt->conn->id));	
-			return -2;
+		if (decision->node->module == NULL) {
+			g_printerr("%s Error! decision->node->module is NULL\n", H(decision->pkt->conn->id));	
+			break;
 		} else {
-			g_printerr("%s >> Calling module %s at address %p\n", H(pkt->conn->id), tree.node->module_name->str, tree.node->module);
+			g_printerr("%s >> Calling module %s at address %p\n", H(decision->pkt->conn->id), decision->node->module_name->str, decision->node->module);
 	 		//tree.node->module(args);
 			//Test of new function "run_module" to prevent segmentation fault occurring at the previous line
-			run_module(tree.node->function->str, args);
-			g_printerr("%s >> Done, result is %d\n", H(pkt->conn->id), tree.node->result);
+			run_module(decision->node->function->str, &args);
+			g_printerr("%s >> Done, result is %d\n", H(decision->pkt->conn->id), decision->node->result);
 		}
 
-		switch(tree.node->result) {
+		switch(decision->node->result) {
 			case 1: /*! if result is true, forward to true node or exit with 1 */
 				/*! update decision_rule information */
-				if (tree.node->info_result != 0) 
-					g_string_append_printf(pkt->conn->decision_rule, "+%s:%d;", 
-						tree.node->module_name->str, tree.node->info_result);
+				if (decision->node->info_result != 0) 
+					g_string_append_printf(decision->pkt->conn->decision_rule, "+%s:%d;", 
+						decision->node->module_name->str, decision->node->info_result);
 				else 
-					g_string_append_printf(pkt->conn->decision_rule, "+%s;", tree.node->module_name->str);
+					g_string_append_printf(decision->pkt->conn->decision_rule, "+%s;", decision->node->module_name->str);
 
- 				if(tree.node->true != NULL)
-	 				tree.node = tree.node->true;	/*! go to next node */
+				/* Global multi-hih module that tells which HIH ID to use */
+				if(args.backend_use != NULL) {
+					decision->backend_use = args.backend_use;
+					g_printerr("%s >> Module suggested using HIH %s\n", H(decision->pkt->conn->id), args.backend_use);
+				}
+
+ 				if(decision->node->true != NULL)
+	 				decision->node = decision->node->true;	/*! go to next node */
 	 			else
-	 				tree.globalresult = 1;		/*! end of the tree, exit */
+	 				decision->result = 1;		/*! end of the tree, exit */
 				break;
 			case -1:
-				if (tree.node->info_result < 0) 
-					g_string_append_printf(pkt->conn->decision_rule, "?%s:%d;", 
-						tree.node->module_name->str, tree.node->info_result);
+				if (decision->node->info_result < 0) 
+					g_string_append_printf(decision->pkt->conn->decision_rule, "?%s:%d;", 
+						decision->node->module_name->str, decision->node->info_result);
 				else 
-					g_string_append_printf(pkt->conn->decision_rule, "?%s;", tree.node->module_name->str);
+					g_string_append_printf(decision->pkt->conn->decision_rule, "?%s;", decision->node->module_name->str);
 
-				tree.globalresult = -1;		/*! end of the tree, exit */
+				decision->result = -1;		/*! end of the tree, exit */
 				break;
 			default: /*! result is false (result == 0), forward to false node or exit with 0 */
-				if (tree.node->info_result < 0) 
-					g_string_append_printf(pkt->conn->decision_rule, "-%s:%d;", 
-						tree.node->module_name->str, tree.node->info_result);
+				if (decision->node->info_result < 0) 
+					g_string_append_printf(decision->pkt->conn->decision_rule, "-%s:%d;", 
+						decision->node->module_name->str, decision->node->info_result);
 				else 
-					g_string_append_printf(pkt->conn->decision_rule, "-%s;", tree.node->module_name->str);
+					g_string_append_printf(decision->pkt->conn->decision_rule, "-%s;", decision->node->module_name->str);
 
-	 			if(tree.node->false != NULL)
-	 				tree.node = tree.node->false;	/*! go to the next subgroup */
+	 			if(decision->node->false != NULL)
+	 				decision->node = decision->node->false;	/*! go to the next subgroup */
 	 			else
- 					tree.globalresult = 0;		/*! end of the tree, exit */
+ 					decision->result = 0;		/*! end of the tree, exit */
 				break;
 		}
  	}
-	return tree.globalresult;
+}
+
+void get_decision(struct decision_holder *decision) {
+	
+	if ( decision->node == NULL ) {
+		g_printerr("%s rule is NULL for state %d on target %p\n", H(decision->pkt->conn->id), decision->pkt->conn->state, decision->pkt->conn->target);
+		decision->result = DE_NO_RULE;
+	} else {
+		g_printerr("%s Rule available, deciding...\n", H(decision->pkt->conn->id));
+		decide(decision);
+		decision->pkt->conn->decision_packet_id = decision->pkt->conn->total_packet;
+	}
+}
+
+int get_decision_backend(gpointer *key, gpointer *value, gpointer *data) {
+	struct decision_holder *decision = (struct decision_holder *)data;
+	decision->backend_test=(char *)key;
+	decision->node = (struct node *)value;
+	get_decision(decision);
+	
+	/* Stop searching on the first accept */
+	if(decision->result == 1) {
+		decision->backend_use=(char *)key;
+		return TRUE;
+	} else {
+		return FALSE;
+	}
 }
 
 /*! DE_process_packet
  \brief submit packets for decision using decision rules and decision modules */
 int DE_process_packet(struct pkt_struct *pkt) 
 {
-	int decision = DE_REJECT;
+
+	/* This structure holds the result of LIH/HIH/CONTROL equations */
+	/* The flow is get_decision->decide->run_module */
+	/* For multi-HIH backends a module can set the backend_use variable in the mod_args structure to give the HIH ID */
+	/* Otherwise each HIH backend can be checked one-by-one */
+	
+	struct decision_holder decision;
+	decision.pkt=pkt;
+	decision.result=DE_REJECT;
+	decision.backend_test = NULL;
+	decision.backend_use = NULL;
+	
 	int statement = 0;	/*! default is to return "drop" to the QUEUE */
 
 	g_printerr("%s Packet pushed to DE: %s\n", H(pkt->conn->id), pkt->conn->key);
@@ -282,15 +317,39 @@ int DE_process_packet(struct pkt_struct *pkt)
 	switch( pkt->conn->state ) {
 	case INIT:
 		/* If we're in INIT, we need to get the "accept" rule from the frontend definition of the target */
-		tree.node = (struct node *) pkt->conn->target->front_rule;
+		decision.node = (struct node *) pkt->conn->target->front_rule;
+		
+		get_decision(&decision);
 		break;
 	case DECISION:
 		/* If we already passed INIT, we need to get the "redirect" rule from the backend definition of the target */
-		tree.node = (struct node *) pkt->conn->target->back_rule;
+		
+		/* Check if global rule for multi-hih available */
+		if(pkt->conn->target->back_picker != NULL) {
+			decision.node = pkt->conn->target->back_picker;
+			get_decision(&decision);
+			
+			if(decision.result == DE_ACCEPT && decision.backend_use != NULL) {
+				// Back picker gave us a HIH, run it's test (if any)
+				g_printerr("%s Global backend rule gave us a HIH: %s\n", H(pkt->conn->id), decision.backend_use);
+				decision.node = (struct node *)g_tree_lookup(pkt->conn->target->back_rules, &(decision.backend_use));
+				if(decision.node != NULL) {
+					get_decision(&decision);
+				}
+			} else {
+				g_printerr("%s Backend picking rule didn't specify HIH, rejecting!\n", H(pkt->conn->id));
+				decision.result=DE_REJECT;
+			}
+		} else {
+			/* Check each backend, first to accept will take it */
+			g_tree_foreach(pkt->conn->target->back_rules, (GTraverseFunc)get_decision_backend, (gpointer *)(&decision));
+		}
+
 		break;
 	case CONTROL:
 		/* If we're in CONTROL, we need to get the "limit" rule from the target */
-		tree.node = (struct node *) pkt->conn->target->control_rule;
+		decision.node = (struct node *) pkt->conn->target->control_rule;
+		get_decision(&decision);
 		break;
 	default:
 		/* should never happen */
@@ -299,18 +358,7 @@ int DE_process_packet(struct pkt_struct *pkt)
 		break;
 	}
 
-	if ( tree.node == NULL ) {
-		g_printerr("%s rule is NULL for state %d on target %p\n", H(pkt->conn->id), pkt->conn->state, pkt->conn->target);
-		//g_string_assign(pkt->conn->decision_rule, "NoRule;");
-		decision = DE_NO_RULE;
-	} else {
-		g_printerr("%s Rule available, deciding...\n", H(pkt->conn->id));
-		//g_string_assign(pkt->conn->decision_rule, rule_to_str(tree.node));
-		decision = decide(pkt);
-		pkt->conn->decision_packet_id = pkt->conn->total_packet;
-	}
-
-	switch( decision ) {
+	switch( decision.result ) {
 	/* NULL rule (-2) */
 	case DE_NO_RULE: 
 		switch( pkt->conn->state ) {
@@ -323,7 +371,7 @@ int DE_process_packet(struct pkt_struct *pkt)
 			statement = 1;
 			break;
 		case INIT:
-			if ( pkt->conn->target->back_rule == NULL ) {
+			if ( g_tree_nnodes(pkt->conn->target->back_rules) == 0 ) {
 				/*! no backend defined, so we simply forward the packets to its destination */
 				//pkt->conn->state = PROXY;
 				switch_state(pkt->conn, PROXY);
@@ -364,7 +412,7 @@ int DE_process_packet(struct pkt_struct *pkt)
 		g_printerr("%s Rule decides to accept\n", H(pkt->conn->id));
 		switch( pkt->conn->state ) {
 		case INIT:
-			if ( pkt->conn->target->back_rule == NULL ) {
+			if ( g_tree_nnodes(pkt->conn->target->back_rules) == 0 ) {
 				//pkt->conn->state = PROXY;
 				switch_state(pkt->conn, PROXY);
 			} else {
@@ -385,7 +433,8 @@ int DE_process_packet(struct pkt_struct *pkt)
 				pkt->conn->target->front_handler->addr_ip);
 			#endif
 			*/
-			if (setup_redirection(pkt->conn) != OK) {
+			g_printerr("%s Redirecting to HIH: %s\n", H(pkt->conn->id), decision.backend_use);
+			if (setup_redirection(pkt->conn, decision.backend_use) != OK) {
 				g_printerr("%s setup_redirection() failed\n", H(pkt->conn->id));
 			}
 			break;

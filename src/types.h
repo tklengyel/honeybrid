@@ -41,9 +41,11 @@ struct target
 	struct bpf_program *filter;	/* PCAP compiled filter to select packets for this target */
 	struct addr *front_handler;	/* Honeypot IP address(es) handling the first response (front end) */
 	struct node *front_rule;	/* Rules of decision modules to accept packet to be handled by the frontend */
-	struct addr *back_handler;		/* Honeypot IP address(es) handling the second response (back end) */
-	struct node *back_rule;		/* Rules of decision modules to accept packets to be transited from front to back end */
+	GTree *back_handlers;		/* Honeypot IP address(es) handling the second response (back end) */
+	GTree *back_rules;		/* Rule(s) of decision modules to accept packets to be transited from front to back end */
+	struct node *back_picker;	/* Rule(s) to pick which backend to use */
 	struct node *control_rule;	/* Rules of decision modules to limit outbound packets from honeypots */
+	int number_of_backends;		/* Number of backends assigned to this target */
 };
 
 

@@ -7,13 +7,14 @@
 #define FILTER 263
 #define FRONTEND 264
 #define BACKEND 265
-#define LIMIT 266
-#define CONFIGURATION 267
-#define TARGET 268
-#define NUMBER 269
-#define WORD 270
-#define EQ 271
-#define EXPR 272
+#define BACKPICK 266
+#define LIMIT 267
+#define CONFIGURATION 268
+#define TARGET 269
+#define NUMBER 270
+#define WORD 271
+#define EQ 272
+#define EXPR 273
 typedef union {
 	int    number;
 	char * string;

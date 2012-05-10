@@ -40,7 +40,7 @@ char* int_append(char * root, int num);
 %token OPEN END SEMICOLON QUOTE DOT
 
 /* Honeybrid configuration keywords */
-%token MODULE FILTER FRONTEND BACKEND LIMIT CONFIGURATION TARGET
+%token MODULE FILTER FRONTEND BACKEND BACKPICK LIMIT CONFIGURATION TARGET
 
 /* Content Variables */
 %token <number> NUMBER
@@ -126,7 +126,7 @@ module: MODULE QUOTE WORD QUOTE OPEN settings END {
 			//g_printerr("\tModule function defined as '%s'\n", (char *)g_hash_table_lookup((GHashTable *)$6, "function"));
 			////g_hash_table_replace((GHashTable *)$6, "function", get_module((char *)g_hash_table_lookup((GHashTable *)$6, "function")));
 			g_hash_table_insert((GHashTable *)$6, "function_pointer", get_module((char *)g_hash_table_lookup((GHashTable *)$6, "function")));
-			//g_printerr("\tModule function defined at address %p\n", g_hash_table_lookup((GHashTable *)$6, "function"));
+			g_printerr("\tModule function defined at address %p\n", g_hash_table_lookup((GHashTable *)$6, "function_pointer"));
 		}
 		
 		gchar *backup_file;
@@ -218,24 +218,25 @@ target: TARGET OPEN rule END {
 		g_printerr("\tGoing to add new element to target array...\n");
 		g_ptr_array_add(targets, $3);
 		g_printerr("\t...done\n");
-		g_printerr("\tAdded a new target with the following values:\n\tfront_handler: %s\n\tfront_rule: %s\n\tback_handler: %s\n\tback_rule: %s\n\tcontrol: %s\n",
+		/*g_printerr("\tAdded a new target with the following values:\n\tfront_handler: %s\n\tfront_rule: %s\n\tback_handler: %s\n\tback_rule: %s\n\tcontrol: %s\n",
 				//addr_ntoa($3->front_handler), "-", //$3->front_rule->module_name->str,
 				//addr_ntoa($3->back_handler), "-"); //$3->back_rule->module_name->str);
 				addr_ntoa($3->front_handler),($3->front_rule == NULL) ? "(null)" : $3->front_rule->module_name->str,
 				addr_ntoa($3->back_handler), ($3->back_rule  == NULL) ? "(null)" : $3->back_rule->module_name->str,
 				($3->control_rule  == NULL) ? "(null)" : $3->control_rule->module_name->str);
+		*/
 	}
 	;
 
 rule: 	{
 		g_printerr("\tAllocating memory for new structure 'target'\n");
-		$$ = malloc(sizeof(struct target));
+		$$ = (struct target *)g_malloc0(sizeof(struct target));
 		$$->front_handler = (struct addr *)g_malloc0(sizeof(struct addr));
-		$$->back_handler = (struct addr *)g_malloc0(sizeof(struct addr));
+		$$->back_picker = NULL;
 		$$->front_rule = NULL;
-		$$->back_rule = NULL;
 		$$->control_rule = NULL;
-
+		$$->back_handlers = g_tree_new((GCompareFunc)strcmp);
+		$$->back_rules = g_tree_new((GCompareFunc)strcmp);
 	}
 	| rule FILTER QUOTE equation QUOTE SEMICOLON {
 		//g_printerr("Read pcap filter: '%s'\n", $4);
@@ -256,28 +257,50 @@ rule: 	{
 		$$->front_rule = NULL;
 	} 
 	| rule FRONTEND honeynet QUOTE equation QUOTE SEMICOLON {
+		g_printerr("\tIP %s (%d) copied to handler\n", addr_ntoa($3), $3->addr_ip);
 		$$->front_handler = $3;
-		g_printerr("\tIP %s (%d) copied to handler\n", addr_ntoa($3), $3->addr_ip);
 		$$->front_rule = DE_create_tree($5->str);
+		g_printerr("\tFront decision module is at %p\n", $$->front_rule->module);
 		g_string_free($5, TRUE);
 	}
+	| rule BACKPICK QUOTE equation QUOTE SEMICOLON {
+                g_printerr("\tCreating backend picking rule: %s\n", $4->str);
+		$$->back_picker = DE_create_tree($4->str);		
+		g_string_free($4, TRUE);
+        }
+	| rule BACKEND honeynet SEMICOLON {
+		if($$->back_picker == NULL) {
+			yyerror("Backend needs a rule if no backend picking rule is defined!\n");
+		}
+		if( NULL != g_tree_lookup($$->back_handlers, addr_ntoa($3)) ) {
+			yyerror("Backend needs a unique IP!\n");
+		}
+		
+		g_tree_insert($$->back_handlers, addr_ntoa($3), $3);
+		
+		g_printerr("\tIP %s copied to handler without rule\n", addr_ntoa($3));
+        }
 	| rule BACKEND honeynet QUOTE equation QUOTE SEMICOLON {
-		$$->back_handler = $3;
-		g_printerr("\tIP %s (%d) copied to handler\n", addr_ntoa($3), $3->addr_ip);
-		$$->back_rule = DE_create_tree($5->str);
-		g_string_free($5, TRUE);
-	}
+		if(NULL != g_tree_lookup($$->back_handlers, addr_ntoa($3)) || NULL != g_tree_lookup($$->back_rules, addr_ntoa($3))) {
+			yyerror("Backend needs a unique IP!\n");
+		}
+		
+		g_tree_insert($$->back_handlers, addr_ntoa($3), $3);
+		g_tree_insert($$->back_rules, addr_ntoa($3), $5);
+	
+       		g_printerr("\tIP %s copied to handler with rule: %s\n", addr_ntoa($3), $5->str);
+       		g_string_free($5, TRUE);	
+        }
 	| rule LIMIT QUOTE equation QUOTE SEMICOLON {
 		$$->control_rule = DE_create_tree($4->str);
 		g_string_free($4, TRUE);
 	}
-	;
 
 honeynet: EXPR { 
 		if (addr_pton($1, $$) < 0)
                         yyerror("\tIllegal IP address");
-		else 
-			g_printerr("\tIP %s (%d) added as honeypot\n", addr_ntoa($$), $$->addr_ip);
+		//else 
+		//	g_printerr("\tIP %s (%d) added as honeypot\n", addr_ntoa($$), $$->addr_ip);
                 //g_free($1);
 	}
 	;

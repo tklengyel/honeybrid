@@ -92,32 +92,32 @@ int init_mod_hash()
  *
  \param[out] set result to 0 if datas's fingerprint is found in search table, 1 if not
  */
-void mod_hash(struct mod_args args)
+void mod_hash(struct mod_args *args)
 {
 	GKeyFile *backup;
 	gchar *backup_file;
 	int expiration = 24*3600;
 
 	/*! First, we make sure that we have data to work on */
-	if (args.pkt->data == 0) {
-		args.node->result = -1;
-                args.node->info_result = -1;
-		g_printerr("%s No data to work on\n", H(args.pkt->conn->id));
+	if (args->pkt->data == 0) {
+		args->node->result = -1;
+                args->node->info_result = -1;
+		g_printerr("%s No data to work on\n", H(args->pkt->conn->id));
 		return;
 	}
 
 	/*! get the backup file for this module */
-        if ( NULL ==    (backup = (GKeyFile *)g_hash_table_lookup(args.node->arg, "backup"))) {
+        if ( NULL ==    (backup = (GKeyFile *)g_hash_table_lookup(args->node->arg, "backup"))) {
                 /*! We can't decide */
-                args.node->result = -1;
-                g_printerr("%s mandatory argument 'backup' undefined!\n", H(args.pkt->conn->id));
+                args->node->result = -1;
+                g_printerr("%s mandatory argument 'backup' undefined!\n", H(args->pkt->conn->id));
                 return;
         }
 	/*! get the backup file path for this module */
-        if ( NULL ==    (backup_file = (gchar *)g_hash_table_lookup(args.node->arg, "backup_file"))) {
+        if ( NULL ==    (backup_file = (gchar *)g_hash_table_lookup(args->node->arg, "backup_file"))) {
                 /*! We can't decide */
-                args.node->result = -1;
-                g_printerr("%s error, backup file path missing\n", H(args.pkt->conn->id));
+                args->node->result = -1;
+                g_printerr("%s error, backup file path missing\n", H(args->pkt->conn->id));
                 return;
         }
 
@@ -129,7 +129,7 @@ void mod_hash(struct mod_args args)
 	unsigned char md_value[EVP_MAX_MD_SIZE];
 	unsigned int md_len = 20, i=0;
 
-	char *payload = malloc(args.pkt->data + 1);
+	char *payload = malloc(args->pkt->data + 1);
 	char *ascii;	
 
 	gchar **key_dst;
@@ -139,20 +139,20 @@ void mod_hash(struct mod_args args)
         gint now = (t.tv_sec);
 
 	/*! get the IP address from the packet */
-        key_dst = g_strsplit(args.pkt->key_dst, ":", 2);
+        key_dst = g_strsplit(args->pkt->key_dst, ":", 2);
 
 	/*! get the destination port */
 	port = key_dst[1];
 
 	/*! get the payload from the packet */
-	memcpy( payload, args.pkt->packet.payload, args.pkt->data - 1);
-	payload[args.pkt->data] = '\0';
+	memcpy( payload, args->pkt->packet.payload, args->pkt->data - 1);
+	payload[args->pkt->data] = '\0';
 
 	/*! replace all occurrences of IP addresses by a generic IP */
 	GRegex *ip_regex = g_regex_new("\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}", 0, 0, NULL);
         if(TRUE == g_regex_match(ip_regex, payload, 0, NULL)) {
 		char *payload_tmp = g_strdup(payload);
-		g_printerr("%s found an IP in the payload! Replacing it...\n", H(args.pkt->conn->id));
+		g_printerr("%s found an IP in the payload! Replacing it...\n", H(args->pkt->conn->id));
 		payload = g_regex_replace(ip_regex, payload_tmp, -1, 0, "<0.0.0.0>", 0, NULL);
 		g_free(payload_tmp);
 	}
@@ -164,7 +164,7 @@ void mod_hash(struct mod_args args)
 	int j, h, pos;
 	if (strlen(key_dst[0]) >= 7) {
 		while(NULL != (position = strstr(payload, key_dst[0]))) {
-			g_printerr("%s found the dst ip in the payload! Replacing it...\n", H(args.pkt->conn->id));
+			g_printerr("%s found the dst ip in the payload! Replacing it...\n", H(args->pkt->conn->id));
 
 			pos = (int)(position-payload);	
 
@@ -191,13 +191,13 @@ void mod_hash(struct mod_args args)
 	}
 	ascii = g_malloc0(ascii_len + 1);
 
-	g_printerr("%s Computing payload digest\n", H(args.pkt->conn->id));
+	g_printerr("%s Computing payload digest\n", H(args->pkt->conn->id));
 
 	/*! digest the payload */
 	EVP_MD_CTX ctx;
 	EVP_MD_CTX_init(&ctx);
 	EVP_DigestInit_ex(&ctx, md, NULL);
-	EVP_DigestUpdate(&ctx, payload, args.pkt->data - 2);
+	EVP_DigestUpdate(&ctx, payload, args->pkt->data - 2);
 	EVP_DigestFinal_ex(&ctx, md_value, &md_len);
 	EVP_MD_CTX_cleanup(&ctx);
 
@@ -206,7 +206,7 @@ void mod_hash(struct mod_args args)
 	for(i = 0; i < md_len; i++)
 		sprintf(hash + (i<<1),"%02x",md_value[i]);
 
-	g_printerr("%s Computing payload ASCII representation\n", H(args.pkt->conn->id));
+	g_printerr("%s Computing payload ASCII representation\n", H(args->pkt->conn->id));
 
 	for(i = 0; i < ascii_len; i++) {
 		if (isprint(payload[i])) {
@@ -217,8 +217,8 @@ void mod_hash(struct mod_args args)
 	}
 	ascii[ascii_len] = '\0';
 
-	g_printerr("%s ASCII of %d char [%s]\n", H(args.pkt->conn->id), ascii_len, ascii);
-	g_printerr("%s Searching for fingerprint in %p on port %s\n", H(args.pkt->conn->id), backup, port);
+	g_printerr("%s ASCII of %d char [%s]\n", H(args->pkt->conn->id), ascii_len, ascii);
+	g_printerr("%s Searching for fingerprint in %p on port %s\n", H(args->pkt->conn->id), backup, port);
 
 
 	GError *error = NULL;	
@@ -232,9 +232,9 @@ void mod_hash(struct mod_args args)
            ) 
 	{
 		/*! Unknown hash, so we accept the packet */
-		args.node->result = 1;
-		g_printerr("%s Hash not found because: %s\n", H(args.pkt->conn->id), error->message);
-		g_printerr("%s Packet accepted and new entry created\n", H(args.pkt->conn->id));
+		args->node->result = 1;
+		g_printerr("%s Hash not found because: %s\n", H(args->pkt->conn->id), error->message);
+		g_printerr("%s Packet accepted and new entry created\n", H(args->pkt->conn->id));
 
 		info = malloc(6 * sizeof(char *));
 
@@ -248,8 +248,8 @@ void mod_hash(struct mod_args args)
 		g_snprintf(info[ HASH_COUNTER ], 20, "1");
 		g_snprintf(info[ HASH_FIRST_SEEN ], 20, "%d", now);
 		g_snprintf(info[ HASH_DURATION ], 20, "0");
-		g_snprintf(info[ HASH_PACKET ], 20, "%d", args.pkt->conn->count_data_pkt_from_intruder);
-		g_snprintf(info[ HASH_BYTE ], 20, "%d", args.pkt->data);
+		g_snprintf(info[ HASH_PACKET ], 20, "%d", args->pkt->conn->count_data_pkt_from_intruder);
+		g_snprintf(info[ HASH_BYTE ], 20, "%d", args->pkt->data);
 		g_snprintf(info[ HASH_ASCII ], ascii_len, "%s", ascii);
 		
 	} else {
@@ -257,8 +257,8 @@ void mod_hash(struct mod_args args)
                 int age = atoi(info[ HASH_DURATION ]);
 		if ( age > expiration ) {
 			/*! Known hash but entry expired, so we accept the packet */
-                        args.node->result = 1;
-                        g_printerr("%s Hash found but expired... packet accepted and entry renewed\n", H(args.pkt->conn->id));
+                        args->node->result = 1;
+                        g_printerr("%s Hash found but expired... packet accepted and entry renewed\n", H(args->pkt->conn->id));
 			
 			g_snprintf(info[ HASH_COUNTER ], 20, "1");
 	                g_snprintf(info[ HASH_FIRST_SEEN ], 20, "%d", now);
@@ -266,19 +266,19 @@ void mod_hash(struct mod_args args)
 
 		} else {
 			/*! Known hash, so we reject the packet */
-                        args.node->result = 0;
-                        g_printerr("%s Hash found... packet rejected and entry updated\n", H(args.pkt->conn->id));
+                        args->node->result = 0;
+                        g_printerr("%s Hash found... packet rejected and entry updated\n", H(args->pkt->conn->id));
 
 			g_snprintf(info[ HASH_COUNTER ], 20, "%d", atoi(info[ HASH_COUNTER ]) + 1);
 			g_snprintf(info[ HASH_DURATION ], 20, "%d", now - atoi(info[ HASH_DURATION ]));
 
 		}
 
-		g_snprintf(info[ HASH_PACKET ], 20, "%d", args.pkt->conn->count_data_pkt_from_intruder);
+		g_snprintf(info[ HASH_PACKET ], 20, "%d", args->pkt->conn->count_data_pkt_from_intruder);
 
 	}	
 
-	g_printerr("%s Set string list...\n", H(args.pkt->conn->id));
+	g_printerr("%s Set string list...\n", H(args->pkt->conn->id));
 
 	g_key_file_set_string_list(
                 backup,
@@ -287,24 +287,24 @@ void mod_hash(struct mod_args args)
                 (const gchar * const *)info,
                 6);
 
-	g_printerr("%s ... done\n", H(args.pkt->conn->id));
+	g_printerr("%s ... done\n", H(args->pkt->conn->id));
 
 	/*! clean and exit */
 	g_free(payload);
-	//g_printerr("%s Free 1/5\n", H(args.pkt->conn->id));
+	//g_printerr("%s Free 1/5\n", H(args->pkt->conn->id));
 	g_free(ascii);
-	//g_printerr("%s Free 2/5\n", H(args.pkt->conn->id));
+	//g_printerr("%s Free 2/5\n", H(args->pkt->conn->id));
 	g_free(hash);
-	//g_printerr("%s Free 3/5\n", H(args.pkt->conn->id));
+	//g_printerr("%s Free 3/5\n", H(args->pkt->conn->id));
 	g_free(port);
 	/*
-	g_printerr("%s Free 4/5\n", H(args.pkt->conn->id));
+	g_printerr("%s Free 4/5\n", H(args->pkt->conn->id));
 	g_free(key_dst[0]);
-	g_printerr("%s Free 5/5\n", H(args.pkt->conn->id));
+	g_printerr("%s Free 5/5\n", H(args->pkt->conn->id));
 	g_free(key_dst[1]);
-	g_printerr("%s Free 6/5\n", H(args.pkt->conn->id));
+	g_printerr("%s Free 6/5\n", H(args->pkt->conn->id));
 	g_free(key_dst);
-	g_printerr("%s Free 7/5\n", H(args.pkt->conn->id));
+	g_printerr("%s Free 7/5\n", H(args->pkt->conn->id));
 	*/
 
 	save_backup(backup, backup_file);
