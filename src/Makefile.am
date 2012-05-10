@@ -18,7 +18,7 @@ sbin_PROGRAMS = honeybrid
 honeybrid_SOURCES = rules.y syntax.l \
  daemon.c decision_engine.c err.c honeybrid.c log.c mod_control.c mod_counter.c \
  mod_hash.c mod_random.c mod_source.c modules.c mod_yesno.c netcode.c tables.c \
- mod_source_time.c mod_vmi.c mod_dionaea.c mod_dionaea.h mod_backpick_random.c \
+ mod_source_time.c mod_dionaea.c mod_dionaea.h mod_backpick_random.c \
  decision_engine.h honeybrid.h log.h modules.h netcode.h pcap_tool.h tables.h types.h
 
 # Compiler flags:
