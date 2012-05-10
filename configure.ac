@@ -45,6 +45,7 @@ AC_CHECK_FUNCS([dup2 gettimeofday inet_ntoa memset socket strdup strerror strstr
 
 CORE_LIBS=""
 AC_CHECK_LIB(ev, ev_loop, [
+	AC_DEFINE([HAVE_LIBEV], [1], [libev enabled])
 	AC_MSG_NOTICE([Using libev for event handling])
 	HONEYBRID_LIBS="$CORE_LIBS -lev"
 	], [AC_MSG_NOTICE([Not using libev for event handling])])
@@ -67,7 +68,6 @@ if test "x$XMPP_LIBS" != "x" -a "xXML2_LIBS" == "x"; then
 	AC_ERROR(XML2 libs are missing)
 fi
 
-AM_CONDITIONAL(HAVE_MYSQL, false)
 AC_PATH_PROG(MYSQL_CONFIG, mysql_config)
 	
 MYSQL_LIBS=$($MYSQL_CONFIG --libs)
