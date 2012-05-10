@@ -101,7 +101,6 @@
 #include <unistd.h>
 #include <execinfo.h>
 
-#include <ev.h>
 #include "../config.h"
 #include "tables.h"
 #include "honeybrid.h"
@@ -113,6 +112,7 @@
 //#include "rules.h"
 
 #ifdef HAVE_LIBEV
+#include <ev.h>
 struct nfq_handle	*h; 
 struct ev_loop		*loop;
 #endif
