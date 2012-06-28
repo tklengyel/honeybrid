@@ -602,8 +602,6 @@ xmpp_listener
 MYSQL_CFLAGS
 MYSQL_LIBS
 MYSQL_CONFIG
-HAVE_MYSQL_FALSE
-HAVE_MYSQL_TRUE
 XML2_LIBS
 XML2_CFLAGS
 XMPP_LIBS
@@ -5460,9 +5458,12 @@ fi
 $as_echo "$ac_cv_lib_ev_ev_loop" >&6; }
 if test "x$ac_cv_lib_ev_ev_loop" = x""yes; then :
   
+	
+$as_echo "@%:@define HAVE_LIBEV 1" >>confdefs.h
+
 	{ $as_echo "$as_me:${as_lineno-$LINENO}: Using libev for event handling" >&5
 $as_echo "$as_me: Using libev for event handling" >&6;}
-	HONEYBRID_LIBS="$CORE_LIBS -lev"
+	CORE_LIBS="$CORE_LIBS -lev"
 	
 else
   { $as_echo "$as_me:${as_lineno-$LINENO}: Not using libev for event handling" >&5
@@ -6046,14 +6047,6 @@ if test "x$XMPP_LIBS" != "x" -a "xXML2_LIBS" == "x"; then
 	as_fn_error $? "XML2 libs are missing" "$LINENO" 5 
 fi
 
- if false; then
-  HAVE_MYSQL_TRUE=
-  HAVE_MYSQL_FALSE='#'
-else
-  HAVE_MYSQL_TRUE='#'
-  HAVE_MYSQL_FALSE=
-fi
-
 # Extract the first word of "mysql_config", so it can be a program name with args.
 set dummy mysql_config; ac_word=$2
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
@@ -6267,10 +6260,6 @@ Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${am__fastdepCXX_TRUE}" && test -z "${am__fastdepCXX_FALSE}"; then
   as_fn_error $? "conditional \"am__fastdepCXX\" was never defined.
-Usually this means the macro was only invoked conditionally." "$LINENO" 5 
-fi
-if test -z "${HAVE_MYSQL_TRUE}" && test -z "${HAVE_MYSQL_FALSE}"; then
-  as_fn_error $? "conditional \"HAVE_MYSQL\" was never defined.
 Usually this means the macro was only invoked conditionally." "$LINENO" 5 
 fi
 

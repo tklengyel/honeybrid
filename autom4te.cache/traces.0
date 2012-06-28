@@ -876,11 +876,7 @@ m4trace:configure.ac:42: -1- m4_pattern_allow([^LIB@&t@OBJS$])
 m4trace:configure.ac:42: -1- m4_pattern_allow([^realloc$])
 m4trace:configure.ac:43: -1- m4_pattern_allow([^HAVE_VPRINTF$])
 m4trace:configure.ac:43: -1- m4_pattern_allow([^HAVE_DOPRNT$])
-m4trace:configure.ac:51: -1- _m4_warn([obsolete], [The macro `AC_ERROR' is obsolete.
-You should run autoupdate.], [../../lib/autoconf/oldnames.m4:34: AC_ERROR is expanded from...
-../../lib/m4sugar/m4sh.m4:598: AS_IF is expanded from...
-../../lib/autoconf/libs.m4:100: AC_CHECK_LIB is expanded from...
-configure.ac:51: the top level])
+m4trace:configure.ac:47: -1- m4_pattern_allow([^HAVE_LIBEV$])
 m4trace:configure.ac:52: -1- _m4_warn([obsolete], [The macro `AC_ERROR' is obsolete.
 You should run autoupdate.], [../../lib/autoconf/oldnames.m4:34: AC_ERROR is expanded from...
 ../../lib/m4sugar/m4sh.m4:598: AS_IF is expanded from...
@@ -891,63 +887,63 @@ You should run autoupdate.], [../../lib/autoconf/oldnames.m4:34: AC_ERROR is exp
 ../../lib/m4sugar/m4sh.m4:598: AS_IF is expanded from...
 ../../lib/autoconf/libs.m4:100: AC_CHECK_LIB is expanded from...
 configure.ac:53: the top level])
-m4trace:configure.ac:54: -1- m4_pattern_allow([^CORE_LIBS$])
-m4trace:configure.ac:56: -1- PKG_CHECK_MODULES([CRYPTO], [libcrypto], [], [AC_ERROR(Crypto library missing)])
-m4trace:configure.ac:56: -1- PKG_PROG_PKG_CONFIG
-m4trace:configure.ac:56: -1- m4_pattern_forbid([^_?PKG_[A-Z_]+$])
-m4trace:configure.ac:56: -1- m4_pattern_allow([^PKG_CONFIG(_PATH)?$])
-m4trace:configure.ac:56: -1- m4_pattern_allow([^PKG_CONFIG$])
-m4trace:configure.ac:56: -1- m4_pattern_allow([^PKG_CONFIG_PATH$])
-m4trace:configure.ac:56: -1- m4_pattern_allow([^PKG_CONFIG_LIBDIR$])
-m4trace:configure.ac:56: -1- m4_pattern_allow([^PKG_CONFIG$])
-m4trace:configure.ac:56: -1- m4_pattern_allow([^CRYPTO_CFLAGS$])
-m4trace:configure.ac:56: -1- m4_pattern_allow([^CRYPTO_LIBS$])
-m4trace:configure.ac:56: -1- PKG_CHECK_EXISTS([libcrypto], [pkg_cv_[]CRYPTO_CFLAGS=`$PKG_CONFIG --[]cflags "libcrypto" 2>/dev/null`], [pkg_failed=yes])
-m4trace:configure.ac:56: -1- PKG_CHECK_EXISTS([libcrypto], [pkg_cv_[]CRYPTO_LIBS=`$PKG_CONFIG --[]libs "libcrypto" 2>/dev/null`], [pkg_failed=yes])
-m4trace:configure.ac:56: -1- _PKG_SHORT_ERRORS_SUPPORTED
-m4trace:configure.ac:56: -1- _m4_warn([obsolete], [The macro `AC_ERROR' is obsolete.
+m4trace:configure.ac:54: -1- _m4_warn([obsolete], [The macro `AC_ERROR' is obsolete.
 You should run autoupdate.], [../../lib/autoconf/oldnames.m4:34: AC_ERROR is expanded from...
-/usr/share/aclocal/pkg.m4:104: PKG_CHECK_MODULES is expanded from...
-configure.ac:56: the top level])
-m4trace:configure.ac:56: -1- _m4_warn([obsolete], [The macro `AC_ERROR' is obsolete.
-You should run autoupdate.], [../../lib/autoconf/oldnames.m4:34: AC_ERROR is expanded from...
-/usr/share/aclocal/pkg.m4:104: PKG_CHECK_MODULES is expanded from...
-configure.ac:56: the top level])
-m4trace:configure.ac:57: -1- PKG_CHECK_MODULES([GLIB], [glib-2.0 gthread-2.0])
-m4trace:configure.ac:57: -1- m4_pattern_allow([^GLIB_CFLAGS$])
-m4trace:configure.ac:57: -1- m4_pattern_allow([^GLIB_LIBS$])
-m4trace:configure.ac:57: -1- PKG_CHECK_EXISTS([glib-2.0 gthread-2.0], [pkg_cv_[]GLIB_CFLAGS=`$PKG_CONFIG --[]cflags "glib-2.0 gthread-2.0" 2>/dev/null`], [pkg_failed=yes])
-m4trace:configure.ac:57: -1- PKG_CHECK_EXISTS([glib-2.0 gthread-2.0], [pkg_cv_[]GLIB_LIBS=`$PKG_CONFIG --[]libs "glib-2.0 gthread-2.0" 2>/dev/null`], [pkg_failed=yes])
+../../lib/m4sugar/m4sh.m4:598: AS_IF is expanded from...
+../../lib/autoconf/libs.m4:100: AC_CHECK_LIB is expanded from...
+configure.ac:54: the top level])
+m4trace:configure.ac:55: -1- m4_pattern_allow([^CORE_LIBS$])
+m4trace:configure.ac:57: -1- PKG_CHECK_MODULES([CRYPTO], [libcrypto], [], [AC_ERROR(Crypto library missing)])
+m4trace:configure.ac:57: -1- PKG_PROG_PKG_CONFIG
+m4trace:configure.ac:57: -1- m4_pattern_forbid([^_?PKG_[A-Z_]+$])
+m4trace:configure.ac:57: -1- m4_pattern_allow([^PKG_CONFIG(_PATH)?$])
+m4trace:configure.ac:57: -1- m4_pattern_allow([^PKG_CONFIG$])
+m4trace:configure.ac:57: -1- m4_pattern_allow([^PKG_CONFIG_PATH$])
+m4trace:configure.ac:57: -1- m4_pattern_allow([^PKG_CONFIG_LIBDIR$])
+m4trace:configure.ac:57: -1- m4_pattern_allow([^PKG_CONFIG$])
+m4trace:configure.ac:57: -1- m4_pattern_allow([^CRYPTO_CFLAGS$])
+m4trace:configure.ac:57: -1- m4_pattern_allow([^CRYPTO_LIBS$])
+m4trace:configure.ac:57: -1- PKG_CHECK_EXISTS([libcrypto], [pkg_cv_[]CRYPTO_CFLAGS=`$PKG_CONFIG --[]cflags "libcrypto" 2>/dev/null`], [pkg_failed=yes])
+m4trace:configure.ac:57: -1- PKG_CHECK_EXISTS([libcrypto], [pkg_cv_[]CRYPTO_LIBS=`$PKG_CONFIG --[]libs "libcrypto" 2>/dev/null`], [pkg_failed=yes])
 m4trace:configure.ac:57: -1- _PKG_SHORT_ERRORS_SUPPORTED
-m4trace:configure.ac:58: -1- PKG_CHECK_MODULES([XMPP], [gloox libxml++-2.6], [
+m4trace:configure.ac:57: -1- _m4_warn([obsolete], [The macro `AC_ERROR' is obsolete.
+You should run autoupdate.], [../../lib/autoconf/oldnames.m4:34: AC_ERROR is expanded from...
+/usr/share/aclocal/pkg.m4:104: PKG_CHECK_MODULES is expanded from...
+configure.ac:57: the top level])
+m4trace:configure.ac:57: -1- _m4_warn([obsolete], [The macro `AC_ERROR' is obsolete.
+You should run autoupdate.], [../../lib/autoconf/oldnames.m4:34: AC_ERROR is expanded from...
+/usr/share/aclocal/pkg.m4:104: PKG_CHECK_MODULES is expanded from...
+configure.ac:57: the top level])
+m4trace:configure.ac:58: -1- PKG_CHECK_MODULES([GLIB], [glib-2.0 gthread-2.0])
+m4trace:configure.ac:58: -1- m4_pattern_allow([^GLIB_CFLAGS$])
+m4trace:configure.ac:58: -1- m4_pattern_allow([^GLIB_LIBS$])
+m4trace:configure.ac:58: -1- PKG_CHECK_EXISTS([glib-2.0 gthread-2.0], [pkg_cv_[]GLIB_CFLAGS=`$PKG_CONFIG --[]cflags "glib-2.0 gthread-2.0" 2>/dev/null`], [pkg_failed=yes])
+m4trace:configure.ac:58: -1- PKG_CHECK_EXISTS([glib-2.0 gthread-2.0], [pkg_cv_[]GLIB_LIBS=`$PKG_CONFIG --[]libs "glib-2.0 gthread-2.0" 2>/dev/null`], [pkg_failed=yes])
+m4trace:configure.ac:58: -1- _PKG_SHORT_ERRORS_SUPPORTED
+m4trace:configure.ac:59: -1- PKG_CHECK_MODULES([XMPP], [gloox libxml++-2.6], [
 	PKG_CHECK_MODULES([XML2], [libxml-2.0], [
 		AC_MSG_NOTICE([Enabling XMPP listener and Dionaea module])
 		AC_DEFINE([HAVE_XMPP], [1], [XMPP listener enabled])
 		])
 	], [AC_MSG_NOTICE([XMPP listener won't be compiled])])
-m4trace:configure.ac:58: -1- m4_pattern_allow([^XMPP_CFLAGS$])
-m4trace:configure.ac:58: -1- m4_pattern_allow([^XMPP_LIBS$])
-m4trace:configure.ac:58: -1- PKG_CHECK_EXISTS([gloox libxml++-2.6], [pkg_cv_[]XMPP_CFLAGS=`$PKG_CONFIG --[]cflags "gloox libxml++-2.6" 2>/dev/null`], [pkg_failed=yes])
-m4trace:configure.ac:58: -1- PKG_CHECK_EXISTS([gloox libxml++-2.6], [pkg_cv_[]XMPP_LIBS=`$PKG_CONFIG --[]libs "gloox libxml++-2.6" 2>/dev/null`], [pkg_failed=yes])
-m4trace:configure.ac:58: -1- _PKG_SHORT_ERRORS_SUPPORTED
-m4trace:configure.ac:58: -1- PKG_CHECK_MODULES([XML2], [libxml-2.0], [
+m4trace:configure.ac:59: -1- m4_pattern_allow([^XMPP_CFLAGS$])
+m4trace:configure.ac:59: -1- m4_pattern_allow([^XMPP_LIBS$])
+m4trace:configure.ac:59: -1- PKG_CHECK_EXISTS([gloox libxml++-2.6], [pkg_cv_[]XMPP_CFLAGS=`$PKG_CONFIG --[]cflags "gloox libxml++-2.6" 2>/dev/null`], [pkg_failed=yes])
+m4trace:configure.ac:59: -1- PKG_CHECK_EXISTS([gloox libxml++-2.6], [pkg_cv_[]XMPP_LIBS=`$PKG_CONFIG --[]libs "gloox libxml++-2.6" 2>/dev/null`], [pkg_failed=yes])
+m4trace:configure.ac:59: -1- _PKG_SHORT_ERRORS_SUPPORTED
+m4trace:configure.ac:59: -1- PKG_CHECK_MODULES([XML2], [libxml-2.0], [
 		AC_MSG_NOTICE([Enabling XMPP listener and Dionaea module])
 		AC_DEFINE([HAVE_XMPP], [1], [XMPP listener enabled])
 		])
-m4trace:configure.ac:58: -1- m4_pattern_allow([^XML2_CFLAGS$])
-m4trace:configure.ac:58: -1- m4_pattern_allow([^XML2_LIBS$])
-m4trace:configure.ac:58: -1- PKG_CHECK_EXISTS([libxml-2.0], [pkg_cv_[]XML2_CFLAGS=`$PKG_CONFIG --[]cflags "libxml-2.0" 2>/dev/null`], [pkg_failed=yes])
-m4trace:configure.ac:58: -1- PKG_CHECK_EXISTS([libxml-2.0], [pkg_cv_[]XML2_LIBS=`$PKG_CONFIG --[]libs "libxml-2.0" 2>/dev/null`], [pkg_failed=yes])
-m4trace:configure.ac:58: -1- _PKG_SHORT_ERRORS_SUPPORTED
-m4trace:configure.ac:58: -1- m4_pattern_allow([^HAVE_XMPP$])
-m4trace:configure.ac:67: -1- _m4_warn([obsolete], [The macro `AC_ERROR' is obsolete.
+m4trace:configure.ac:59: -1- m4_pattern_allow([^XML2_CFLAGS$])
+m4trace:configure.ac:59: -1- m4_pattern_allow([^XML2_LIBS$])
+m4trace:configure.ac:59: -1- PKG_CHECK_EXISTS([libxml-2.0], [pkg_cv_[]XML2_CFLAGS=`$PKG_CONFIG --[]cflags "libxml-2.0" 2>/dev/null`], [pkg_failed=yes])
+m4trace:configure.ac:59: -1- PKG_CHECK_EXISTS([libxml-2.0], [pkg_cv_[]XML2_LIBS=`$PKG_CONFIG --[]libs "libxml-2.0" 2>/dev/null`], [pkg_failed=yes])
+m4trace:configure.ac:59: -1- _PKG_SHORT_ERRORS_SUPPORTED
+m4trace:configure.ac:59: -1- m4_pattern_allow([^HAVE_XMPP$])
+m4trace:configure.ac:68: -1- _m4_warn([obsolete], [The macro `AC_ERROR' is obsolete.
 You should run autoupdate.], [../../lib/autoconf/oldnames.m4:34: AC_ERROR is expanded from...
-configure.ac:67: the top level])
-m4trace:configure.ac:70: -1- AM_CONDITIONAL([HAVE_MYSQL], [false])
-m4trace:configure.ac:70: -1- m4_pattern_allow([^HAVE_MYSQL_TRUE$])
-m4trace:configure.ac:70: -1- m4_pattern_allow([^HAVE_MYSQL_FALSE$])
-m4trace:configure.ac:70: -1- _AM_SUBST_NOTMAKE([HAVE_MYSQL_TRUE])
-m4trace:configure.ac:70: -1- _AM_SUBST_NOTMAKE([HAVE_MYSQL_FALSE])
+configure.ac:68: the top level])
 m4trace:configure.ac:71: -1- m4_pattern_allow([^MYSQL_CONFIG$])
 m4trace:configure.ac:77: -1- m4_pattern_allow([^HAVE_MYSQL$])
 m4trace:configure.ac:79: -1- m4_pattern_allow([^MYSQL_LIBS$])

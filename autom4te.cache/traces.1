@@ -530,11 +530,10 @@ m4trace:configure.ac:44: -1- AH_OUTPUT([HAVE_STRERROR], [/* Define to 1 if you h
 @%:@undef HAVE_STRERROR])
 m4trace:configure.ac:44: -1- AH_OUTPUT([HAVE_STRSTR], [/* Define to 1 if you have the `strstr\' function. */
 @%:@undef HAVE_STRSTR])
-m4trace:configure.ac:51: -1- _m4_warn([obsolete], [The macro `AC_ERROR' is obsolete.
-You should run autoupdate.], [../../lib/autoconf/oldnames.m4:34: AC_ERROR is expanded from...
-../../lib/m4sugar/m4sh.m4:598: AS_IF is expanded from...
-../../lib/autoconf/libs.m4:100: AC_CHECK_LIB is expanded from...
-configure.ac:51: the top level])
+m4trace:configure.ac:47: -1- AC_DEFINE_TRACE_LITERAL([HAVE_LIBEV])
+m4trace:configure.ac:47: -1- m4_pattern_allow([^HAVE_LIBEV$])
+m4trace:configure.ac:47: -1- AH_OUTPUT([HAVE_LIBEV], [/* libev enabled */
+@%:@undef HAVE_LIBEV])
 m4trace:configure.ac:52: -1- _m4_warn([obsolete], [The macro `AC_ERROR' is obsolete.
 You should run autoupdate.], [../../lib/autoconf/oldnames.m4:34: AC_ERROR is expanded from...
 ../../lib/m4sugar/m4sh.m4:598: AS_IF is expanded from...
@@ -545,71 +544,67 @@ You should run autoupdate.], [../../lib/autoconf/oldnames.m4:34: AC_ERROR is exp
 ../../lib/m4sugar/m4sh.m4:598: AS_IF is expanded from...
 ../../lib/autoconf/libs.m4:100: AC_CHECK_LIB is expanded from...
 configure.ac:53: the top level])
-m4trace:configure.ac:54: -1- AC_SUBST([CORE_LIBS])
-m4trace:configure.ac:54: -1- AC_SUBST_TRACE([CORE_LIBS])
-m4trace:configure.ac:54: -1- m4_pattern_allow([^CORE_LIBS$])
-m4trace:configure.ac:56: -1- m4_pattern_forbid([^_?PKG_[A-Z_]+$])
-m4trace:configure.ac:56: -1- m4_pattern_allow([^PKG_CONFIG(_PATH)?$])
-m4trace:configure.ac:56: -1- AC_SUBST([PKG_CONFIG])
-m4trace:configure.ac:56: -1- AC_SUBST_TRACE([PKG_CONFIG])
-m4trace:configure.ac:56: -1- m4_pattern_allow([^PKG_CONFIG$])
-m4trace:configure.ac:56: -1- AC_SUBST([PKG_CONFIG_PATH])
-m4trace:configure.ac:56: -1- AC_SUBST_TRACE([PKG_CONFIG_PATH])
-m4trace:configure.ac:56: -1- m4_pattern_allow([^PKG_CONFIG_PATH$])
-m4trace:configure.ac:56: -1- AC_SUBST([PKG_CONFIG_LIBDIR])
-m4trace:configure.ac:56: -1- AC_SUBST_TRACE([PKG_CONFIG_LIBDIR])
-m4trace:configure.ac:56: -1- m4_pattern_allow([^PKG_CONFIG_LIBDIR$])
-m4trace:configure.ac:56: -1- AC_SUBST([PKG_CONFIG])
-m4trace:configure.ac:56: -1- AC_SUBST_TRACE([PKG_CONFIG])
-m4trace:configure.ac:56: -1- m4_pattern_allow([^PKG_CONFIG$])
-m4trace:configure.ac:56: -1- AC_SUBST([CRYPTO_CFLAGS])
-m4trace:configure.ac:56: -1- AC_SUBST_TRACE([CRYPTO_CFLAGS])
-m4trace:configure.ac:56: -1- m4_pattern_allow([^CRYPTO_CFLAGS$])
-m4trace:configure.ac:56: -1- AC_SUBST([CRYPTO_LIBS])
-m4trace:configure.ac:56: -1- AC_SUBST_TRACE([CRYPTO_LIBS])
-m4trace:configure.ac:56: -1- m4_pattern_allow([^CRYPTO_LIBS$])
-m4trace:configure.ac:56: -1- _m4_warn([obsolete], [The macro `AC_ERROR' is obsolete.
+m4trace:configure.ac:54: -1- _m4_warn([obsolete], [The macro `AC_ERROR' is obsolete.
+You should run autoupdate.], [../../lib/autoconf/oldnames.m4:34: AC_ERROR is expanded from...
+../../lib/m4sugar/m4sh.m4:598: AS_IF is expanded from...
+../../lib/autoconf/libs.m4:100: AC_CHECK_LIB is expanded from...
+configure.ac:54: the top level])
+m4trace:configure.ac:55: -1- AC_SUBST([CORE_LIBS])
+m4trace:configure.ac:55: -1- AC_SUBST_TRACE([CORE_LIBS])
+m4trace:configure.ac:55: -1- m4_pattern_allow([^CORE_LIBS$])
+m4trace:configure.ac:57: -1- m4_pattern_forbid([^_?PKG_[A-Z_]+$])
+m4trace:configure.ac:57: -1- m4_pattern_allow([^PKG_CONFIG(_PATH)?$])
+m4trace:configure.ac:57: -1- AC_SUBST([PKG_CONFIG])
+m4trace:configure.ac:57: -1- AC_SUBST_TRACE([PKG_CONFIG])
+m4trace:configure.ac:57: -1- m4_pattern_allow([^PKG_CONFIG$])
+m4trace:configure.ac:57: -1- AC_SUBST([PKG_CONFIG_PATH])
+m4trace:configure.ac:57: -1- AC_SUBST_TRACE([PKG_CONFIG_PATH])
+m4trace:configure.ac:57: -1- m4_pattern_allow([^PKG_CONFIG_PATH$])
+m4trace:configure.ac:57: -1- AC_SUBST([PKG_CONFIG_LIBDIR])
+m4trace:configure.ac:57: -1- AC_SUBST_TRACE([PKG_CONFIG_LIBDIR])
+m4trace:configure.ac:57: -1- m4_pattern_allow([^PKG_CONFIG_LIBDIR$])
+m4trace:configure.ac:57: -1- AC_SUBST([PKG_CONFIG])
+m4trace:configure.ac:57: -1- AC_SUBST_TRACE([PKG_CONFIG])
+m4trace:configure.ac:57: -1- m4_pattern_allow([^PKG_CONFIG$])
+m4trace:configure.ac:57: -1- AC_SUBST([CRYPTO_CFLAGS])
+m4trace:configure.ac:57: -1- AC_SUBST_TRACE([CRYPTO_CFLAGS])
+m4trace:configure.ac:57: -1- m4_pattern_allow([^CRYPTO_CFLAGS$])
+m4trace:configure.ac:57: -1- AC_SUBST([CRYPTO_LIBS])
+m4trace:configure.ac:57: -1- AC_SUBST_TRACE([CRYPTO_LIBS])
+m4trace:configure.ac:57: -1- m4_pattern_allow([^CRYPTO_LIBS$])
+m4trace:configure.ac:57: -1- _m4_warn([obsolete], [The macro `AC_ERROR' is obsolete.
 You should run autoupdate.], [../../lib/autoconf/oldnames.m4:34: AC_ERROR is expanded from...
 aclocal.m4:125: PKG_CHECK_MODULES is expanded from...
-configure.ac:56: the top level])
-m4trace:configure.ac:56: -1- _m4_warn([obsolete], [The macro `AC_ERROR' is obsolete.
+configure.ac:57: the top level])
+m4trace:configure.ac:57: -1- _m4_warn([obsolete], [The macro `AC_ERROR' is obsolete.
 You should run autoupdate.], [../../lib/autoconf/oldnames.m4:34: AC_ERROR is expanded from...
 aclocal.m4:125: PKG_CHECK_MODULES is expanded from...
-configure.ac:56: the top level])
-m4trace:configure.ac:57: -1- AC_SUBST([GLIB_CFLAGS])
-m4trace:configure.ac:57: -1- AC_SUBST_TRACE([GLIB_CFLAGS])
-m4trace:configure.ac:57: -1- m4_pattern_allow([^GLIB_CFLAGS$])
-m4trace:configure.ac:57: -1- AC_SUBST([GLIB_LIBS])
-m4trace:configure.ac:57: -1- AC_SUBST_TRACE([GLIB_LIBS])
-m4trace:configure.ac:57: -1- m4_pattern_allow([^GLIB_LIBS$])
-m4trace:configure.ac:58: -1- AC_SUBST([XMPP_CFLAGS])
-m4trace:configure.ac:58: -1- AC_SUBST_TRACE([XMPP_CFLAGS])
-m4trace:configure.ac:58: -1- m4_pattern_allow([^XMPP_CFLAGS$])
-m4trace:configure.ac:58: -1- AC_SUBST([XMPP_LIBS])
-m4trace:configure.ac:58: -1- AC_SUBST_TRACE([XMPP_LIBS])
-m4trace:configure.ac:58: -1- m4_pattern_allow([^XMPP_LIBS$])
-m4trace:configure.ac:58: -1- AC_SUBST([XML2_CFLAGS])
-m4trace:configure.ac:58: -1- AC_SUBST_TRACE([XML2_CFLAGS])
-m4trace:configure.ac:58: -1- m4_pattern_allow([^XML2_CFLAGS$])
-m4trace:configure.ac:58: -1- AC_SUBST([XML2_LIBS])
-m4trace:configure.ac:58: -1- AC_SUBST_TRACE([XML2_LIBS])
-m4trace:configure.ac:58: -1- m4_pattern_allow([^XML2_LIBS$])
-m4trace:configure.ac:58: -1- AC_DEFINE_TRACE_LITERAL([HAVE_XMPP])
-m4trace:configure.ac:58: -1- m4_pattern_allow([^HAVE_XMPP$])
-m4trace:configure.ac:58: -1- AH_OUTPUT([HAVE_XMPP], [/* XMPP listener enabled */
+configure.ac:57: the top level])
+m4trace:configure.ac:58: -1- AC_SUBST([GLIB_CFLAGS])
+m4trace:configure.ac:58: -1- AC_SUBST_TRACE([GLIB_CFLAGS])
+m4trace:configure.ac:58: -1- m4_pattern_allow([^GLIB_CFLAGS$])
+m4trace:configure.ac:58: -1- AC_SUBST([GLIB_LIBS])
+m4trace:configure.ac:58: -1- AC_SUBST_TRACE([GLIB_LIBS])
+m4trace:configure.ac:58: -1- m4_pattern_allow([^GLIB_LIBS$])
+m4trace:configure.ac:59: -1- AC_SUBST([XMPP_CFLAGS])
+m4trace:configure.ac:59: -1- AC_SUBST_TRACE([XMPP_CFLAGS])
+m4trace:configure.ac:59: -1- m4_pattern_allow([^XMPP_CFLAGS$])
+m4trace:configure.ac:59: -1- AC_SUBST([XMPP_LIBS])
+m4trace:configure.ac:59: -1- AC_SUBST_TRACE([XMPP_LIBS])
+m4trace:configure.ac:59: -1- m4_pattern_allow([^XMPP_LIBS$])
+m4trace:configure.ac:59: -1- AC_SUBST([XML2_CFLAGS])
+m4trace:configure.ac:59: -1- AC_SUBST_TRACE([XML2_CFLAGS])
+m4trace:configure.ac:59: -1- m4_pattern_allow([^XML2_CFLAGS$])
+m4trace:configure.ac:59: -1- AC_SUBST([XML2_LIBS])
+m4trace:configure.ac:59: -1- AC_SUBST_TRACE([XML2_LIBS])
+m4trace:configure.ac:59: -1- m4_pattern_allow([^XML2_LIBS$])
+m4trace:configure.ac:59: -1- AC_DEFINE_TRACE_LITERAL([HAVE_XMPP])
+m4trace:configure.ac:59: -1- m4_pattern_allow([^HAVE_XMPP$])
+m4trace:configure.ac:59: -1- AH_OUTPUT([HAVE_XMPP], [/* XMPP listener enabled */
 @%:@undef HAVE_XMPP])
-m4trace:configure.ac:67: -1- _m4_warn([obsolete], [The macro `AC_ERROR' is obsolete.
+m4trace:configure.ac:68: -1- _m4_warn([obsolete], [The macro `AC_ERROR' is obsolete.
 You should run autoupdate.], [../../lib/autoconf/oldnames.m4:34: AC_ERROR is expanded from...
-configure.ac:67: the top level])
-m4trace:configure.ac:70: -1- AM_CONDITIONAL([HAVE_MYSQL], [false])
-m4trace:configure.ac:70: -1- AC_SUBST([HAVE_MYSQL_TRUE])
-m4trace:configure.ac:70: -1- AC_SUBST_TRACE([HAVE_MYSQL_TRUE])
-m4trace:configure.ac:70: -1- m4_pattern_allow([^HAVE_MYSQL_TRUE$])
-m4trace:configure.ac:70: -1- AC_SUBST([HAVE_MYSQL_FALSE])
-m4trace:configure.ac:70: -1- AC_SUBST_TRACE([HAVE_MYSQL_FALSE])
-m4trace:configure.ac:70: -1- m4_pattern_allow([^HAVE_MYSQL_FALSE$])
-m4trace:configure.ac:70: -1- _AM_SUBST_NOTMAKE([HAVE_MYSQL_TRUE])
-m4trace:configure.ac:70: -1- _AM_SUBST_NOTMAKE([HAVE_MYSQL_FALSE])
+configure.ac:68: the top level])
 m4trace:configure.ac:71: -1- AC_SUBST([MYSQL_CONFIG])
 m4trace:configure.ac:71: -1- AC_SUBST_TRACE([MYSQL_CONFIG])
 m4trace:configure.ac:71: -1- m4_pattern_allow([^MYSQL_CONFIG$])
