@@ -49,7 +49,7 @@ AC_CHECK_LIB(ev, ev_loop, [
 	AC_MSG_NOTICE([Using libev for event handling])
 	CORE_LIBS="$CORE_LIBS -lev"
 	], [AC_MSG_NOTICE([Not using libev for event handling])])
-AC_CHECK_LIB(netfilter_queue, nfq_set_verdict2, [CORE_LIBS="$CORE_LIBS -lnetfilter_queue"],[AC_ERROR(Netfilter Queue library is too old)])
+AC_CHECK_LIB(netfilter_queue, nfq_set_verdict2, [CORE_LIBS="$CORE_LIBS -lnetfilter_queue"],[AC_ERROR([libnetfilter_queue is too old. Please upgrade it to 1.0.0 or later!])])
 AC_CHECK_LIB(pcap, pcap_compile_nopcap, [CORE_LIBS="$CORE_LIBS -lpcap"], [AC_ERROR(PCAP library missing)])
 AC_CHECK_LIB(dumbnet, addr_ntoa, [CORE_LIBS="$CORE_LIBS -ldumbnet"], [AC_ERROR(Dumbnet library missing)])
 AC_SUBST(CORE_LIBS)
@@ -70,10 +70,10 @@ fi
 
 AC_PATH_PROG(MYSQL_CONFIG, mysql_config)
 	
-MYSQL_LIBS=$($MYSQL_CONFIG --libs)
-MYSQL_CFLAGS=$($MYSQL_CONFIG --cflags)
+if test "x$MYSQL_CONFIG" != "x"; then
+	MYSQL_LIBS=$($MYSQL_CONFIG --libs)
+	MYSQL_CFLAGS=$($MYSQL_CONFIG --cflags)
 
-if test "x$MYSQL_LIBS" != "x" -a "x$MYSQL_CFLAGS" != "x"; then
 	AC_DEFINE(HAVE_MYSQL, 1, "Working MySQL library found")
 	AC_MSG_NOTICE([Enabling MySQL logging])
 	AC_SUBST(MYSQL_LIBS)
