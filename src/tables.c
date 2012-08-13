@@ -381,6 +381,8 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 	char *key1 = malloc(64);
         sprintf(key1, "%s:%s", pkt->key_dst, pkt->key_src);
 
+	//g_printerr("%s Looking for connections between %s and %s!\n", H(0), pkt->key_src, pkt->key_dst);
+
 	int update = 0;
 	int create = 0;
 
@@ -408,11 +410,11 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 
 			char **split = g_strsplit( value, ":", 0 );
 			/* split[0]=IP, split[1]=port, split[2]=mark */
-			pkt->mark=(u_int32_t)atoi(split[2]);
+			pkt->mark=(uint32_t)atoi(split[2]);
 
 			snprintf(pkt->key, 64, "%s:%s:%s", pkt->key_dst, split[0],split[1]);
 
-			g_printerr("%s ====== Corresponding LIH session: %s, Mark: %u (%s)==== \n",H(0),pkt->key,pkt->mark,split[2]);
+			g_printerr("%s ====== Corresponding LIH session: %s, Mark: %u ==== \n",H(0),pkt->key,pkt->mark);
 
 			pkt->origin = HIH;
 			update = 1;
@@ -461,10 +463,11 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 			    (u_char *)(pkt->packet.FRAME ),
 			    pkt->size + ETHER_HDR_LEN,
 			    pkt->size + ETHER_HDR_LEN) != 0) {
-				g_printerr("%s This packet matches the filter of target %d\n", H(0), i);
 				found = i;
 				snprintf(pkt->key, 64, "%s:%s", pkt->key_src, pkt->key_dst);
 				pkt->origin = EXT;
+				g_printerr("%s This packet matches the filter of target %d (%s)\n", H(0), i, pkt->key);
+
 				break;
 			}
 		}
@@ -489,9 +492,9 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 					/* Note: this honeypot might be defined later in another target... */
 				}
 
-				
-				/* T0MA FIX */
-				if ( g_tree_lookup( ((struct target *)g_ptr_array_index(targets,i))->back_handlers,src_addr) != NULL )
+
+				/* TODO: T0MA FIX */
+				if ( g_tree_lookup( ((struct target *)g_ptr_array_index(targets,i))->back_ips,src_addr) != NULL )
 				{
 					g_printerr("%s This packet matches a HIH honeypot IP address for target %d\n", H(0), i);
 					found = i;
@@ -954,15 +957,16 @@ void clean()
  \param[in] conn: redirected connection metadata
  \return OK when done, NOK in case of failure
  */
-int setup_redirection(struct conn_struct *conn, char *hih_use)
+int setup_redirection(struct conn_struct *conn, uint32_t hih_use)
 {
 	/* Check if decision engine gave me wrong HIH ID */
-	if(hih_use == NULL) {
+	if(hih_use == 0) {
 		return NOK;
 	}
-	
+
 	g_printerr("%s [** Starting... **]\n", H(conn->id));
-	struct addr *hihaddr = (struct addr *)g_tree_lookup(conn->target->back_handlers, hih_use);
+	struct addr *hihaddr = (struct addr *)g_tree_lookup(conn->target->back_handlers, &hih_use);
+	struct interface *hihiface = (struct interface *)g_tree_lookup(conn->target->back_ifs, &hih_use);
 
 	if ( hihaddr != NULL ) {
 		gchar **tmp;
@@ -980,11 +984,11 @@ int setup_redirection(struct conn_struct *conn, char *hih_use)
 		}
 		if (g_hash_table_lookup(high_redirection_table, key_hih_ext->str) == NULL) {
 
-			/* T0MA TODO: Insert as value: conn->key_lih:conn->mark */
+			/* Insert as value: conn->key_lih:conn->mark */
 			GString *value = g_string_new("");
 			g_string_printf(value, "%s:%u", conn->key_lih, conn->mark);
 
-			g_hash_table_insert (high_redirection_table, key_hih_ext->str, value->str);
+			g_hash_table_insert(high_redirection_table, key_hih_ext->str, value->str);
 			g_printerr("%s [** high_redirection_table updated: key %s value %s **]\n", H(conn->id),key_hih_ext->str, value->str);
 		} else {
 			g_string_free(key_hih_ext, TRUE);
@@ -999,7 +1003,9 @@ int setup_redirection(struct conn_struct *conn, char *hih_use)
 	        microtime += (((gdouble)t.tv_usec)/1000000.0);
 
 		///conn->key_hih = hihaddr;
-		conn->hih.addr = 	htonl(addr2int(addr_ntoa(hihaddr))); 
+		conn->hih.hihID=	hih_use;
+		conn->hih.iface=	hihiface;
+		conn->hih.addr = 	htonl(addr2int(addr_ntoa(hihaddr)));
 		conn->hih.lih_addr = 	htonl(addr2int(conn->key_lih));
 		conn->hih.port = 	htons((short)atoi(tmp[3]));
 		/*! We then update the status of the connection structure */

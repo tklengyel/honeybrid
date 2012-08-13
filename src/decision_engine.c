@@ -39,6 +39,10 @@
 #include "tables.h"
 #include "log.h"
 
+/*! like strcmp */
+int intcmp(gconstpointer v1, gconstpointer v2, gpointer extra) {
+     return (*(uint32_t *)v1<(*(uint32_t *)v2)?1:(*(uint32_t *)v1==(*(uint32_t *)v2))?0:-1);
+}
 
 /*! build_subtree
  \param[in] expr, a part of the boolean equation
@@ -191,7 +195,7 @@ void decide(struct decision_holder *decision)
 	args.backend_test=decision->backend_test;
 	args.backend_use = decision->backend_use;
 
-	/*! globalresult is used to store the final result of the boolean equation of module 
+	/*! globalresult is used to store the final result of the boolean equation of module
 	    3 possible outcome:
 		"-1" means "can't decide, needs more data to decide"
  	        "0" means "reject"
@@ -212,7 +216,7 @@ void decide(struct decision_holder *decision)
 
   		/*! call module */
 		if (decision->node->module == NULL) {
-			g_printerr("%s Error! decision->node->module is NULL\n", H(decision->pkt->conn->id));	
+			g_printerr("%s Error! decision->node->module is NULL\n", H(decision->pkt->conn->id));
 			break;
 		} else {
 			g_printerr("%s >> Calling module %s at address %p\n", H(decision->pkt->conn->id), decision->node->module_name->str, decision->node->module);
@@ -225,16 +229,16 @@ void decide(struct decision_holder *decision)
 		switch(decision->node->result) {
 			case 1: /*! if result is true, forward to true node or exit with 1 */
 				/*! update decision_rule information */
-				if (decision->node->info_result != 0) 
-					g_string_append_printf(decision->pkt->conn->decision_rule, "+%s:%d;", 
+				if (decision->node->info_result != 0)
+					g_string_append_printf(decision->pkt->conn->decision_rule, "+%s:%d;",
 						decision->node->module_name->str, decision->node->info_result);
-				else 
+				else
 					g_string_append_printf(decision->pkt->conn->decision_rule, "+%s;", decision->node->module_name->str);
 
 				/* Global multi-hih module that tells which HIH ID to use */
-				if(args.backend_use != NULL) {
+				if(args.backend_use != 0) {
 					decision->backend_use = args.backend_use;
-					g_printerr("%s >> Module suggested using HIH %s\n", H(decision->pkt->conn->id), args.backend_use);
+					g_printerr("%s >> Module suggested using HIH %u\n", H(decision->pkt->conn->id), args.backend_use);
 				}
 
  				if(decision->node->true != NULL)
@@ -243,19 +247,19 @@ void decide(struct decision_holder *decision)
 	 				decision->result = 1;		/*! end of the tree, exit */
 				break;
 			case -1:
-				if (decision->node->info_result < 0) 
-					g_string_append_printf(decision->pkt->conn->decision_rule, "?%s:%d;", 
+				if (decision->node->info_result < 0)
+					g_string_append_printf(decision->pkt->conn->decision_rule, "?%s:%d;",
 						decision->node->module_name->str, decision->node->info_result);
-				else 
+				else
 					g_string_append_printf(decision->pkt->conn->decision_rule, "?%s;", decision->node->module_name->str);
 
 				decision->result = -1;		/*! end of the tree, exit */
 				break;
 			default: /*! result is false (result == 0), forward to false node or exit with 0 */
-				if (decision->node->info_result < 0) 
-					g_string_append_printf(decision->pkt->conn->decision_rule, "-%s:%d;", 
+				if (decision->node->info_result < 0)
+					g_string_append_printf(decision->pkt->conn->decision_rule, "-%s:%d;",
 						decision->node->module_name->str, decision->node->info_result);
-				else 
+				else
 					g_string_append_printf(decision->pkt->conn->decision_rule, "-%s;", decision->node->module_name->str);
 
 	 			if(decision->node->false != NULL)
@@ -268,7 +272,7 @@ void decide(struct decision_holder *decision)
 }
 
 void get_decision(struct decision_holder *decision) {
-	
+
 	if ( decision->node == NULL ) {
 		g_printerr("%s rule is NULL for state %d on target %p\n", H(decision->pkt->conn->id), decision->pkt->conn->state, decision->pkt->conn->target);
 		decision->result = DE_NO_RULE;
@@ -279,15 +283,15 @@ void get_decision(struct decision_holder *decision) {
 	}
 }
 
-int get_decision_backend(gpointer *key, gpointer *value, gpointer *data) {
+int get_decision_backend(gpointer key, gpointer value, gpointer data) {
 	struct decision_holder *decision = (struct decision_holder *)data;
-	decision->backend_test=(char *)key;
+	decision->backend_test=*(uint32_t *)key;
 	decision->node = (struct node *)value;
 	get_decision(decision);
-	
+
 	/* Stop searching on the first accept */
 	if(decision->result == 1) {
-		decision->backend_use=(char *)key;
+		decision->backend_use=*(uint32_t *)key;
 		return TRUE;
 	} else {
 		return FALSE;
@@ -296,20 +300,20 @@ int get_decision_backend(gpointer *key, gpointer *value, gpointer *data) {
 
 /*! DE_process_packet
  \brief submit packets for decision using decision rules and decision modules */
-int DE_process_packet(struct pkt_struct *pkt) 
+int DE_process_packet(struct pkt_struct *pkt)
 {
 
 	/* This structure holds the result of LIH/HIH/CONTROL equations */
 	/* The flow is get_decision->decide->run_module */
 	/* For multi-HIH backends a module can set the backend_use variable in the mod_args structure to give the HIH ID */
 	/* Otherwise each HIH backend can be checked one-by-one */
-	
+
 	struct decision_holder decision;
 	decision.pkt=pkt;
 	decision.result=DE_REJECT;
-	decision.backend_test = NULL;
-	decision.backend_use = NULL;
-	
+	decision.backend_test = 0;
+	decision.backend_use = 0;
+
 	int statement = 0;	/*! default is to return "drop" to the QUEUE */
 
 	g_printerr("%s Packet pushed to DE: %s\n", H(pkt->conn->id), pkt->conn->key);
@@ -318,21 +322,22 @@ int DE_process_packet(struct pkt_struct *pkt)
 	case INIT:
 		/* If we're in INIT, we need to get the "accept" rule from the frontend definition of the target */
 		decision.node = (struct node *) pkt->conn->target->front_rule;
-		
+
 		get_decision(&decision);
 		break;
 	case DECISION:
 		/* If we already passed INIT, we need to get the "redirect" rule from the backend definition of the target */
-		
+
 		/* Check if global rule for multi-hih available */
 		if(pkt->conn->target->back_picker != NULL) {
 			decision.node = pkt->conn->target->back_picker;
 			get_decision(&decision);
-			
-			if(decision.result == DE_ACCEPT && decision.backend_use != NULL) {
+
+			if(decision.result == DE_ACCEPT && decision.backend_use != 0) {
 				// Back picker gave us a HIH, run it's test (if any)
-				g_printerr("%s Global backend rule gave us a HIH: %s\n", H(pkt->conn->id), decision.backend_use);
+				g_printerr("%s Global backend rule gave us a HIH: %u\n", H(pkt->conn->id), decision.backend_use);
 				decision.node = (struct node *)g_tree_lookup(pkt->conn->target->back_rules, &(decision.backend_use));
+
 				if(decision.node != NULL) {
 					get_decision(&decision);
 				}
@@ -364,7 +369,7 @@ int DE_process_packet(struct pkt_struct *pkt)
 		switch( pkt->conn->state ) {
 		case CONTROL:
 			/*! we update the state */
-			//pkt->conn->state = PROXY;			
+			//pkt->conn->state = PROXY;
 			switch_state(pkt->conn, PROXY);
 			/*! we release the packet */
 			//send_raw(pkt->packet.ip);
@@ -433,7 +438,7 @@ int DE_process_packet(struct pkt_struct *pkt)
 				pkt->conn->target->front_handler->addr_ip);
 			#endif
 			*/
-			g_printerr("%s Redirecting to HIH: %s\n", H(pkt->conn->id), decision.backend_use);
+			g_printerr("%s Redirecting to HIH: %u\n", H(pkt->conn->id), decision.backend_use);
 			if (setup_redirection(pkt->conn, decision.backend_use) != OK) {
 				g_printerr("%s setup_redirection() failed\n", H(pkt->conn->id));
 			}
@@ -448,23 +453,6 @@ int DE_process_packet(struct pkt_struct *pkt)
 
 	return statement;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 /*! DE_submit_packet DEPRECATED, \todo to remove
  \brief handle connections being decided and submits packets for decision

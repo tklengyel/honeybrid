@@ -107,7 +107,7 @@ int store_pkt(struct conn_struct *conn, struct pkt_struct *pkt);
 
 void clean();
 
-int setup_redirection(struct conn_struct *conn, char *hih_id);
+int setup_redirection(struct conn_struct *conn, uint32_t hih_id);
 
 int expire_conn(gpointer key, struct conn_struct *cur_conn, gint *expiration_delay);
 

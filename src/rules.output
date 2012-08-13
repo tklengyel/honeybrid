@@ -30,15 +30,16 @@
   21       | rule BACKPICK QUOTE equation QUOTE SEMICOLON
   22       | rule BACKEND honeynet SEMICOLON
   23       | rule BACKEND honeynet QUOTE equation QUOTE SEMICOLON
-  24       | rule LIMIT QUOTE equation QUOTE SEMICOLON
+  24       | rule BACKEND honeynet QUOTE equation QUOTE QUOTE equation QUOTE SEMICOLON
+  25       | rule LIMIT QUOTE equation QUOTE SEMICOLON
 
-  25  honeynet : EXPR
+  26  honeynet : EXPR
 
-  26  equation :
-  27           | equation WORD
-  28           | equation NUMBER
-  29           | equation EXPR
-  30           | equation EQ
+  27  equation :
+  28           | equation WORD
+  29           | equation NUMBER
+  30           | equation EXPR
+  31           | equation EQ
 
 state 0
 	$accept : . configuration $end  (0)
@@ -156,7 +157,8 @@ state 13
 	rule : rule . BACKPICK QUOTE equation QUOTE SEMICOLON  (21)
 	rule : rule . BACKEND honeynet SEMICOLON  (22)
 	rule : rule . BACKEND honeynet QUOTE equation QUOTE SEMICOLON  (23)
-	rule : rule . LIMIT QUOTE equation QUOTE SEMICOLON  (24)
+	rule : rule . BACKEND honeynet QUOTE equation QUOTE QUOTE equation QUOTE SEMICOLON  (24)
+	rule : rule . LIMIT QUOTE equation QUOTE SEMICOLON  (25)
 
 	END  shift 18
 	FILTER  shift 19
@@ -222,6 +224,7 @@ state 20
 state 21
 	rule : rule BACKEND . honeynet SEMICOLON  (22)
 	rule : rule BACKEND . honeynet QUOTE equation QUOTE SEMICOLON  (23)
+	rule : rule BACKEND . honeynet QUOTE equation QUOTE QUOTE equation QUOTE SEMICOLON  (24)
 
 	EXPR  shift 28
 	.  error
@@ -237,7 +240,7 @@ state 22
 
 
 state 23
-	rule : rule LIMIT . QUOTE equation QUOTE SEMICOLON  (24)
+	rule : rule LIMIT . QUOTE equation QUOTE SEMICOLON  (25)
 
 	QUOTE  shift 32
 	.  error
@@ -271,17 +274,17 @@ state 26
 
 state 27
 	rule : rule FILTER QUOTE . equation QUOTE SEMICOLON  (18)
-	equation : .  (26)
+	equation : .  (27)
 
-	.  reduce 26
+	.  reduce 27
 
 	equation  goto 37
 
 
 state 28
-	honeynet : EXPR .  (25)
+	honeynet : EXPR .  (26)
 
-	.  reduce 25
+	.  reduce 26
 
 
 state 29
@@ -296,6 +299,7 @@ state 29
 state 30
 	rule : rule BACKEND honeynet . SEMICOLON  (22)
 	rule : rule BACKEND honeynet . QUOTE equation QUOTE SEMICOLON  (23)
+	rule : rule BACKEND honeynet . QUOTE equation QUOTE QUOTE equation QUOTE SEMICOLON  (24)
 
 	SEMICOLON  shift 40
 	QUOTE  shift 41
@@ -304,18 +308,18 @@ state 30
 
 state 31
 	rule : rule BACKPICK QUOTE . equation QUOTE SEMICOLON  (21)
-	equation : .  (26)
+	equation : .  (27)
 
-	.  reduce 26
+	.  reduce 27
 
 	equation  goto 42
 
 
 state 32
-	rule : rule LIMIT QUOTE . equation QUOTE SEMICOLON  (24)
-	equation : .  (26)
+	rule : rule LIMIT QUOTE . equation QUOTE SEMICOLON  (25)
+	equation : .  (27)
 
-	.  reduce 26
+	.  reduce 27
 
 	equation  goto 43
 
@@ -351,10 +355,10 @@ state 36
 
 state 37
 	rule : rule FILTER QUOTE equation . QUOTE SEMICOLON  (18)
-	equation : equation . WORD  (27)
-	equation : equation . NUMBER  (28)
-	equation : equation . EXPR  (29)
-	equation : equation . EQ  (30)
+	equation : equation . WORD  (28)
+	equation : equation . NUMBER  (29)
+	equation : equation . EXPR  (30)
+	equation : equation . EQ  (31)
 
 	QUOTE  shift 46
 	NUMBER  shift 47
@@ -372,9 +376,9 @@ state 38
 
 state 39
 	rule : rule FRONTEND honeynet QUOTE . equation QUOTE SEMICOLON  (20)
-	equation : .  (26)
+	equation : .  (27)
 
-	.  reduce 26
+	.  reduce 27
 
 	equation  goto 51
 
@@ -387,19 +391,20 @@ state 40
 
 state 41
 	rule : rule BACKEND honeynet QUOTE . equation QUOTE SEMICOLON  (23)
-	equation : .  (26)
+	rule : rule BACKEND honeynet QUOTE . equation QUOTE QUOTE equation QUOTE SEMICOLON  (24)
+	equation : .  (27)
 
-	.  reduce 26
+	.  reduce 27
 
 	equation  goto 52
 
 
 state 42
 	rule : rule BACKPICK QUOTE equation . QUOTE SEMICOLON  (21)
-	equation : equation . WORD  (27)
-	equation : equation . NUMBER  (28)
-	equation : equation . EXPR  (29)
-	equation : equation . EQ  (30)
+	equation : equation . WORD  (28)
+	equation : equation . NUMBER  (29)
+	equation : equation . EXPR  (30)
+	equation : equation . EQ  (31)
 
 	QUOTE  shift 53
 	NUMBER  shift 47
@@ -410,11 +415,11 @@ state 42
 
 
 state 43
-	rule : rule LIMIT QUOTE equation . QUOTE SEMICOLON  (24)
-	equation : equation . WORD  (27)
-	equation : equation . NUMBER  (28)
-	equation : equation . EXPR  (29)
-	equation : equation . EQ  (30)
+	rule : rule LIMIT QUOTE equation . QUOTE SEMICOLON  (25)
+	equation : equation . WORD  (28)
+	equation : equation . NUMBER  (29)
+	equation : equation . EXPR  (30)
+	equation : equation . EQ  (31)
 
 	QUOTE  shift 54
 	NUMBER  shift 47
@@ -447,35 +452,35 @@ state 46
 
 
 state 47
-	equation : equation NUMBER .  (28)
-
-	.  reduce 28
-
-
-state 48
-	equation : equation WORD .  (27)
-
-	.  reduce 27
-
-
-state 49
-	equation : equation EQ .  (30)
-
-	.  reduce 30
-
-
-state 50
-	equation : equation EXPR .  (29)
+	equation : equation NUMBER .  (29)
 
 	.  reduce 29
 
 
+state 48
+	equation : equation WORD .  (28)
+
+	.  reduce 28
+
+
+state 49
+	equation : equation EQ .  (31)
+
+	.  reduce 31
+
+
+state 50
+	equation : equation EXPR .  (30)
+
+	.  reduce 30
+
+
 state 51
 	rule : rule FRONTEND honeynet QUOTE equation . QUOTE SEMICOLON  (20)
-	equation : equation . WORD  (27)
-	equation : equation . NUMBER  (28)
-	equation : equation . EXPR  (29)
-	equation : equation . EQ  (30)
+	equation : equation . WORD  (28)
+	equation : equation . NUMBER  (29)
+	equation : equation . EXPR  (30)
+	equation : equation . EQ  (31)
 
 	QUOTE  shift 57
 	NUMBER  shift 47
@@ -487,10 +492,11 @@ state 51
 
 state 52
 	rule : rule BACKEND honeynet QUOTE equation . QUOTE SEMICOLON  (23)
-	equation : equation . WORD  (27)
-	equation : equation . NUMBER  (28)
-	equation : equation . EXPR  (29)
-	equation : equation . EQ  (30)
+	rule : rule BACKEND honeynet QUOTE equation . QUOTE QUOTE equation QUOTE SEMICOLON  (24)
+	equation : equation . WORD  (28)
+	equation : equation . NUMBER  (29)
+	equation : equation . EXPR  (30)
+	equation : equation . EQ  (31)
 
 	QUOTE  shift 58
 	NUMBER  shift 47
@@ -508,7 +514,7 @@ state 53
 
 
 state 54
-	rule : rule LIMIT QUOTE equation QUOTE . SEMICOLON  (24)
+	rule : rule LIMIT QUOTE equation QUOTE . SEMICOLON  (25)
 
 	SEMICOLON  shift 60
 	.  error
@@ -540,8 +546,10 @@ state 57
 
 state 58
 	rule : rule BACKEND honeynet QUOTE equation QUOTE . SEMICOLON  (23)
+	rule : rule BACKEND honeynet QUOTE equation QUOTE . QUOTE equation QUOTE SEMICOLON  (24)
 
 	SEMICOLON  shift 65
+	QUOTE  shift 66
 	.  error
 
 
@@ -552,29 +560,29 @@ state 59
 
 
 state 60
-	rule : rule LIMIT QUOTE equation QUOTE SEMICOLON .  (24)
+	rule : rule LIMIT QUOTE equation QUOTE SEMICOLON .  (25)
 
-	.  reduce 24
+	.  reduce 25
 
 
 state 61
 	settings : settings WORD EQ NUMBER . SEMICOLON  (15)
 
-	SEMICOLON  shift 66
+	SEMICOLON  shift 67
 	.  error
 
 
 state 62
 	settings : settings WORD EQ WORD . SEMICOLON  (13)
 
-	SEMICOLON  shift 67
+	SEMICOLON  shift 68
 	.  error
 
 
 state 63
 	settings : settings WORD EQ EXPR . SEMICOLON  (14)
 
-	SEMICOLON  shift 68
+	SEMICOLON  shift 69
 	.  error
 
 
@@ -591,22 +599,59 @@ state 65
 
 
 state 66
+	rule : rule BACKEND honeynet QUOTE equation QUOTE QUOTE . equation QUOTE SEMICOLON  (24)
+	equation : .  (27)
+
+	.  reduce 27
+
+	equation  goto 70
+
+
+state 67
 	settings : settings WORD EQ NUMBER SEMICOLON .  (15)
 
 	.  reduce 15
 
 
-state 67
+state 68
 	settings : settings WORD EQ WORD SEMICOLON .  (13)
 
 	.  reduce 13
 
 
-state 68
+state 69
 	settings : settings WORD EQ EXPR SEMICOLON .  (14)
 
 	.  reduce 14
 
 
+state 70
+	rule : rule BACKEND honeynet QUOTE equation QUOTE QUOTE equation . QUOTE SEMICOLON  (24)
+	equation : equation . WORD  (28)
+	equation : equation . NUMBER  (29)
+	equation : equation . EXPR  (30)
+	equation : equation . EQ  (31)
+
+	QUOTE  shift 71
+	NUMBER  shift 47
+	WORD  shift 48
+	EQ  shift 49
+	EXPR  shift 50
+	.  error
+
+
+state 71
+	rule : rule BACKEND honeynet QUOTE equation QUOTE QUOTE equation QUOTE . SEMICOLON  (24)
+
+	SEMICOLON  shift 72
+	.  error
+
+
+state 72
+	rule : rule BACKEND honeynet QUOTE equation QUOTE QUOTE equation QUOTE SEMICOLON .  (24)
+
+	.  reduce 24
+
+
 19 terminals, 11 nonterminals
-31 grammar rules, 69 states
+32 grammar rules, 73 states

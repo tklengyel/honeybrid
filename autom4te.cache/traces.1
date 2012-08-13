@@ -148,7 +148,7 @@ m4trace:configure.ac:13: -1- AC_SUBST_TRACE([target_alias])
 m4trace:configure.ac:13: -1- m4_pattern_allow([^target_alias$])
 m4trace:configure.ac:17: -1- AM_INIT_AUTOMAKE
 m4trace:configure.ac:17: -1- m4_pattern_allow([^AM_[A-Z]+FLAGS$])
-m4trace:configure.ac:17: -1- AM_AUTOMAKE_VERSION([1.11.6])
+m4trace:configure.ac:17: -1- AM_AUTOMAKE_VERSION([1.11.1])
 m4trace:configure.ac:17: -1- AC_REQUIRE_AUX_FILE([install-sh])
 m4trace:configure.ac:17: -1- AC_SUBST([INSTALL_PROGRAM])
 m4trace:configure.ac:17: -1- AC_SUBST_TRACE([INSTALL_PROGRAM])
@@ -221,7 +221,7 @@ m4trace:configure.ac:17: -1- m4_pattern_allow([^SET_MAKE$])
 m4trace:configure.ac:17: -1- AC_SUBST([am__leading_dot])
 m4trace:configure.ac:17: -1- AC_SUBST_TRACE([am__leading_dot])
 m4trace:configure.ac:17: -1- m4_pattern_allow([^am__leading_dot$])
-m4trace:configure.ac:17: -1- AC_SUBST([AMTAR], ['$${TAR-tar}'])
+m4trace:configure.ac:17: -1- AC_SUBST([AMTAR])
 m4trace:configure.ac:17: -1- AC_SUBST_TRACE([AMTAR])
 m4trace:configure.ac:17: -1- m4_pattern_allow([^AMTAR$])
 m4trace:configure.ac:17: -1- AC_SUBST([am__tar])
@@ -289,10 +289,6 @@ m4trace:configure.ac:22: -1- AC_SUBST([AMDEPBACKSLASH])
 m4trace:configure.ac:22: -1- AC_SUBST_TRACE([AMDEPBACKSLASH])
 m4trace:configure.ac:22: -1- m4_pattern_allow([^AMDEPBACKSLASH$])
 m4trace:configure.ac:22: -1- _AM_SUBST_NOTMAKE([AMDEPBACKSLASH])
-m4trace:configure.ac:22: -1- AC_SUBST([am__nodep])
-m4trace:configure.ac:22: -1- AC_SUBST_TRACE([am__nodep])
-m4trace:configure.ac:22: -1- m4_pattern_allow([^am__nodep$])
-m4trace:configure.ac:22: -1- _AM_SUBST_NOTMAKE([am__nodep])
 m4trace:configure.ac:22: -1- AC_SUBST([CCDEPMODE], [depmode=$am_cv_CC_dependencies_compiler_type])
 m4trace:configure.ac:22: -1- AC_SUBST_TRACE([CCDEPMODE])
 m4trace:configure.ac:22: -1- m4_pattern_allow([^CCDEPMODE$])
@@ -483,10 +479,10 @@ m4trace:configure.ac:41: -1- AH_OUTPUT([HAVE_MALLOC], [/* Define to 1 if your sy
 @%:@undef HAVE_MALLOC])
 m4trace:configure.ac:41: -1- AC_DEFINE_TRACE_LITERAL([HAVE_MALLOC])
 m4trace:configure.ac:41: -1- m4_pattern_allow([^HAVE_MALLOC$])
+m4trace:configure.ac:41: -1- AC_LIBSOURCE([malloc.c])
 m4trace:configure.ac:41: -1- AC_SUBST([LIB@&t@OBJS], ["$LIB@&t@OBJS malloc.$ac_objext"])
 m4trace:configure.ac:41: -1- AC_SUBST_TRACE([LIB@&t@OBJS])
 m4trace:configure.ac:41: -1- m4_pattern_allow([^LIB@&t@OBJS$])
-m4trace:configure.ac:41: -1- AC_LIBSOURCE([malloc.c])
 m4trace:configure.ac:41: -1- AC_DEFINE_TRACE_LITERAL([malloc])
 m4trace:configure.ac:41: -1- m4_pattern_allow([^malloc$])
 m4trace:configure.ac:41: -1- AH_OUTPUT([malloc], [/* Define to rpl_malloc if the replacement function should be used. */
@@ -502,10 +498,10 @@ m4trace:configure.ac:42: -1- AH_OUTPUT([HAVE_REALLOC], [/* Define to 1 if your s
 @%:@undef HAVE_REALLOC])
 m4trace:configure.ac:42: -1- AC_DEFINE_TRACE_LITERAL([HAVE_REALLOC])
 m4trace:configure.ac:42: -1- m4_pattern_allow([^HAVE_REALLOC$])
+m4trace:configure.ac:42: -1- AC_LIBSOURCE([realloc.c])
 m4trace:configure.ac:42: -1- AC_SUBST([LIB@&t@OBJS], ["$LIB@&t@OBJS realloc.$ac_objext"])
 m4trace:configure.ac:42: -1- AC_SUBST_TRACE([LIB@&t@OBJS])
 m4trace:configure.ac:42: -1- m4_pattern_allow([^LIB@&t@OBJS$])
-m4trace:configure.ac:42: -1- AC_LIBSOURCE([realloc.c])
 m4trace:configure.ac:42: -1- AC_DEFINE_TRACE_LITERAL([realloc])
 m4trace:configure.ac:42: -1- m4_pattern_allow([^realloc$])
 m4trace:configure.ac:42: -1- AH_OUTPUT([realloc], [/* Define to rpl_realloc if the replacement function should be used. */
@@ -540,25 +536,24 @@ m4trace:configure.ac:47: -1- AH_OUTPUT([HAVE_LIBEV], [/* libev enabled */
 @%:@undef HAVE_LIBEV])
 m4trace:configure.ac:52: -1- _m4_warn([obsolete], [The macro `AC_ERROR' is obsolete.
 You should run autoupdate.], [../../lib/autoconf/oldnames.m4:34: AC_ERROR is expanded from...
-../../lib/m4sugar/m4sh.m4:639: AS_IF is expanded from...
-../../lib/autoconf/libs.m4:99: AC_CHECK_LIB is expanded from...
+../../lib/m4sugar/m4sh.m4:598: AS_IF is expanded from...
+../../lib/autoconf/libs.m4:100: AC_CHECK_LIB is expanded from...
 configure.ac:52: the top level])
 m4trace:configure.ac:53: -1- _m4_warn([obsolete], [The macro `AC_ERROR' is obsolete.
 You should run autoupdate.], [../../lib/autoconf/oldnames.m4:34: AC_ERROR is expanded from...
-../../lib/m4sugar/m4sh.m4:639: AS_IF is expanded from...
-../../lib/autoconf/libs.m4:99: AC_CHECK_LIB is expanded from...
+../../lib/m4sugar/m4sh.m4:598: AS_IF is expanded from...
+../../lib/autoconf/libs.m4:100: AC_CHECK_LIB is expanded from...
 configure.ac:53: the top level])
 m4trace:configure.ac:54: -1- _m4_warn([obsolete], [The macro `AC_ERROR' is obsolete.
 You should run autoupdate.], [../../lib/autoconf/oldnames.m4:34: AC_ERROR is expanded from...
-../../lib/m4sugar/m4sh.m4:639: AS_IF is expanded from...
-../../lib/autoconf/libs.m4:99: AC_CHECK_LIB is expanded from...
+../../lib/m4sugar/m4sh.m4:598: AS_IF is expanded from...
+../../lib/autoconf/libs.m4:100: AC_CHECK_LIB is expanded from...
 configure.ac:54: the top level])
 m4trace:configure.ac:55: -1- AC_SUBST([CORE_LIBS])
 m4trace:configure.ac:55: -1- AC_SUBST_TRACE([CORE_LIBS])
 m4trace:configure.ac:55: -1- m4_pattern_allow([^CORE_LIBS$])
 m4trace:configure.ac:57: -1- m4_pattern_forbid([^_?PKG_[A-Z_]+$])
-m4trace:configure.ac:57: -1- m4_pattern_allow([^PKG_CONFIG(_(PATH|LIBDIR|SYSROOT_DIR|ALLOW_SYSTEM_(CFLAGS|LIBS)))?$])
-m4trace:configure.ac:57: -1- m4_pattern_allow([^PKG_CONFIG_(DISABLE_UNINSTALLED|TOP_BUILD_DIR|DEBUG_SPEW)$])
+m4trace:configure.ac:57: -1- m4_pattern_allow([^PKG_CONFIG(_PATH)?$])
 m4trace:configure.ac:57: -1- AC_SUBST([PKG_CONFIG])
 m4trace:configure.ac:57: -1- AC_SUBST_TRACE([PKG_CONFIG])
 m4trace:configure.ac:57: -1- m4_pattern_allow([^PKG_CONFIG$])
@@ -579,11 +574,11 @@ m4trace:configure.ac:57: -1- AC_SUBST_TRACE([CRYPTO_LIBS])
 m4trace:configure.ac:57: -1- m4_pattern_allow([^CRYPTO_LIBS$])
 m4trace:configure.ac:57: -1- _m4_warn([obsolete], [The macro `AC_ERROR' is obsolete.
 You should run autoupdate.], [../../lib/autoconf/oldnames.m4:34: AC_ERROR is expanded from...
-aclocal.m4:128: PKG_CHECK_MODULES is expanded from...
+aclocal.m4:125: PKG_CHECK_MODULES is expanded from...
 configure.ac:57: the top level])
 m4trace:configure.ac:57: -1- _m4_warn([obsolete], [The macro `AC_ERROR' is obsolete.
 You should run autoupdate.], [../../lib/autoconf/oldnames.m4:34: AC_ERROR is expanded from...
-aclocal.m4:128: PKG_CHECK_MODULES is expanded from...
+aclocal.m4:125: PKG_CHECK_MODULES is expanded from...
 configure.ac:57: the top level])
 m4trace:configure.ac:58: -1- AC_SUBST([GLIB_CFLAGS])
 m4trace:configure.ac:58: -1- AC_SUBST_TRACE([GLIB_CFLAGS])

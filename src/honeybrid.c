@@ -306,6 +306,9 @@ free_target(struct target *t, gpointer user_data)
 	g_free(t->front_handler);
 	g_tree_destroy(t->back_handlers);
 	g_tree_destroy(t->back_rules);
+	g_tree_destroy(t->back_ifs);
+	g_tree_destroy(t->back_ips);
+	g_slist_free(t->backendIDs);
 	if (t->front_rule != NULL)
 		g_free(t->front_rule);
 	if (t->control_rule != NULL)
@@ -538,7 +541,7 @@ process_packet(struct nfq_data *tb)
 	int statement = 0;		/* by default we reject this packet */
 	unsigned char *nf_packet;
 	struct in_addr in;
-	u_int32_t mark=nfq_get_nfmark(tb);	/* initiliaze it to current packets mark, might get updated later */
+	u_int32_t mark=nfq_get_nfmark(tb);	/* initiliaze it to current packet's mark, might get updated later */
 
 	/*! extract ip header from packet payload */
 	int size;
@@ -575,7 +578,7 @@ process_packet(struct nfq_data *tb)
 	}
 
 	if(conn->mark != pkt->mark)
-		g_printerr("%s Connection needs to be marked %u!\n",H(conn->id),conn->mark);
+		g_printerr("%s Connection needs to be marked %u!\n",H(conn->id),pkt->mark);
 
 	#ifdef DEBUG
 	g_printerr("%s Origin: %s %s, %i bytes\n",
@@ -596,7 +599,7 @@ process_packet(struct nfq_data *tb)
 			inet_ntoa(in));
 		#ifdef RST_EXT
 		if(pkt->packet.ip->protocol==0x06)
-			reply_reset( pkt->packet );
+			reply_reset( &(pkt->packet) );
 		#endif
 		free_pkt(pkt);
 		return statement = 0;
@@ -608,7 +611,7 @@ process_packet(struct nfq_data *tb)
 			inet_ntoa(in));
 		#ifdef RST_EXT
 			if(pkt->packet.ip->protocol==0x06)
-				reply_reset( pkt->packet );
+				reply_reset( &(pkt->packet) );
 		#endif
 		free_pkt(pkt);
 		return statement = 0;
@@ -650,7 +653,7 @@ process_packet(struct nfq_data *tb)
 		default:
 			g_printerr("%s Packet from LIH at wrong state => reset %s\n", H(conn->id), inet_ntoa(in));
 			if(pkt->packet.ip->protocol==0x06)
-				reply_reset( pkt->packet );
+				reply_reset( &(pkt->packet) );
 			free_pkt(pkt);
 			break;
 		}
@@ -685,7 +688,7 @@ process_packet(struct nfq_data *tb)
 			if (RESET_HIH > 0) {
 				g_printerr("%s Packet from HIH at wrong state, so we reset %s\n", H(conn->id), inet_ntoa(in));
 				if(pkt->packet.ip->protocol==0x06) {
-					reply_reset( pkt->packet );
+					reply_reset( &(pkt->packet) );
 				}
 				statement = 0;
 				//conn->state = DROP;
@@ -1034,7 +1037,7 @@ main(int argc, char *argv[])
 	unsigned short int queuenum=0;
 	#ifdef HAVE_LIBEV
 	//struct nfq_handle *h; 
-	struct nfq_q_handle *qh;
+	struct nfq_q_handle *qh=NULL;
 	int my_nfq_fd;
 	#endif
 

@@ -41,11 +41,13 @@ struct target
 	struct bpf_program *filter;	/* PCAP compiled filter to select packets for this target */
 	struct addr *front_handler;	/* Honeypot IP address(es) handling the first response (front end) */
 	struct node *front_rule;	/* Rules of decision modules to accept packet to be handled by the frontend */
-	GTree *back_handlers;		/* Honeypot IP address(es) handling the second response (back end) */
+	GTree *back_handlers;		/* Honeypot IP address(es) handling the second response (back end) with key hihID value IP */
+	GTree *back_ips;		/* Honeypot IP address(es) handling the second response (back end) with key IP value hihID */
 	GTree *back_rules;		/* Rule(s) of decision modules to accept packets to be transited from front to back end */
+	GTree *back_ifs;		/* Network interface the backend is running on (enforced with raw socket) */
 	struct node *back_picker;	/* Rule(s) to pick which backend to use */
 	struct node *control_rule;	/* Rules of decision modules to limit outbound packets from honeypots */
-	int number_of_backends;		/* Number of backends assigned to this target */
+	GSList *backendIDs;		/* Backend ID list */
 };
 
 
@@ -114,6 +116,16 @@ struct udp_packet
 	char *payload;
 };
 
+/*! \brief Structure to hold network interface information
+ */
+struct interface
+{
+        char *name;
+        int tcp_socket;
+        int udp_socket;
+        int mark;
+};
+
 /*! hih_struct
  \brief hih info
 
@@ -122,7 +134,9 @@ struct udp_packet
  */
 struct hih_struct
 {
+	int hihID;
 	int addr;
+	struct interface *iface;
 	short port;
 	unsigned lih_syn_seq;
 	unsigned delta;
@@ -197,8 +211,8 @@ struct conn_struct
 
 	u_int32_t mark;	// adding support for multiple uplinks
 
-	unsigned short int dionaeaDownload;
-	int dionaeaDownloadTime;
+	uint8_t dionaeaDownload;
+	unsigned int dionaeaDownloadTime;
 };
 
 /*! pkt_struct

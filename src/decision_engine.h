@@ -38,20 +38,22 @@
  \brief hash table to select a rule for a connection, key is the rule, value is the boolean decision tree root
  */
 GHashTable *DE_rules;
- 
+
 struct decision_holder
 {
 	struct pkt_struct *pkt;
 	struct node *node;
 	struct mod_args args;
 	int result;
-	
-	char *backend_test, *backend_use;
+
+	uint32_t backend_test, backend_use;
 };
 
 GStaticRWLock DE_queue_lock;
 
 GSList *DE_queue;
+
+int intcmp(gconstpointer v1, gconstpointer v2, gpointer extra);
 
 struct node *DE_create_tree(const gchar *equation);
 

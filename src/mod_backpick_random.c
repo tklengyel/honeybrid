@@ -32,23 +32,6 @@
 #include "modules.h"
 #include "netcode.h"
 
-struct picking {
-	int num;
-	int counter;
-	char *name;
-};
-
-int get_backpick(gpointer *key, gpointer *value, gpointer *data) {
-	struct picking *pick = (struct picking *)data;
-	if(pick->num==pick->counter) {
-		pick->name = (char *)key;
-		return 1;
-	} else {
-		pick->counter++;
-		return 0;
-	}
-}
-
 /*! mod_backpick_random
  \param[in] args, struct that contain the node and the data to process
  */
@@ -61,15 +44,11 @@ void mod_backpick_random(struct mod_args *args)
 		g_printerr("%s No backends are defined for this target, rejecting\n", H(args->pkt->conn->id));
 		args->node->result = 0;
 	} else {
-		struct picking pick;
-		pick.num = rand() % n_backends;
-		pick.num=0;
-		pick.counter=0;
-		
-		/* get the IP of the backend to use from the GTree */
-		g_tree_foreach(args->pkt->conn->target->back_handlers, (GTraverseFunc)get_backpick, (gpointer *)(&pick));
-		g_printerr("%s Picking %d: %s out of %d backends\n", H(args->pkt->conn->id), pick.num+1, pick.name, n_backends);
-		args->backend_use=pick.name;
+
+		uint32_t pick = rand() % n_backends+1;
+
+		g_printerr("%s Picking %d out of %d backends\n", H(args->pkt->conn->id), pick, n_backends);
+		args->backend_use=pick;
 		args->node->result = 1;
 	}
 }

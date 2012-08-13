@@ -235,8 +235,15 @@ rule: 	{
 		$$->back_picker = NULL;
 		$$->front_rule = NULL;
 		$$->control_rule = NULL;
-		$$->back_handlers = g_tree_new((GCompareFunc)strcmp);
-		$$->back_rules = g_tree_new((GCompareFunc)strcmp);
+		$$->back_handlers = g_tree_new((GCompareFunc)intcmp);
+		$$->back_ips = g_tree_new((GCompareFunc)strcmp);
+		$$->back_rules = g_tree_new((GCompareFunc)intcmp);
+		/* T0MA TODO: Create interface destroy function and hook it in here! */
+		$$->back_ifs = g_tree_new((GCompareFunc)intcmp);
+		/* Since the trees need pointers for the keys (uints), they need to live somewhere */
+		uint32_t *startID=malloc(sizeof(uint32_t));
+		*startID=0;
+		$$->backendIDs=g_slist_prepend($$->backendIDs, (gpointer)startID);
 	}
 	| rule FILTER QUOTE equation QUOTE SEMICOLON {
 		//g_printerr("Read pcap filter: '%s'\n", $4);
@@ -252,7 +259,7 @@ rule: 	{
 	}
 	| rule FRONTEND honeynet SEMICOLON {
 		$$->front_handler = $3;
-		g_printerr("\tIP %s (%d) copied to handler\n", addr_ntoa($3), $3->addr_ip);
+		g_printerr("\tIP %s (%d) copied to front handler\n", addr_ntoa($3), $3->addr_ip);
 		g_printerr("\tResult IP %s (%d)\n", addr_ntoa($$->front_handler), $$->front_handler->addr_ip);
 		$$->front_rule = NULL;
 	} 
@@ -272,24 +279,47 @@ rule: 	{
 		if($$->back_picker == NULL) {
 			yyerror("Backend needs a rule if no backend picking rule is defined!\n");
 		}
-		if( NULL != g_tree_lookup($$->back_handlers, addr_ntoa($3)) ) {
-			yyerror("Backend needs a unique IP!\n");
-		}
 		
-		g_tree_insert($$->back_handlers, addr_ntoa($3), $3);
+		uint32_t *id=malloc(sizeof(uint32_t));
+		*id=*(uint32_t *)($$->backendIDs->data)+1;
+		$$->backendIDs=g_slist_prepend($$->backendIDs, (gpointer)id);
+
+		g_tree_insert($$->back_handlers, $$->backendIDs->data, $3);
+		g_tree_insert($$->back_ips, addr_ntoa($3), $3);
 		
-		g_printerr("\tIP %s copied to handler without rule\n", addr_ntoa($3));
+		g_printerr("\tBackend %u with IP %s copied to handler without rule\n", *(uint32_t*)($$->backendIDs->data), addr_ntoa($3));
         }
 	| rule BACKEND honeynet QUOTE equation QUOTE SEMICOLON {
-		if(NULL != g_tree_lookup($$->back_handlers, addr_ntoa($3)) || NULL != g_tree_lookup($$->back_rules, addr_ntoa($3))) {
-			yyerror("Backend needs a unique IP!\n");
-		}
-		
-		g_tree_insert($$->back_handlers, addr_ntoa($3), $3);
-		g_tree_insert($$->back_rules, addr_ntoa($3), $5);
+
+		uint32_t *id=g_malloc0(sizeof(uint32_t));
+                *id=*(uint32_t *)($$->backendIDs->data)+1;
+                $$->backendIDs=g_slist_prepend($$->backendIDs, (gpointer)id);
+
+		g_tree_insert($$->back_handlers, $$->backendIDs->data, $3);
+		g_tree_insert($$->back_ips, addr_ntoa($3), $3);
+		g_tree_insert($$->back_rules, $$->backendIDs->data, DE_create_tree($5->str));
 	
-       		g_printerr("\tIP %s copied to handler with rule: %s\n", addr_ntoa($3), $5->str);
-       		g_string_free($5, TRUE);	
+       		g_printerr("\tBackend %u with IP %s copied to handler with rule: %s\n", *(uint32_t*)($$->backendIDs->data), addr_ntoa($3), $5->str);
+       		g_string_free($5, TRUE);
+        }
+	| rule BACKEND honeynet QUOTE equation QUOTE QUOTE equation QUOTE SEMICOLON {
+
+                uint32_t *id=g_malloc0(sizeof(uint32_t));
+                *id=*(uint32_t *)($$->backendIDs->data)+1;
+                $$->backendIDs=g_slist_prepend($$->backendIDs, (gpointer)id);
+
+		struct interface *iface=g_malloc0(sizeof(struct interface));
+		iface->name=strdup($5->str);
+		iface->mark=*id;
+
+                g_tree_insert($$->back_handlers, $$->backendIDs->data, $3);
+		g_tree_insert($$->back_ips, addr_ntoa($3), $3);
+		g_tree_insert($$->back_ifs, $$->backendIDs->data, (gpointer)iface);
+                g_tree_insert($$->back_rules, $$->backendIDs->data, DE_create_tree($8->str));
+
+                g_printerr("\tBackend %u with IP %s on interface %s copied to handler with rule: %s\n", *(uint32_t*)($$->backendIDs->data), addr_ntoa($3), $5->str, $8->str);
+                g_string_free($5, TRUE);
+		g_string_free($8, TRUE);
         }
 	| rule LIMIT QUOTE equation QUOTE SEMICOLON {
 		$$->control_rule = DE_create_tree($4->str);

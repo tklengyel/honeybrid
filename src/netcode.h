@@ -68,21 +68,13 @@ struct tcp_chk_packet
 	char payload[BUFSIZE];
 };
 
-struct interface
-{
-	char *name;
-	int tcp_socket;
-	int udp_socket;
-	int mark;
-};
-
 struct interface *uplinks;
 
-int send_raw(struct iphdr *p, u_int32_t mark);
+int send_raw(struct iphdr *p, uint32_t mark, int origin, struct interface *iface);
 
 int forward(struct pkt_struct* pkt);
 
-int reply_reset(struct packet p);
+int reply_reset(struct packet *p);
 
 int reset_lih(struct conn_struct* connection_data);
 
@@ -99,5 +91,9 @@ int define_expected_data(struct pkt_struct* pkt);
 int test_expected(struct conn_struct* connection_data, struct pkt_struct* pkt);
 
 int init_raw_sockets();
+
+void init_raw_sockets_backends(gpointer target, gpointer extra);
+
+gboolean init_raw_sockets_backends2(gpointer key, gpointer value, gpointer extra);
 
 #endif // _NETCODE_H_

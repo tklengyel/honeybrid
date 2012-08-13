@@ -84,7 +84,7 @@ unsigned short in_cksum(unsigned short *addr,int len)
  \return OK if the packet has been succesfully sent
  */
 
-int send_raw(struct iphdr *p,u_int32_t mark)
+int send_raw(struct iphdr *p, uint32_t mark, int origin, struct interface *iface)
 {
 	/*
 	#ifdef DEBUG
@@ -99,9 +99,10 @@ int send_raw(struct iphdr *p,u_int32_t mark)
 
 	/// This line seg fault...
 	///sprintf(logbuf, "send_raw():\tSending raw packet from %s to %s\n", inet_ntoa(*(struct in_addr*)p->saddr), inet_ntoa(*(struct in_addr*)p->daddr));
-	g_printerr("%s Sending raw packet to %s with mark %u\n", H(4), inet_ntoa(dst.sin_addr),mark);
 
-	if(ICONFIG("multi_uplink")<=1 || mark==0) {
+	g_printerr("%s Sending raw packet to %s with mark %u\n", H(4), inet_ntoa(dst.sin_addr), mark);
+
+	if(mark==0 || (ICONFIG("multi_uplink")<=1 && origin==HIH) || (origin==EXT && iface==NULL)) {
 			if(p->protocol==0x06)
 				sockettouse=tcp_rsd;
 			else if(p->protocol==0x11)
@@ -109,17 +110,27 @@ int send_raw(struct iphdr *p,u_int32_t mark)
 			else
 				return NOK;
 	} else {
-		int link;
-		for(link=0;link<ICONFIG("multi_uplink");link++) {
-			if(uplinks[link].mark==mark) {
-				if(p->protocol==0x06)
-	                                sockettouse=uplinks[link].tcp_socket;
-        	                else if(p->protocol==0x11)
-                	                sockettouse=uplinks[link].udp_socket;
-                        	else
-                                	return NOK;
-				break;
+		if(ICONFIG("multi_uplink")>1 && origin==HIH) {
+			int link;
+			for(link=0;link<ICONFIG("multi_uplink");link++) {
+				if(uplinks[link].mark==mark) {
+					if(p->protocol==0x06)
+	                        	        sockettouse=uplinks[link].tcp_socket;
+        	                	else if(p->protocol==0x11)
+                	                	sockettouse=uplinks[link].udp_socket;
+                        		else
+                                		return NOK;
+					break;
+				}
 			}
+		}
+		if(origin==EXT && iface!=NULL) {
+			if(p->protocol==0x06)
+                        	sockettouse=iface->tcp_socket;
+                        else if(p->protocol==0x11)
+                        	sockettouse=iface->udp_socket;
+                        else
+                        	return NOK;
 		}
 	}
 
@@ -176,13 +187,14 @@ int forward(struct pkt_struct* pkt)
 			udp_checksum((struct udp_packet*)fwd);
 		}
 
+		send_raw(fwd, pkt->mark, pkt->origin, NULL);
 	}
 	/*!If packet from EXT, we forward if to HIH*/
 	else if(pkt->origin == EXT)
 	{
-		g_printerr("%s forwarding packet to HIH\n", H(pkt->conn->id));
-		/*!If packet from HIH, we forward if to EXT with LIH source*/
+		g_printerr("%s forwarding packet to HIH %u on interface %s\n", H(pkt->conn->id), pkt->conn->hih.hihID, pkt->conn->hih.iface->name);
 		fwd->daddr = pkt->conn->hih.addr;
+
 		/*!If TCP, we update the destination port, the acknowledgement number if any, and the checksum*/
 		if(fwd->protocol==0x06)
 		{
@@ -199,11 +211,12 @@ int forward(struct pkt_struct* pkt)
 			((struct udp_packet*)fwd)->udp.dest = pkt->conn->hih.port;
 			udp_checksum((struct udp_packet*)fwd);
 		}
+
+		send_raw(fwd, pkt->conn->hih.hihID, pkt->origin, pkt->conn->hih.iface);
 	}
 
 	/*!we update the IP checksum and send the packect*/
 	hb_ip_checksum(fwd);
-	send_raw(fwd,pkt->mark);
 	free(fwd);
 	return OK;
 }
@@ -215,14 +228,14 @@ int forward(struct pkt_struct* pkt)
 
  */
 
-int reply_reset(struct packet p)
+int reply_reset(struct packet *p)
 {
 	int res;
 	struct tcp_packet* rst = malloc(sizeof(struct iphdr)+sizeof(struct tcphdr));
 	/*! reset only tcp connections */
-	if(p.ip->protocol!=0x06)
+	if(p->ip->protocol!=0x06)
 	{
-		g_printerr("%s Incorrect protocol: %d\n", H(4), p.ip->protocol);
+		g_printerr("%s Incorrect protocol: %d\n", H(4), p->ip->protocol);
 		return NOK;
 	}
 	/*! fill up the IP header */
@@ -235,18 +248,18 @@ int reply_reset(struct packet p)
 	rst->ip.ttl	= 0x40;
 	rst->ip.protocol= 0x06;
 	rst->ip.check	= 0x00;
-	rst->ip.saddr	= p.ip->daddr;
-	rst->ip.daddr	= p.ip->saddr;
+	rst->ip.saddr	= p->ip->daddr;
+	rst->ip.daddr	= p->ip->saddr;
 	hb_ip_checksum((struct iphdr*)rst);
 
 	/*! fill up the TCP header */
-	rst->tcp.source		= p.tcp->dest;
-	rst->tcp.dest		= p.tcp->source;
-	if(p.tcp->ack == 1)
-		rst->tcp.seq	= (p.tcp->ack_seq);
+	rst->tcp.source		= p->tcp->dest;
+	rst->tcp.dest		= p->tcp->source;
+	if(p->tcp->ack == 1)
+		rst->tcp.seq	= (p->tcp->ack_seq);
 	else
 		rst->tcp.seq	= 0x0;
-	rst->tcp.ack_seq	= htonl(ntohl(p.tcp->seq) + p.tcp->syn + p.tcp->fin + ntohs(p.ip->tot_len) - (p.ip->ihl << 2) - (p.tcp->doff << 2) );
+	rst->tcp.ack_seq	= htonl(ntohl(p->tcp->seq) + p->tcp->syn + p->tcp->fin + ntohs(p->ip->tot_len) - (p->ip->ihl << 2) - (p->tcp->doff << 2) );
 	rst->tcp.res1		= 0x0;
 	rst->tcp.doff		= 0x5;
 	rst->tcp.fin		= 0x0;
@@ -260,7 +273,7 @@ int reply_reset(struct packet p)
 	rst->tcp.check		= 0x00;
 	rst->tcp.urg_ptr	= 0x00;
 	tcp_checksum( rst );
-	res = send_raw((struct iphdr*)rst,0);
+	res = send_raw((struct iphdr*)rst,0,0,NULL);
 	free(rst);
 	return res;
 }
@@ -290,7 +303,7 @@ int reset_lih(struct conn_struct* conn)
 		g_printerr("%s no packet found from LIH\n", H(conn->id));
 	}else
 	/*! call reply_reset() with this packet*/
-		res = reply_reset(p);
+		res = reply_reset(&p);
 	return res;
 }
 
@@ -462,7 +475,7 @@ int init_raw_sockets()
 {
 
 	int opt=1;
-	/*! create the two raw sockets for UDP/IP and TCP/IP
+	/*! create the two raw sockets for UDP/IP and TCP/IP, packets sent through these will be routed normally
 	*/
 	tcp_rsd = socket (PF_INET, SOCK_RAW,IPPROTO_TCP);
 	udp_rsd = socket (PF_INET, SOCK_RAW,IPPROTO_UDP);
@@ -503,14 +516,47 @@ int init_raw_sockets()
 			if(setsockopt(uplinks[init].udp_socket,SOL_SOCKET,SO_BINDTODEVICE, uplinks[init].name, strlen(uplinks[init].name))==0)
                                 g_printerr("%s UDP socket binding on %s with ID %i successfull\n",H(0),uplinks[init].name,uplinks[init].udp_socket);
 			else {
-				g_printerr("%s UDP socket binding failed on %s with ID %i\n",H(0),uplinks[init].name,uplinks[init].tcp_socket);
+				g_printerr("%s UDP socket binding failed on %s with ID %i\n",H(0),uplinks[init].name,uplinks[init].udp_socket);
 				return NOK;
 			}
 		}
 
 	}
+
+	/* Open backend sockets for defined interfaces */
+	g_ptr_array_foreach(targets, (GFunc)init_raw_sockets_backends, (gpointer)&opt);
+
 	return OK;
 }
+
+/* Loop through each target */
+void init_raw_sockets_backends(gpointer target, gpointer opt) {
+	g_tree_foreach(((struct target *)target)->back_ifs, (GTraverseFunc)init_raw_sockets_backends2, opt);
+}
+
+/* Loop through each backend interface*/
+gboolean init_raw_sockets_backends2(gpointer key, gpointer value, gpointer opt) {
+	struct interface *iface=(struct interface *)value;
+	g_printerr("%s Opening backend sockets on interface %s\n", H(0),iface->name);
+        iface->tcp_socket = socket (PF_INET, SOCK_RAW,IPPROTO_TCP);
+        iface->udp_socket = socket (PF_INET, SOCK_RAW,IPPROTO_UDP);
+
+	setsockopt(iface->tcp_socket,IPPROTO_IP,IP_HDRINCL,(int*)opt,sizeof(*(int*)opt));
+        setsockopt(iface->udp_socket,IPPROTO_IP,IP_HDRINCL,(int*)opt,sizeof(*(int*)opt));
+
+	if(setsockopt(iface->tcp_socket,SOL_SOCKET,SO_BINDTODEVICE, iface->name, strlen(iface->name))==0)
+        	g_printerr("%s TCP socket binding on %s with ID %i successfull\n",H(0),iface->name,iface->tcp_socket);
+        else
+        	g_printerr("%s TCP socket binding failed on %s with ID %i\n",H(0),iface->name,iface->tcp_socket);
+
+       	if(setsockopt(iface->udp_socket,SOL_SOCKET,SO_BINDTODEVICE, iface->name, strlen(iface->name))==0)
+        	g_printerr("%s UDP socket binding on %s with ID %i successfull\n",H(0),iface->name,iface->udp_socket);
+        else
+        	g_printerr("%s UDP socket binding failed on %s with ID %i\n",H(0),iface->name,iface->udp_socket);
+
+	return 0;
+}
+
 
 /*!
  * test for a new tcp checksum function
