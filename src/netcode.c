@@ -84,7 +84,7 @@ unsigned short in_cksum(unsigned short *addr,int len)
  \return OK if the packet has been succesfully sent
  */
 
-int send_raw(struct iphdr *p, uint32_t mark, int origin, struct interface *iface)
+int send_raw(struct iphdr *p, uint32_t mark)
 {
 	/*
 	#ifdef DEBUG
@@ -92,17 +92,18 @@ int send_raw(struct iphdr *p, uint32_t mark, int origin, struct interface *iface
 	#endif
 	*/
 	struct sockaddr_in dst;
-	int bytes_sent;
+	unsigned int bytes_sent;
 	int sockettouse=0;
 	dst.sin_addr.s_addr = p->daddr;
 	dst.sin_family = AF_INET;
 
-	/// This line seg fault...
-	///sprintf(logbuf, "send_raw():\tSending raw packet from %s to %s\n", inet_ntoa(*(struct in_addr*)p->saddr), inet_ntoa(*(struct in_addr*)p->daddr));
+	struct tcphdr *test=(struct tcphdr*)(((char *)p) + (p->ihl<<2));
+	g_printerr("%s sending packet in raw socket: %s:%d -> ", H(4),inet_ntoa(*(struct in_addr *)&p->saddr),ntohs(test->source));
+	g_printerr("%s:%d\n", inet_ntoa(*(struct in_addr *)&p->daddr),ntohs(test->dest));
 
 	g_printerr("%s Sending raw packet to %s with mark %u\n", H(4), inet_ntoa(dst.sin_addr), mark);
 
-	if(mark==0 || (ICONFIG("multi_uplink")<=1 && origin==HIH) || (origin==EXT && iface==NULL)) {
+	if(mark==0) {
 			if(p->protocol==0x06)
 				sockettouse=tcp_rsd;
 			else if(p->protocol==0x11)
@@ -110,27 +111,17 @@ int send_raw(struct iphdr *p, uint32_t mark, int origin, struct interface *iface
 			else
 				return NOK;
 	} else {
-		if(ICONFIG("multi_uplink")>1 && origin==HIH) {
-			int link;
-			for(link=0;link<ICONFIG("multi_uplink");link++) {
-				if(uplinks[link].mark==mark) {
-					if(p->protocol==0x06)
-	                        	        sockettouse=uplinks[link].tcp_socket;
-        	                	else if(p->protocol==0x11)
-                	                	sockettouse=uplinks[link].udp_socket;
-                        		else
-                                		return NOK;
-					break;
-				}
+		int link;
+		for(link=0;link<ICONFIG("multi_uplink");link++) {
+			if(uplinks[link].mark==mark) {
+				if(p->protocol==0x06)
+                        	        sockettouse=uplinks[link].tcp_socket;
+       	                	else if(p->protocol==0x11)
+               	                	sockettouse=uplinks[link].udp_socket;
+                       		else
+                               		return NOK;
+				break;
 			}
-		}
-		if(origin==EXT && iface!=NULL) {
-			if(p->protocol==0x06)
-                        	sockettouse=iface->tcp_socket;
-                        else if(p->protocol==0x11)
-                        	sockettouse=iface->udp_socket;
-                        else
-                        	return NOK;
 		}
 	}
 
@@ -147,7 +138,7 @@ int send_raw(struct iphdr *p, uint32_t mark, int origin, struct interface *iface
 		g_printerr("%s Packet not sent\n", H(4));
 		return NOK;
 	} else {
-		g_printerr("%s Packet sent on socket %i\n",H(4),sockettouse);
+		g_printerr("%s Packet sent on socket %i, %u bytes\n",H(4),sockettouse, bytes_sent);
 	}
 	return OK;
 }
@@ -166,7 +157,9 @@ int forward(struct pkt_struct* pkt)
 	struct iphdr* fwd = malloc( ntohs(pkt->packet.ip->tot_len) );
 	if(&fwd == (void*)0x1)
 		return NOK;
-	memcpy(fwd,pkt->packet.ip, ntohs(pkt->packet.ip->tot_len) );
+
+	memcpy(fwd, pkt->packet.ip, ntohs(pkt->packet.ip->tot_len) );
+
 	/*!If packet from HIH, we forward if to EXT with LIH source*/
 	if(pkt->origin == HIH)
 	{
@@ -187,7 +180,6 @@ int forward(struct pkt_struct* pkt)
 			udp_checksum((struct udp_packet*)fwd);
 		}
 
-		send_raw(fwd, pkt->mark, pkt->origin, NULL);
 	}
 	/*!If packet from EXT, we forward if to HIH*/
 	else if(pkt->origin == EXT)
@@ -212,11 +204,11 @@ int forward(struct pkt_struct* pkt)
 			udp_checksum((struct udp_packet*)fwd);
 		}
 
-		send_raw(fwd, pkt->conn->hih.hihID, pkt->origin, pkt->conn->hih.iface);
 	}
 
-	/*!we update the IP checksum and send the packect*/
 	hb_ip_checksum(fwd);
+	send_raw(fwd, pkt->mark);
+
 	free(fwd);
 	return OK;
 }
@@ -273,7 +265,7 @@ int reply_reset(struct packet *p)
 	rst->tcp.check		= 0x00;
 	rst->tcp.urg_ptr	= 0x00;
 	tcp_checksum( rst );
-	res = send_raw((struct iphdr*)rst,0,0,NULL);
+	res = send_raw((struct iphdr*)rst,0);
 	free(rst);
 	return res;
 }
@@ -588,9 +580,34 @@ int tcp_checksum(struct tcp_packet* pkt)
 
 	memcpy(&chk_p.tcp, &pkt->tcp, sizeof(struct tcphdr));
 	memcpy(&chk_p.payload, &pkt->payload, len_tcp - sizeof(struct tcphdr));
- 
+
 	pkt->tcp.check=(unsigned short)in_cksum((unsigned short *)&chk_p, sizeof(struct pseudotcphdr) + len_tcp);
 
 	return OK;
+}
+
+/*! addr2int
+ * \brief Convert an IP address from string to int
+ * \param[in] the IP address (string format)
+ *
+ * \return the IP address (int format)
+ */
+int addr2int(char *address) {
+        gchar **addr;
+        int intaddr;
+
+        if (address == NULL) {
+                g_printerr("%s Error, null address can't be converted!\n", H(0));
+                return -1;
+        }
+
+        addr = g_strsplit ( address, ".", 0 );
+
+        intaddr =  atoi(addr[0]) << 24;
+        intaddr += atoi(addr[1]) << 16;
+        intaddr += atoi(addr[2]) << 8;
+        intaddr += atoi(addr[3]);
+        g_strfreev(addr);
+        return intaddr;
 }
 

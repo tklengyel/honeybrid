@@ -194,6 +194,7 @@ struct conn_struct
 	struct expected_data_struct expected_data;
 	GStaticRWLock lock;
 	struct hih_struct hih;
+	int initiator; // who initiated the conn? EXT/LIH/HIH
 
 	struct target *target;
 
@@ -250,4 +251,13 @@ struct DE_submit_args
 	int packetposition;
 };
 
+/*! \brief Structure to receive verdict from process_packet in nfq_cb
+ \param statement, 0 for reject, 1 for accept
+ \param mark, the netfilter mark to set on the packet (if any)
+ */
+
+struct verdict {
+	u_int32_t statement;
+	u_int32_t mark;
+};
 #endif

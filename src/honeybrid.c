@@ -1,6 +1,4 @@
 /*
- * $Id: honeybrid.c 714 2009-09-04 12:39:42Z robin $
- *
  * This file is part of the honeybrid project.
  *
  * 2007-2009 University of Maryland (http://www.umd.edu)
@@ -78,6 +76,7 @@
 	\Author J. Vehent, 2007
 	\Author Thomas Coquelin, 2008
 	\Author Robin Berthier, 2007-2009
+	\Author Tamas K Lengyel, 2012
  */
 
 #include <sys/param.h>
@@ -185,10 +184,12 @@ int close_thread()
  \brief Function to free memory in the different table created */
 int free_table(gchar *key, gchar *value, gpointer data)
 {
-	if (key != NULL)
+	if (key != NULL) {
 		g_free (key);
-	if (value != NULL)
+	}
+	if (value != NULL) {
 		g_free (value);
+	}
 	return TRUE;
 
 }
@@ -209,7 +210,7 @@ int free_hash(gchar *key, GHashTable *value, gpointer data)
  \brief Destroy the different hashes used by honeybrid */
 int close_hash()
 {
-	/*! Destroy hash tables 
+	/*! Destroy hash tables
 	 */
 	if (log_table != NULL) {
 		g_printerr("%s: Destroying table log_table\n", __func__);
@@ -528,9 +529,14 @@ init_variables()
  \param[in] tb a Netfilter Queue structure that contain both the packet and the metadatas
  \param[in] *mark a pointer to the mark field to be set on the packet
  \return statement = 1 if the packet should be accepted or 0 if the packet has to be dropped. Default is to drop. */
-static u_int32_t 
+struct verdict *
 process_packet(struct nfq_data *tb)
 {
+
+	/*! We create the verdict structure to return */
+	struct verdict *to_return=malloc(sizeof(struct verdict));
+	to_return->statement=0; // by defult we reject the packet
+
 	/*! We create a new temporary connection structure */
 	struct conn_struct conn_init;
         conn_init.state = INVALID;	/* by default the connection is invalid */
@@ -538,16 +544,15 @@ process_packet(struct nfq_data *tb)
         struct conn_struct * conn = &conn_init;
 
 	struct pkt_struct * pkt = (struct pkt_struct *) malloc(sizeof(struct pkt_struct)); /* \todo TODO: check that it's correctly freed */
-	int statement = 0;		/* by default we reject this packet */
 	unsigned char *nf_packet;
 	struct in_addr in;
-	u_int32_t mark=nfq_get_nfmark(tb);	/* initiliaze it to current packet's mark, might get updated later */
+	to_return->mark=nfq_get_nfmark(tb);	/* initiliaze it to current packet's mark, might get updated later */
 
 	/*! extract ip header from packet payload */
 	int size;
 	size = nfq_get_payload(tb, &nf_packet);
 	if(size < 0) {
-		return statement = 0;
+		return to_return;
 	}
 
 	in.s_addr=((struct iphdr*)nf_packet)->saddr;
@@ -557,28 +562,31 @@ process_packet(struct nfq_data *tb)
 		inet_ntoa(in),
 		lookup_proto(((struct iphdr*)nf_packet)->protocol),
 		size,
-		mark);
+		to_return->mark);
 
 	/*! check if protocol is invalid (not TCP or UDP) */
 	if ((((struct iphdr*)nf_packet)->protocol != 6) && (((struct iphdr*)nf_packet)->protocol != 17)) {
 		g_printerr("%s Incorrect protocol: %d, packet dropped\n", H(conn->id), (((struct iphdr*)nf_packet)->protocol));
-		return statement = 0;
+		return to_return;
 	}
 
 	/*! Initialize the packet structure (into pkt) and find the origin of the packet */
-	if (init_pkt(nf_packet, pkt, mark) == NOK) {
+	if (init_pkt(nf_packet, pkt, to_return->mark) == NOK) {
 		g_printerr("%s Packet structure couldn't be initialized, packet dropped\n", H(conn->id));
-		return statement = 0;
+		return to_return;
 	}
 
 	/*! Initialize the connection structure (into conn) and get the state of the connection */
 	if (init_conn(pkt, &conn) == NOK) {
 		g_printerr("%s Connection structure couldn't be initialized, packet dropped\n", H(conn->id));
-		return statement = 0;
+		return to_return;
 	}
 
-	if(conn->mark != pkt->mark)
-		g_printerr("%s Connection needs to be marked %u!\n",H(conn->id),pkt->mark);
+	if(conn->mark != pkt->mark) {
+		g_printerr("%s Packet marked as %u!\n",H(conn->id),conn->mark);
+		pkt->mark=conn->mark;
+		to_return->mark=pkt->mark;
+	}
 
 	#ifdef DEBUG
 	g_printerr("%s Origin: %s %s, %i bytes\n",
@@ -602,7 +610,7 @@ process_packet(struct nfq_data *tb)
 			reply_reset( &(pkt->packet) );
 		#endif
 		free_pkt(pkt);
-		return statement = 0;
+		return to_return;
 	}
 
 	if ( conn->state == DROP ) {
@@ -614,8 +622,10 @@ process_packet(struct nfq_data *tb)
 				reply_reset( &(pkt->packet) );
 		#endif
 		free_pkt(pkt);
-		return statement = 0;
+		return to_return;
 	}
+
+	printf("WHAT TO DO? ORIGIN: %i AND STATE %i AND MARK %u\n", pkt->origin, conn->state, pkt->mark);
 
 	switch( pkt->origin ) {
 	/*! Packet is from the low interaction honeypot */
@@ -628,27 +638,27 @@ process_packet(struct nfq_data *tb)
 			store_pkt(conn, pkt);
 			//conn->state = CONTROL;
 			//switch_state(conn, CONTROL); //Now it's when the connection is created that the state is on CONTROL for LIH
-			statement = 1;	//DE_process_packet(pkt);	/*! For now, we don't analyze packets from LIH */
+			to_return->statement = 1;	//DE_process_packet(pkt);	/*! For now, we don't analyze packets from LIH */
 			break;
 		case DECISION:
 			if(pkt->packet.ip->protocol == 0x06 && pkt->packet.tcp->syn!=0) {
 				conn->hih.lih_syn_seq = ntohl(pkt->packet.tcp->seq);
 			}
 			store_pkt(conn, pkt);
-			statement = 1;	//DE_process_packet(pkt);	/*! For now, we don't analyze packets from LIH */
+			to_return->statement = 1;	//DE_process_packet(pkt);	/*! For now, we don't analyze packets from LIH */
 			break;
 		case PROXY:
 			#ifdef DEBUG
 			g_printerr("%s Packet from LIH proxied directly to its destination\n", H(conn->id));
 			#endif
-			statement = 1;
+			to_return->statement = 1;
 			break;
 		case CONTROL:
 			if(pkt->packet.ip->protocol == 0x06 && pkt->packet.tcp->syn!=0) {
 				conn->hih.lih_syn_seq = ntohl(pkt->packet.tcp->seq);
 			}
 			store_pkt(conn, pkt);
-			statement = DE_process_packet(pkt);
+			to_return->statement = DE_process_packet(pkt);
 			break;
 		default:
 			g_printerr("%s Packet from LIH at wrong state => reset %s\n", H(conn->id), inet_ntoa(in));
@@ -670,7 +680,7 @@ process_packet(struct nfq_data *tb)
 			replay(conn, pkt );
 			break;
 		case FORWARD:
-			forward(pkt );
+			forward(pkt);
 			free_pkt(pkt);
 			break;
 		/*! This one should never occur because PROXY are only between EXT and LIH... but we never know! */
@@ -678,10 +688,10 @@ process_packet(struct nfq_data *tb)
 			#ifdef DEBUG
 			g_printerr("%s Packet from EXT proxied directly to its destination\n", H(conn->id));
 			#endif
-			statement = 1;
+			to_return->statement = 1;
 			break;
 		case CONTROL:
-			statement = DE_process_packet(pkt);
+			to_return->statement = DE_process_packet(pkt);
 			break;
 		default:
 			/*! We are surely in the INIT state, so the HIH is initiating a connection to outside. We reset or control it */
@@ -690,7 +700,7 @@ process_packet(struct nfq_data *tb)
 				if(pkt->packet.ip->protocol==0x06) {
 					reply_reset( &(pkt->packet) );
 				}
-				statement = 0;
+				to_return->statement = 0;
 				//conn->state = DROP;
 				switch_state(conn, DROP);
 				free_pkt(pkt);
@@ -698,7 +708,7 @@ process_packet(struct nfq_data *tb)
 				g_printerr("%s Packet from HIH at wrong state, so we control it (%s)\n", H(conn->id), inet_ntoa(in));
 				//conn->state = CONTROL;
 				switch_state(conn, CONTROL);
-				statement = DE_process_packet(pkt);
+				to_return->statement = DE_process_packet(pkt);
 			}
 			break;
 		}
@@ -711,28 +721,34 @@ process_packet(struct nfq_data *tb)
 			store_pkt(conn, pkt);
 			//conn->state = DECISION;
 			g_string_assign(conn->decision_rule, ";");
-			statement = DE_process_packet(pkt);
+			to_return->statement = DE_process_packet(pkt);
 
 			break;
 		case DECISION:
 			store_pkt(conn, pkt);
-			statement = DE_process_packet(pkt);
+			to_return->statement = DE_process_packet(pkt);
 			break;
 		case FORWARD:
-			forward(pkt );
+			forward(pkt);
 			free_pkt(pkt);
 			break;
 		case PROXY:
-			#ifdef DEBUG
-			g_printerr("%s Packet from EXT proxied directly to its destination\n", H(conn->id));
-			#endif
-			statement = 1;
+			//#ifdef DEBUG
+			g_printerr("%s Packet from EXT proxied directly to its destination (PROXY)\n", H(conn->id));
+			//#endif
+			to_return->statement = 1;
 			break;
 		case CONTROL:
-			#ifdef DEBUG
-			g_printerr("%s Packet from EXT proxied directly to its destination\n", H(conn->id));
-			#endif
-			statement = 1;
+			//#ifdef DEBUG
+			g_printerr("%s Packet from EXT proxied directly to its destination (CONTROL)\n", H(conn->id));
+			//#endif
+			//if(pkt->mark == 0) {
+				// route packet normally
+				to_return->statement = 1;
+			//} else {
+				// packet has a mark set, it needs to be forced to an interface
+			//	forward(pkt);
+			//}
 			break;
 		default:
 			store_pkt(conn, pkt);
@@ -741,9 +757,7 @@ process_packet(struct nfq_data *tb)
 		break;
 	}
 
-	//g_printerr("\nMark says %u and output device will be %u\n\n",*mark, nfq_get_outdev(tb));
-
-	return statement;
+	return to_return;
 }
 
 
@@ -762,9 +776,11 @@ static int q_cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data
 	/* We need to duplicate whatever mark was set on the LIH connection to forwarded connections to HIH */
 
 	/*! launch process function */
-	u_int32_t statement = process_packet(nfa);
+	struct verdict *decision = process_packet(nfa);
 
-	if(statement == 1) {
+	printf("Final result: %u and set mark to %u\n", decision->statement, decision->mark);
+
+	if(decision->statement == 1) {
 		/*! nfq_set_verdict2
 		\brief set a decision NF_ACCEPT or NF_DROP on the packet and put a mark on it
 		 *
@@ -779,7 +795,7 @@ static int q_cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data
 
 		/*! ACCEPT the packet if the statement is 1 */
 		/* Also copy whatever mark has been on the packet initially, required for multi-uplink setups */
-		return nfq_set_verdict2(qh, id, NF_ACCEPT, nfq_get_nfmark(nfa), 0, NULL);
+		return nfq_set_verdict2(qh, id, NF_ACCEPT, decision->mark, 0, NULL);
 	} else {
 		/*! DROP the packet if the statement is 0 (or something else than 1) */
 		return nfq_set_verdict2(qh, id, NF_DROP, nfq_get_nfmark(nfa), 0, NULL);
@@ -1012,7 +1028,7 @@ init_signal()
 	sigfillset(&sa_rotate_log.sa_mask);
 
 	/*! SIGUSR1*/
-	if (sigaction(SIGUSR1, &sa_rotate_log, NULL) != 0) 
+	if (sigaction(SIGUSR1, &sa_rotate_log, NULL) != 0)
 		errx(1, "%s: Failed to install sighandler for SIGUSR1", __func__);
 }
 
@@ -1023,9 +1039,7 @@ init_signal()
  \param[in] argv, table with arguments
  *
  \return 0 if exit with success, anything else if not */
-int 
-main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
 	int argument;
 	char *config_file_name = "";
 	threading = OK;
@@ -1033,10 +1047,9 @@ main(int argc, char *argv[])
 	int fdebug;
 	int daemonize=0;
 
-
 	unsigned short int queuenum=0;
 	#ifdef HAVE_LIBEV
-	//struct nfq_handle *h; 
+	//struct nfq_handle *h;
 	struct nfq_q_handle *qh=NULL;
 	int my_nfq_fd;
 	#endif
@@ -1110,7 +1123,7 @@ main(int argc, char *argv[])
 					* connection left alone (DOES NOT MATCH)
 				 - errors
 					* NF_QUEUE restarts
-					* expected data	 
+					* expected data
 				 - top ports?
 				 - top IP addresses?
 				 */
@@ -1175,7 +1188,7 @@ main(int argc, char *argv[])
 		}
         }
 
-	
+
 	if(ICONFIG("output")==4)
 		#ifdef HAVE_MYSQL
                 init_mysql_log();
@@ -1194,7 +1207,7 @@ main(int argc, char *argv[])
 
 	#ifdef DE_THREAD
 	/*! init the Decision Engine thread */
-	if( ( thread_de = g_thread_create_full ((void *)DE_submit_packet, NULL, 0, TRUE, TRUE, 0, NULL)) == NULL) 
+	if( ( thread_de = g_thread_create_full ((void *)DE_submit_packet, NULL, 0, TRUE, TRUE, 0, NULL)) == NULL)
 		errx(1, "%s: Unable to start the decision engine thread", __func__);
 	else
 		g_printerr("%s: Decision engine thread started\n", __func__);
@@ -1203,11 +1216,11 @@ main(int argc, char *argv[])
 	/*! initiate outgoing connection control => no longer needed
 	init_control(); */
 	/*! initiate decision engine modules => done automatically in rules.y, except for init_mod_hash: */
-	init_modules(); 
+	init_modules();
 
-	/*! create the two raw sockets for UDP/IP and TCP/IP */
+	/*! create the raw sockets for UDP/IP and TCP/IP */
 	init_raw_sockets();
-	if(tcp_rsd == 0 || udp_rsd == 0) 
+	if(tcp_rsd == 0 || udp_rsd == 0)
 		errx(1, "%s: failed to create the raw sockets", __func__);
 
 	#ifdef HAVE_LIBEV

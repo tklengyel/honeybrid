@@ -41,7 +41,7 @@ struct mod_args
 {
 	struct node *node;
 	struct pkt_struct *pkt;
-	char *backend_test, *backend_use;
+	uint32_t backend_test, backend_use;
 };
 
 

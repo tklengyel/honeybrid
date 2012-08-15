@@ -70,7 +70,7 @@ struct tcp_chk_packet
 
 struct interface *uplinks;
 
-int send_raw(struct iphdr *p, uint32_t mark, int origin, struct interface *iface);
+int send_raw(struct iphdr *p, uint32_t mark);
 
 int forward(struct pkt_struct* pkt);
 
@@ -95,5 +95,7 @@ int init_raw_sockets();
 void init_raw_sockets_backends(gpointer target, gpointer extra);
 
 gboolean init_raw_sockets_backends2(gpointer key, gpointer value, gpointer extra);
+
+int addr2int(char *address);
 
 #endif // _NETCODE_H_

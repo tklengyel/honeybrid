@@ -308,6 +308,7 @@ int init_pkt( unsigned char *nf_packet, struct pkt_struct *pkt, u_int32_t mark)
 
 		/* The volume of data is the total size of the packet minus the size of the IP and TCP headers */
 		pkt->data = ntohs(pkt->packet.ip->tot_len) - (pkt->packet.ip->ihl << 2) - (pkt->packet.tcp->doff << 2);
+
 	} else if( pkt->packet.ip->protocol == 0x11 ) 	/* 0x11 == 17 */
 	{
 		pkt->packet.payload = (char*)pkt->packet.udp + 8;
@@ -381,7 +382,7 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 	char *key1 = malloc(64);
         sprintf(key1, "%s:%s", pkt->key_dst, pkt->key_src);
 
-	//g_printerr("%s Looking for connections between %s and %s!\n", H(0), pkt->key_src, pkt->key_dst);
+	g_printerr("%s Looking for connections between %s and %s!\n", H(0), pkt->key_src, pkt->key_dst);
 
 	int update = 0;
 	int create = 0;
@@ -397,7 +398,12 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 	} else if (TRUE == g_tree_lookup_extended(conn_tree, key1, NULL,(gpointer *) conn)) {
 		/* Structure found! It means destination is EXT and source is INT */
 		snprintf(pkt->key, 64, "%s", key1);
-		pkt->origin = LIH;
+
+		// But is it the LIH or a HIH?
+		if((*conn)->initiator==LIH)
+			pkt->origin = LIH;
+		else
+			pkt->origin = HIH;
 		update = 1;
 	} else {
 		char *value;
@@ -412,7 +418,7 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 			/* split[0]=IP, split[1]=port, split[2]=mark */
 			pkt->mark=(uint32_t)atoi(split[2]);
 
-			snprintf(pkt->key, 64, "%s:%s:%s", pkt->key_dst, split[0],split[1]);
+			snprintf(pkt->key, 64, "%s:%s:%s", pkt->key_dst, split[0], split[1]);
 
 			g_printerr("%s ====== Corresponding LIH session: %s, Mark: %u ==== \n",H(0),pkt->key,pkt->mark);
 
@@ -421,12 +427,52 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 
 			if (FALSE == g_tree_lookup_extended(conn_tree, pkt->key, NULL,(gpointer *) conn)) {
 				g_printerr("%s ~~~~ Error! Related connection structure can't be found with key %s ~~~~~\n", H(0), pkt->key);
+				update=0;
 				create=1; // segfaulted when this event occured and there was no create!
 			}
 		} else {
-			/* Still nothing found, we need to initiate a new structure. We don't know yet if the source is EXT or INT... 
-			   pcap filter defined in targets will help us figuring this out */
-			create = 1;
+
+			/* It could still be a packet before DNAT that needs to be sent to clone */
+			if(ICONFIG("multi_uplink")==1) {
+				char *uplink_ip=config_lookup("uplink_ip");
+				if(uplink_ip != NULL) {
+					char **split = g_strsplit(pkt->key_dst, ":", 0 );
+
+					if(!strcmp(split[0], uplink_ip)) {
+						uint32_t i;
+						for (i = 0; i < targets->len; i++) {
+							struct target *t=g_ptr_array_index(targets,i);
+							uint32_t backends=g_tree_nnodes(t->back_handlers);
+							while(backends>0) {
+
+								char *back_ip=addr_ntoa((struct addr *)g_tree_lookup(t->back_handlers, &backends));
+								snprintf(pkt->key, 64, "%s:%s:%s", pkt->key_src, back_ip, split[1]);
+								printf("Looping through back ips: %s\n", pkt->key);
+								if(TRUE == g_tree_lookup_extended(conn_tree, pkt->key, NULL,(gpointer *) conn)) {
+		                                                        g_printerr("YES, connection found with mark: %u\n", (*conn)->mark);
+                		                                        update = 1;
+									break;
+								}
+								backends--;
+							}
+
+							if(update) break;
+						}
+
+						if(!update)
+							create = 1;
+					} else {
+						// No connection was found with _any_ of the backends, its not a pre-DNAT packet
+						create =1;
+					}
+				}
+			} else if(ICONFIG("multi_uplink")>1) {
+				/* T0MA TODO! */
+			} else {
+				/* Still nothing found, we need to initiate a new structure. We don't know yet if the source is EXT or INT...
+				   pcap filter defined in targets will help us figuring this out */
+				create = 1;
+			}
 		}
 	}
 
@@ -436,7 +482,8 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 	if (create == 1) {
 		/*! The key could not be found, so we need to figure out where this packet comes from */
 		if(pkt->packet.ip->protocol == 0x06 && pkt->packet.tcp->syn == 0 ) {
-			g_printerr("%s ~~~~ TCP packet without SYN: we drop ~~~~\n", H(0));
+
+			g_printerr("%s ~~~~ TCP packet without SYN: we drop %s -> %s~~~~\n", H(0), pkt->key_src, pkt->key_dst);
 			return NOK;
 		}
 
@@ -492,9 +539,7 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 					/* Note: this honeypot might be defined later in another target... */
 				}
 
-
-				/* TODO: T0MA FIX */
-				if ( g_tree_lookup( ((struct target *)g_ptr_array_index(targets,i))->back_ips,src_addr) != NULL )
+				if ( g_tree_lookup( ((struct target *)g_ptr_array_index(targets,i))->back_ips, inet_ntoa(*(struct in_addr*)&pkt->packet.ip->saddr)) != NULL )
 				{
 					g_printerr("%s This packet matches a HIH honeypot IP address for target %d\n", H(0), i);
 					found = i;
@@ -553,6 +598,7 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 			conn_init->state		 	= CONTROL;
 		else
 			conn_init->state		 	= INIT;
+		conn_init->initiator				= pkt->origin;
 		conn_init->count_data_pkt_from_lih 		= 0;
 		conn_init->count_data_pkt_from_intruder 	= 0;
 		conn_init->BUFFER				= NULL;
@@ -633,8 +679,8 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 		(*conn)->access_time = curtime;
 		if(pkt->origin == EXT)
 			(*conn)->count_data_pkt_from_intruder += 1;
-		else
-			(*conn)->mark=pkt->mark; /* We only take marks from internal IP's */
+		//else
+		//	(*conn)->mark=pkt->mark; /* We only take marks from internal IP's.. */
 
 		pkt->conn = *conn;
 		g_static_rw_lock_writer_unlock (&((*conn)->lock));
@@ -659,33 +705,6 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 	*/
 	return OK;
 }
-
-/*! addr2int
- * \brief Convert an IP address from string to int
- * \param[in] the IP address (string format)
- *
- * \return the IP address (int format)
- */
-int addr2int(char *address) {
-        gchar **addr;
-	int intaddr;
-
-	if (address == NULL) {
-		g_printerr("%s Error, null address can't be converted!\n", H(0));
-		return -1;
-	}
-
-        addr = g_strsplit ( address, ".", 0 );
-
-        intaddr =  atoi(addr[0]) << 24;
-        intaddr += atoi(addr[1]) << 16;
-        intaddr += atoi(addr[2]) << 8;
-        intaddr += atoi(addr[3]);
-	g_strfreev(addr);
-	return intaddr;
-}
-
-
 
 /*! test_honeypot_addr
  *
@@ -723,17 +742,17 @@ int test_honeypot_addr( char *key, int list ) {
 	g_strfreev(addr);
 	g_strfreev(byte);
 	g_string_free(testkey,TRUE);
-	
+
 	/*! We test which list we want to search */
-	if ( list == LIH && g_hash_table_lookup(low_honeypot_addr, &intaddr) != NULL) 
+	if ( list == LIH && g_hash_table_lookup(low_honeypot_addr, &intaddr) != NULL)
 	/*! if the IP is detected in the list of low honeypot addresses */
 		return OK;
 	/*! We then test by increasing the size of the network progressively: */
-	if ( list == LIH && g_hash_table_lookup(low_honeypot_addr, &intaddrC) != NULL) 
+	if ( list == LIH && g_hash_table_lookup(low_honeypot_addr, &intaddrC) != NULL)
 		return OK;
-	if ( list == LIH && g_hash_table_lookup(low_honeypot_addr, &intaddrB) != NULL) 
+	if ( list == LIH && g_hash_table_lookup(low_honeypot_addr, &intaddrB) != NULL)
 		return OK;
-	if ( list == LIH && g_hash_table_lookup(low_honeypot_addr, &intaddrA) != NULL) 
+	if ( list == LIH && g_hash_table_lookup(low_honeypot_addr, &intaddrA) != NULL)
 		return OK;
 
 	if( list == HIH && g_hash_table_lookup(high_honeypot_addr, &intaddr) != NULL)
@@ -753,7 +772,7 @@ int test_honeypot_addr( char *key, int list ) {
 char * lookup_honeypot_addr( gchar *testkey, int list ) {
 
 	g_printerr("%s Looking up %s in list %d (LIH == 1, HIH == 2)\n", H(5), testkey, list);
-	
+
 	/*! We test which list we want to search */
 	if ( list == LIH ) {
 		/*! ROBIN 2009-02-25: small hack to include full network definition */

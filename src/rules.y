@@ -111,6 +111,13 @@ parameter: WORD EQ WORD {
 		g_hash_table_insert(config, $1, s);
 		g_printerr("\t'%s' => '%d'\n", $1, $3);
         }
+	|  WORD EQ QUOTE honeynet QUOTE {
+		char *s = malloc(snprintf(NULL, 0, "%s", addr_ntoa($4) + 1));
+		sprintf(s, "%s", addr_ntoa($4));
+                g_hash_table_insert(config, $1, s);
+                g_printerr("\tDefining IP: '%s' => '%s'\n", $1, s);
+		free($4);
+        }
 	;
 
 
