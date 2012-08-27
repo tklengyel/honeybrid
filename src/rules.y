@@ -248,6 +248,7 @@ rule: 	{
 		/* T0MA TODO: Create interface destroy function and hook it in here! */
 		$$->back_ifs = g_tree_new((GCompareFunc)intcmp);
 		/* Since the trees need pointers for the keys (uints), they need to live somewhere */
+		$$->backendIDs=NULL;
 		uint32_t *startID=malloc(sizeof(uint32_t));
 		*startID=0;
 		$$->backendIDs=g_slist_prepend($$->backendIDs, (gpointer)startID);

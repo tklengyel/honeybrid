@@ -382,13 +382,12 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 	char *key1 = malloc(64);
         sprintf(key1, "%s:%s", pkt->key_dst, pkt->key_src);
 
-	g_printerr("%s Looking for connections between %s and %s!\n", H(0), pkt->key_src, pkt->key_dst);
+	//g_printerr("%s Looking for connections between %s and %s!\n", H(0), pkt->key_src, pkt->key_dst);
 
 	int update = 0;
 	int create = 0;
 
 	/* Check first if a structure already exists for direction 0 */
-	/* Assumption: connection structures are created only for direction EXT -> INT */
 	if (TRUE == g_tree_lookup_extended(conn_tree, key0, NULL,(gpointer *) conn)) {
 		/* Structure found! It means source is EXT */
 		snprintf(pkt->key, 64, "%s", key0);
@@ -447,9 +446,9 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 
 								char *back_ip=addr_ntoa((struct addr *)g_tree_lookup(t->back_handlers, &backends));
 								snprintf(pkt->key, 64, "%s:%s:%s", pkt->key_src, back_ip, split[1]);
-								printf("Looping through back ips: %s\n", pkt->key);
+								//printf("Looping through back ips: %s\n", pkt->key);
 								if(TRUE == g_tree_lookup_extended(conn_tree, pkt->key, NULL,(gpointer *) conn)) {
-		                                                        g_printerr("YES, connection found with mark: %u\n", (*conn)->mark);
+		                                                        //g_printerr("YES, connection found with mark: %u\n", (*conn)->mark);
                 		                                        update = 1;
 									break;
 								}
@@ -654,7 +653,7 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 		if (TRUE != g_tree_lookup_extended(conn_tree, pkt->key, NULL,(gpointer *) conn))
 			return NOK;
 
-		g_printerr("%s Key inserted to to conn_tree %s with mark %u \n", H(0),pkt->key, conn_init->mark);
+		g_printerr("%s Key inserted to conn_tree %s with mark %u \n", H(0),pkt->key, conn_init->mark);
 		pkt->conn = conn_init;
 	}
 

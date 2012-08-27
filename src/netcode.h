@@ -70,7 +70,7 @@ struct tcp_chk_packet
 
 struct interface *uplinks;
 
-int send_raw(struct iphdr *p, uint32_t mark);
+int send_raw(struct iphdr *p, uint32_t mark, struct interface *iface);
 
 int forward(struct pkt_struct* pkt);
 

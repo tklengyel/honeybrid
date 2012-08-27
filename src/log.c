@@ -440,7 +440,11 @@ void connection_log(struct conn_struct *conn)
 		conn->dionaeaDownload,
 		conn->dionaeaDownloadTime
 		);
-		fprintf(logfd, "%s", logbuf);
+
+		if(ICONFIG("output")==2)
+			printf("%s", logbuf);
+		else
+			fprintf(logfd, "%s", logbuf);
         } else {
 		sprintf(logbuf,"%s %.3f %d %s %s:%s -> %s:%s %d %d %s ** %d %s %s %s %s %s | %i %i \n",
 		conn->start_timestamp->str,
@@ -464,8 +468,14 @@ void connection_log(struct conn_struct *conn)
 		conn->dionaeaDownload,
 		conn->dionaeaDownloadTime
 		);
-		fprintf(logfd, "%s", logbuf);
+
+		if(ICONFIG("output")==2)
+			printf("%s", logbuf);
+		else
+			fprintf(logfd, "%s", logbuf);
 	}
+
+
 	///g_printerr("%s",logbuf);
 
 	g_free(logbuf);

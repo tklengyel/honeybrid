@@ -99,8 +99,8 @@
 #include <glib.h>
 #include <unistd.h>
 #include <execinfo.h>
+#include <config.h>
 
-#include "../config.h"
 #include "tables.h"
 #include "honeybrid.h"
 #include "netcode.h"
@@ -276,6 +276,7 @@ int close_hash()
  \brief Function to free memory taken by conn_tree */
 int close_conn_tree()
 {
+
 	/*! clean the memory
 	 * traverse the B-Tree to remove the singly linked lists and then destroy the B-Tree
 	 */
@@ -295,9 +296,15 @@ int close_conn_tree()
 	g_tree_destroy(conn_tree);
 
 	/*! close log file */
-	close_connection_log();
+	if(ICONFIG("output")!=2 && ICONFIG("output")!=4)
+		close_connection_log();
+
 
 	return 0;
+}
+
+void free_backendIDs(gpointer data, gpointer user_data) {
+	free((uint32_t *)data);
 }
 
 void
@@ -309,6 +316,7 @@ free_target(struct target *t, gpointer user_data)
 	g_tree_destroy(t->back_rules);
 	g_tree_destroy(t->back_ifs);
 	g_tree_destroy(t->back_ips);
+	g_slist_foreach(t->backendIDs, (GFunc)free_backendIDs, NULL);
 	g_slist_free(t->backendIDs);
 	if (t->front_rule != NULL)
 		g_free(t->front_rule);
@@ -336,26 +344,25 @@ close_all(void)
 	/*! delete lock file (only if the process ran as a daemon) */
 	if ( ICONFIG("output") != 2 )
         {
-		if (unlink(PIDFILE) < 0) 
+		if (unlink(PIDFILE) < 0)
 			g_printerr("%s: Error when removing lock file\n", __func__);
 	}
 
 	/*! wait for thread to close */
-	if (close_thread() < 0) 
+	if (close_thread() < 0)
 		g_printerr("%s: Error when waiting for threads to close\n", __func__);
 
+	/*! delete conn_tree */
+	if (close_conn_tree() < 0)
+		g_printerr("%s: Error when closing conn_tree\n", __func__);
+
 	/*! delete hashes */
-	if (close_hash() < 0) 
+	if (close_hash() < 0)
 		g_printerr("%s: Error when closing hashes\n", __func__);
 
 	if (close_target() <0)
 		g_printerr("%s: Error when closing targets\n", __func__);
 
-	/*! delete conn_tree */
-	if (close_conn_tree() < 0) 
-		g_printerr("%s: Error when closing conn_tree\n", __func__);
-
-	closelog();
 }
 
 /*! term_signal_handler
@@ -445,7 +452,7 @@ init_parser(char *filename)
 	//extern int yydebug;
 	//yydebug = 1;
 	yyin=fp;
-	yyparse();	
+	yyparse();
 
 	fclose(fp);
 
@@ -625,7 +632,7 @@ process_packet(struct nfq_data *tb)
 		return to_return;
 	}
 
-	printf("WHAT TO DO? ORIGIN: %i AND STATE %i AND MARK %u\n", pkt->origin, conn->state, pkt->mark);
+	//printf("WHAT TO DO? ORIGIN: %i AND STATE %i AND MARK %u\n", pkt->origin, conn->state, pkt->mark);
 
 	switch( pkt->origin ) {
 	/*! Packet is from the low interaction honeypot */
@@ -777,8 +784,9 @@ static int q_cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data
 
 	/*! launch process function */
 	struct verdict *decision = process_packet(nfa);
+	int to_return;
 
-	printf("Final result: %u and set mark to %u\n", decision->statement, decision->mark);
+	//printf("Final result: %u and set mark to %u\n", decision->statement, decision->mark);
 
 	if(decision->statement == 1) {
 		/*! nfq_set_verdict2
@@ -795,12 +803,15 @@ static int q_cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data
 
 		/*! ACCEPT the packet if the statement is 1 */
 		/* Also copy whatever mark has been on the packet initially, required for multi-uplink setups */
-		return nfq_set_verdict2(qh, id, NF_ACCEPT, decision->mark, 0, NULL);
+
+		to_return=nfq_set_verdict2(qh, id, NF_ACCEPT, decision->mark, 0, NULL);
 	} else {
 		/*! DROP the packet if the statement is 0 (or something else than 1) */
-		return nfq_set_verdict2(qh, id, NF_DROP, nfq_get_nfmark(nfa), 0, NULL);
+		to_return=nfq_set_verdict2(qh, id, NF_DROP, nfq_get_nfmark(nfa), 0, NULL);
 	}
 
+	free(decision);
+	return to_return;
 }
 
 #ifndef HAVE_LIBEV
@@ -814,7 +825,7 @@ short int netlink_loop(unsigned short int queuenum)
         struct nfq_handle *h;
         struct nfq_q_handle *qh;
         struct nfnl_handle *nh;
-        int fd, rv, watchdog;
+        int fd, rv=-1, watchdog;
         char buf[BUFSIZE];
 
 	running = OK;
@@ -872,14 +883,14 @@ short int netlink_loop(unsigned short int queuenum)
 				g_printerr("%s Error: too many consecutive failures, giving up\n", H(0));
 				running = NOK;
 			}
-		}	
+		}
 		*/
 	}
 
 	syslog(LOG_INFO, "NFQUEUE: unbinding from queue '%hd' (running: %d, rv: %d)\n", queuenum, running, rv);
         nfq_destroy_queue(qh);
         nfq_close(h);
-        return(0);	
+        return(0);
 }
 
 #else
@@ -1196,6 +1207,7 @@ int main(int argc, char *argv[]) {
                 errx(1, "%s: Honeybrid wasn't compiled with MySQL!", __func__);
                 #endif
 	else
+	if(ICONFIG("output")!=2)
 		open_connection_log();
 
 

@@ -84,7 +84,7 @@ unsigned short in_cksum(unsigned short *addr,int len)
  \return OK if the packet has been succesfully sent
  */
 
-int send_raw(struct iphdr *p, uint32_t mark)
+int send_raw(struct iphdr *p, uint32_t mark, struct interface *iface)
 {
 	/*
 	#ifdef DEBUG
@@ -111,16 +111,28 @@ int send_raw(struct iphdr *p, uint32_t mark)
 			else
 				return NOK;
 	} else {
-		int link;
-		for(link=0;link<ICONFIG("multi_uplink");link++) {
-			if(uplinks[link].mark==mark) {
-				if(p->protocol==0x06)
-                        	        sockettouse=uplinks[link].tcp_socket;
-       	                	else if(p->protocol==0x11)
-               	                	sockettouse=uplinks[link].udp_socket;
-                       		else
-                               		return NOK;
+		if(iface!=NULL) {
+			if(p->protocol==0x06)
+                        	sockettouse=iface->tcp_socket;
+                        else if(p->protocol==0x11)
+                        	sockettouse=iface->udp_socket;
+                        else
+				return NOK;
+		} else
+		if(ICONFIG("multi_uplink")<=1) {
+			return NOK;
+		} else {
+			int link;
+			for(link=0;link<ICONFIG("multi_uplink");link++) {
+				if(uplinks[link].mark==mark) {
+					if(p->protocol==0x06)
+                        	        	sockettouse=uplinks[link].tcp_socket;
+       	                		else if(p->protocol==0x11)
+               	                		sockettouse=uplinks[link].udp_socket;
+                       			else
+                               			return NOK;
 				break;
+				}
 			}
 		}
 	}
@@ -160,7 +172,7 @@ int forward(struct pkt_struct* pkt)
 
 	memcpy(fwd, pkt->packet.ip, ntohs(pkt->packet.ip->tot_len) );
 
-	/*!If packet from HIH, we forward if to EXT with LIH source*/
+	/*!If packet from HIH, we forward it to EXT with LIH source*/
 	if(pkt->origin == HIH)
 	{
 		g_printerr("%s forwarding packet to EXT\n", H(pkt->conn->id));
@@ -181,7 +193,7 @@ int forward(struct pkt_struct* pkt)
 		}
 
 	}
-	/*!If packet from EXT, we forward if to HIH*/
+	/*!If packet from EXT, we forward it to HIH*/
 	else if(pkt->origin == EXT)
 	{
 		g_printerr("%s forwarding packet to HIH %u on interface %s\n", H(pkt->conn->id), pkt->conn->hih.hihID, pkt->conn->hih.iface->name);
@@ -207,7 +219,7 @@ int forward(struct pkt_struct* pkt)
 	}
 
 	hb_ip_checksum(fwd);
-	send_raw(fwd, pkt->mark);
+	send_raw(fwd, pkt->mark, pkt->conn->hih.iface);
 
 	free(fwd);
 	return OK;
@@ -265,7 +277,7 @@ int reply_reset(struct packet *p)
 	rst->tcp.check		= 0x00;
 	rst->tcp.urg_ptr	= 0x00;
 	tcp_checksum( rst );
-	res = send_raw((struct iphdr*)rst,0);
+	res = send_raw((struct iphdr*)rst,0,NULL);
 	free(rst);
 	return res;
 }
