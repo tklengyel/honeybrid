@@ -382,7 +382,7 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 	char *key1 = malloc(64);
         sprintf(key1, "%s:%s", pkt->key_dst, pkt->key_src);
 
-	//g_printerr("%s Looking for connections between %s and %s!\n", H(0), pkt->key_src, pkt->key_dst);
+	g_printerr("%s Looking for connections between %s and %s!\n", H(0), pkt->key_src, pkt->key_dst);
 
 	int update = 0;
 	int create = 0;
@@ -399,10 +399,14 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 		snprintf(pkt->key, 64, "%s", key1);
 
 		// But is it the LIH or a HIH?
-		if((*conn)->initiator==LIH)
-			pkt->origin = LIH;
+		if((*conn)->initiator!=EXT)
+			if((*conn)->initiator==LIH)
+				pkt->origin = LIH;
+			else
+				pkt->origin = HIH;
 		else
-			pkt->origin = HIH;
+			pkt->origin = LIH;
+
 		update = 1;
 	} else {
 		char *value;
@@ -653,7 +657,7 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 		if (TRUE != g_tree_lookup_extended(conn_tree, pkt->key, NULL,(gpointer *) conn))
 			return NOK;
 
-		g_printerr("%s Key inserted to conn_tree %s with mark %u \n", H(0),pkt->key, conn_init->mark);
+		g_printerr("%s Key inserted to conn_tree %s with mark %u\n", H(0),pkt->key, conn_init->mark);
 		pkt->conn = conn_init;
 	}
 
@@ -1020,6 +1024,8 @@ int setup_redirection(struct conn_struct *conn, uint32_t hih_use)
 	        microtime +=  ((gdouble)t.tv_sec);
 	        microtime += (((gdouble)t.tv_usec)/1000000.0);
 
+		printf("Interface for HIH: %s, TCP sock: %i UDP sock: %i\n", hihiface->name, hihiface->tcp_socket, hihiface->udp_socket);
+
 		///conn->key_hih = hihaddr;
 		conn->hih.hihID=	hih_use;
 		conn->hih.iface=	hihiface;
@@ -1043,12 +1049,13 @@ int setup_redirection(struct conn_struct *conn, uint32_t hih_use)
 		g_printerr("%s [** starting the forwarding loop... **]\n", H(conn->id));
 		// Does not correctly replay when MIN_DATA_DECISION is 0...
 		while(current->origin == EXT) {
+
 			forward(current);
 			if(g_slist_next(g_slist_nth( conn->BUFFER, conn->replay_id )) == NULL) {
-				//conn->state = FORWARD;
-				switch_state(conn, FORWARD);
-				return OK;
-			}
+                                //conn->state = FORWARD;
+                                switch_state(conn, FORWARD);
+                                return OK;
+                        }
 			conn->replay_id++;
 			current = (struct pkt_struct*) g_slist_nth_data ( conn->BUFFER, conn->replay_id );
 		}
@@ -1056,10 +1063,14 @@ int setup_redirection(struct conn_struct *conn, uint32_t hih_use)
 		g_printerr("%s [** defining expected data **]\n", H(conn->id));
 		define_expected_data(current);
 		conn->replay_id++;
+
+		return OK;
+
 	} else {
 		g_printerr("%s [** Error, no HIH address defined **]\n", H(conn->id));
 		return NOK;
 	}
+
 	return OK;
 }
 

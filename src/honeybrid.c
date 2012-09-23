@@ -546,6 +546,7 @@ process_packet(struct nfq_data *tb)
 
 	/*! We create a new temporary connection structure */
 	struct conn_struct conn_init;
+	bzero(&conn_init, sizeof(struct conn_struct));
         conn_init.state = INVALID;	/* by default the connection is invalid */
         conn_init.id = 0;
         struct conn_struct * conn = &conn_init;
@@ -632,7 +633,7 @@ process_packet(struct nfq_data *tb)
 		return to_return;
 	}
 
-	//printf("WHAT TO DO? ORIGIN: %i AND STATE %i AND MARK %u\n", pkt->origin, conn->state, pkt->mark);
+	printf("WHAT TO DO? ORIGIN: %i AND STATE %i AND MARK %u\n", pkt->origin, conn->state, pkt->mark);
 
 	switch( pkt->origin ) {
 	/*! Packet is from the low interaction honeypot */
@@ -693,7 +694,7 @@ process_packet(struct nfq_data *tb)
 		/*! This one should never occur because PROXY are only between EXT and LIH... but we never know! */
 		case PROXY:
 			#ifdef DEBUG
-			g_printerr("%s Packet from EXT proxied directly to its destination\n", H(conn->id));
+			g_printerr("%s Packet from HIH proxied directly to its destination\n", H(conn->id));
 			#endif
 			to_return->statement = 1;
 			break;
@@ -786,7 +787,7 @@ static int q_cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data
 	struct verdict *decision = process_packet(nfa);
 	int to_return;
 
-	//printf("Final result: %u and set mark to %u\n", decision->statement, decision->mark);
+	printf("Final result: %u and set mark to %u\n", decision->statement, decision->mark);
 
 	if(decision->statement == 1) {
 		/*! nfq_set_verdict2

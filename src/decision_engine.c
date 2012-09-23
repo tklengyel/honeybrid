@@ -417,8 +417,9 @@ int DE_process_packet(struct pkt_struct *pkt)
 		g_printerr("%s Rule decides to accept\n", H(pkt->conn->id));
 		switch( pkt->conn->state ) {
 		case INIT:
-			if ( g_tree_nnodes(pkt->conn->target->back_rules) == 0 ) {
+			if ( g_tree_nnodes(pkt->conn->target->back_handlers) == 0) {
 				//pkt->conn->state = PROXY;
+				printf("No back rules and back picker is null\n");
 				switch_state(pkt->conn, PROXY);
 			} else {
 				//pkt->conn->state = DECISION;

@@ -45,7 +45,8 @@ struct target
 	GTree *back_ips;		/* Honeypot IP address(es) handling the second response (back end) with key IP value hihID */
 	GTree *back_rules;		/* Rule(s) of decision modules to accept packets to be transited from front to back end */
 	GTree *back_ifs;		/* Network interface the backend is running on (enforced with raw socket) */
-	struct node *back_picker;	/* Rule(s) to pick which backend to use */
+	GTree *back_tags;		/* Additional tag describing the backend */
+	struct node *back_picker;	/* Rule(s) to pick which backend to use (such as VM name, etc.) */
 	struct node *control_rule;	/* Rules of decision modules to limit outbound packets from honeypots */
 	GSList *backendIDs;		/* Backend ID list */
 };

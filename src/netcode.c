@@ -103,7 +103,7 @@ int send_raw(struct iphdr *p, uint32_t mark, struct interface *iface)
 
 	g_printerr("%s Sending raw packet to %s with mark %u\n", H(4), inet_ntoa(dst.sin_addr), mark);
 
-	if(mark==0) {
+	if(mark==0 && iface==NULL) {
 			if(p->protocol==0x06)
 				sockettouse=tcp_rsd;
 			else if(p->protocol==0x11)
@@ -192,6 +192,9 @@ int forward(struct pkt_struct* pkt)
 			udp_checksum((struct udp_packet*)fwd);
 		}
 
+		hb_ip_checksum(fwd);
+		send_raw(fwd, 0, NULL);
+
 	}
 	/*!If packet from EXT, we forward it to HIH*/
 	else if(pkt->origin == EXT)
@@ -216,10 +219,9 @@ int forward(struct pkt_struct* pkt)
 			udp_checksum((struct udp_packet*)fwd);
 		}
 
+		hb_ip_checksum(fwd);
+		send_raw(fwd, pkt->mark, pkt->conn->hih.iface);
 	}
-
-	hb_ip_checksum(fwd);
-	send_raw(fwd, pkt->mark, pkt->conn->hih.iface);
 
 	free(fwd);
 	return OK;

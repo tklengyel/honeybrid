@@ -18,273 +18,244 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-/*! \file mod_source.c
- * \brief Source IP based filtering Module for honeybrid Decision Engine
- *
- * This module is called by a boolean decision tree to filter attacker based on their IP address
- *
- \author Robin Berthier 2009
- */
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netdb.h>
 
 #include <string.h>
 #include <unistd.h>
 #include <ctype.h>
 #include <time.h>
 #include <sys/time.h>
+#include <pthread.h>
 
-#include "tables.h"
+#include "decision_engine.h"
 #include "modules.h"
 #include "netcode.h"
 
-GThread *vmi_com_thread;
-GStaticRWLock vmi_lock;
-GQueue *vmi_send, *vmi_recv;
-int vmi_com_count;
-int vmi_session_start;
-int last_check;
-int IP_last_seen;
-char *vmi_user;
+GTree *vmi_vms;
+int vmi_sock;
 
-int vmi_sock;                   /* Socket descriptor */
 struct sockaddr_in vmi_addr;    /* VMI server address */
 unsigned short vmi_port;    /* VMI server port */
 
 struct vmi_msg {
-	int com_id;
-	char *vmname;
-	char *command;
-	int result;
+	char *vm_name;
+	char *attacker;
+	char *conn_out;
+};
+
+struct vmi_vm {
+	char *attacker;
+	char *name;
+	uint32_t vmID;
+	uint32_t start;
+	uint32_t last_seen;
+	int socket;
+	int paused;
+
+	pthread_mutex_t lock;
 };
 
 void free_vmi_msg(gpointer data) {
         struct vmi_msg *tofree = (struct vmi_msg *)data;
-	if(tofree->vmname!=NULL)
-		free(tofree->vmname);
-	if(tofree->command!=NULL)
-		free(tofree->command);
+	if(tofree->vm_name!=NULL)
+		free(tofree->vm_name);
+	if(tofree->attacker!=NULL)
+		free(tofree->attacker);
+	if(tofree->conn_out!=NULL)
+		free(tofree->conn_out);
         free(tofree);
 }
 
-int assign_vm(char *key) {
+void noop(gpointer data) {}
 
-	g_queue_foreach(vmi_send,(GFunc)free_vmi_msg,NULL);
-        g_queue_foreach(vmi_recv,(GFunc)free_vmi_msg,NULL);
+void free_vmi_vm(gpointer data) {
+	struct vmi_vm *vm=(struct vmi_vm *)data;
+        if(vm->attacker!=NULL)
+		free(vm->attacker);
+	if(vm->name!=NULL)
+		free(vm->name);
 
-        g_queue_clear(vmi_send);
-        g_queue_clear(vmi_recv);
-
-        vmi_user=(char *)malloc(strlen(key));
-        strcpy(vmi_user,key);
-
-	GTimeVal t;
-        g_get_current_time(&t);
-        gint now = t.tv_sec;
-	last_check = now;
-	IP_last_seen = now;
-        vmi_session_start = now;
-
-	return 1;
+	pthread_mutex_destroy(&(vm->lock));
+        free(vm);
 }
 
-void check_vm_state(gchar *vmname) {
+// Each backend
+gboolean build_vmi_vms2(gpointer key, gpointer value, gpointer data) {
 
-	GTimeVal t;
-        g_get_current_time(&t);
-        gint now = (t.tv_sec);
+	//int *vmi_sock=(int *)data;
+	char *vm_name=(char *)value;
+	char vmi_buffer[100];
+	bzero(vmi_buffer,100);
+	sprintf(vmi_buffer,"status,%s\n", vm_name);
 
-	int conn_expired=0;
-	// if IP haven't sent anything in a minute or if the entire session is 10 minutes old
-	if(now-IP_last_seen>=60 || now-vmi_session_start >= 600)
-		conn_expired=1;
-	else
-		conn_expired=0;
+	//printf("Sending on socket %i: %s", vmi_sock, vmi_buffer);
 
-	// check msg queues
-	if(!g_queue_is_empty(vmi_send)) {
-		// msg waiting to be sent
-	} else
-	if(g_queue_is_empty(vmi_send) && !g_queue_is_empty(vmi_recv)) {
-		// got message, check it
-		struct vmi_msg *msg = (struct vmi_msg *)g_queue_pop_head(vmi_recv);
-		if(msg->result==1 || msg->result == 3) {
-			// vm was reset
-			g_printerr("%s VM is now free because of a reset!\n",H(22));
-			free(vmi_user);
-			vmi_user=NULL;
-		} else
-		if(msg->result == 0 && conn_expired) {
-			// no change was detected and connection expired
-			g_printerr("%s VM is now free because of timeout and no change!\n",H(22));
-			free(vmi_user);
-			vmi_user=NULL;
-		} else {
-			// ERROR
-			g_printerr("%s ERROR in VMI Honeymon!\n",H(22));
-		}
-		free(msg);
-	} else
-	if(g_queue_is_empty(vmi_send) && g_queue_is_empty(vmi_recv)) {
-		// nothing
-		if(conn_expired) {
-			// do a final check
-			g_printerr("%s Sending check request to VMI because connection expired!\n",H(22));
-			struct vmi_msg *command = (struct vmi_msg *)malloc(sizeof(struct vmi_msg));
-			command->com_id=vmi_com_count;
-			command->vmname=(char *)malloc(strlen(vmname));
-			strcpy(command->vmname,vmname);
-			command->command=(char *)malloc(6*sizeof(char));
-			strcpy(command->command,"check");
-
-			g_queue_push_head(vmi_send, command);
-		}
-	}
-}
-
-/*
- * Communication thread with VMI-Honeymon
- */
-void vmi_com() {
-	while(1) {
-		int doSleep=0;
-		g_static_rw_lock_writer_lock(&vmi_lock);
-
-		if(!g_queue_is_empty(vmi_send) && g_queue_is_empty(vmi_recv)) {
-			// Query honeymon
-
-			if ((vmi_sock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0
-				|| connect(vmi_sock, (struct sockaddr *) &vmi_addr, sizeof(vmi_addr)) < 0) {
-		                g_printerr("%s: Couldn't connect to VMI Honeymon\n", H(22));
-		        } else {
-
-				/* Get the msg from the queue and format it into string */
-				struct vmi_msg *command = (struct vmi_msg *)g_queue_pop_head(vmi_send);
-				char *send_str = (char *)malloc(100*sizeof(char));
-
-				g_printerr("\n\n%s Building tcp message with %i,%s,%s\n\n",H(22),command->com_id,command->vmname,command->command);
-				g_snprintf(send_str, 100, "%i,%s,%s,%s\n\r", command->com_id, command->vmname, command->command, vmi_user);
-
-    				if (send(vmi_sock, send_str, strlen(send_str), 0) != strlen(send_str)) {
-					g_printerr("%s Couldn't send message to VMI server\n", H(22));
-				} else {
-					g_printerr("%s Command sent to VMI: %s", H(22),send_str);
-
-					GTimeVal t;
-        				g_get_current_time(&t);
-        				last_check = (t.tv_sec);
-
-					/* Now let's wait for an answer */
-					char *vmi_buffer = (char *)malloc(100*sizeof(char));
-					memset( vmi_buffer, '\0', 100);
-
-	        			if (recv(vmi_sock, vmi_buffer, 100, 0) <= 0) {
-						g_printerr("%s Didn't get any message back!\n", H(22));
-					} else {
-						g_printerr("%s Received from VMI %s\n", H(22),vmi_buffer);
-
-						struct vmi_msg *msg = (struct vmi_msg *)malloc(sizeof(struct vmi_msg));
-
-						char *ptr = strtok(vmi_buffer, ",");
-						int count=-1;
-						while(ptr != NULL) {
-							count++;
-
-                                           	     	if(count==0) {
-								msg->com_id=atoi(ptr);
-		                                     	} else
-                                                	if(count==1) {
-								msg->vmname=(char *)malloc(strlen(ptr));
-                                                        	strcpy(msg->vmname,ptr);
-                                                	} else
-                                                	if(count==2) {
-                                                        	msg->result = atoi(ptr);
-                                                	}
-
-                                                	ptr = strtok(NULL, ",");
-						}
-
-						if(msg->com_id==command->com_id) {
-							g_queue_push_head(vmi_recv,(gpointer) msg);
-							vmi_com_count++;
-						} else {
-							free_vmi_msg(msg);
-							g_printerr("%s Couldn't parse the reply message!\n",H(22));
-						}
-					}
-					free(vmi_buffer);
-				}
-
-
-				free_vmi_msg((gpointer)command);
-				free(send_str);
-				close(vmi_sock);
-			}
-		} else {
-			doSleep=1;
-		}
-		g_static_rw_lock_writer_unlock(&vmi_lock);
-
-		if(doSleep)
-			sleep(1);
-	}
-}
-
-/*
- * Create thread to connect to VMI-Honeymon and setup queues to communicate with main program
- */
-int init_mod_vmi() {
-
-	gchar *vmi_server_ip, *vmi_server_port;
-
-	if(NULL == (vmi_server_ip=(gchar *)g_hash_table_lookup(config,"vmi_server_ip"))) {
-		// Not defined so skipping init
-		return 0;
-        }
-
-	if(NULL == (vmi_server_port=(gchar *)g_hash_table_lookup(config,"vmi_server_port"))) {
-                errx(1,"%s: VMI Server port not defined!!\n",__func__);
-        }
-
-	/* Construct the server address structures */
-    	memset(&vmi_addr, 0, sizeof(vmi_addr));     			/* Zero out structure */
-    	vmi_addr.sin_family      = AF_INET;             		/* Internet address family */
-    	vmi_addr.sin_addr.s_addr = inet_addr(vmi_server_ip);   		/* Server IP address */
-    	vmi_addr.sin_port        = htons(atoi(vmi_server_port)); 	/* Server port */
-
-	if ((vmi_sock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0
-                                || connect(vmi_sock, (struct sockaddr *) &vmi_addr, sizeof(vmi_addr)) < 0) {
-        	errx(1,"%s: Couldn't connect to VMI Honeymon\n", __func__);
+	if ( write(vmi_sock, vmi_buffer, strlen(vmi_buffer)) < 0) {
+		g_printerr("%s Couldn't send message to VMI server\n", H(22));
 	} else {
-		g_printerr("%s: Connected to VMI Honeymon!\n",H(22));
-		close(vmi_sock);
+		bzero(vmi_buffer,100);
+
+ 		if ( read(vmi_sock, vmi_buffer, 100) < 0) {
+         		printf("%s Didn't get any message back!\n", H(22));
+		} else {
+
+			char *nl = strrchr(vmi_buffer, '\r');
+                	if (nl) *nl = '\0';
+                	nl = strrchr(vmi_buffer, '\n');
+                	if (nl) *nl = '\0';
+
+			if(!strcmp(vmi_buffer,"active")) {
+				g_printerr("%s VM %s is active, pausing!\n", H(22), (char *)value);
+
+				bzero(vmi_buffer,100);
+				sprintf(vmi_buffer,"pause,%s\n", vm_name);
+				write(vmi_sock, vmi_buffer, strlen(vmi_buffer));
+				bzero(vmi_buffer,100);
+				read(vmi_sock, vmi_buffer, 100);
+				if(strcmp(vmi_buffer,"paused\n\r")) {
+					g_printerr("%s VM was not paused on our request, skipping\n",H(22));
+					return FALSE;
+				}
+				else
+					g_printerr("%s VM was paused, enabling\n",H(22));
+
+				struct vmi_vm *vm=g_malloc0(sizeof(struct vmi_vm));
+
+				vm->vmID=*(uint32_t*)key;
+				vm->name=strdup(vm_name);
+				vm->attacker=NULL;
+				vm->start=0;
+				vm->last_seen=0;
+				vm->paused=1;
+
+				pthread_mutex_init(&(vm->lock),NULL);
+
+				g_tree_insert(vmi_vms, key, (gpointer)vm);
+			} else
+			if(!strcmp(vmi_buffer,"paused")) {
+
+				g_printerr("%s VM %s is paused, enabling!\n", H(22), (char *)value);
+                                struct vmi_vm *vm=g_malloc0(sizeof(struct vmi_vm));
+
+                                vm->vmID=*(uint32_t*)key;
+                                vm->name=strdup(vm_name);
+                                vm->attacker=NULL;
+                                vm->start=0;
+                                vm->last_seen=0;
+				vm->paused=1;
+
+                                pthread_mutex_init(&(vm->lock),NULL);
+
+                                g_tree_insert(vmi_vms, key, (gpointer)vm);
+
+			} else
+				g_printerr("%s VM %s is inactive!\n",H(22), (char *)value);
+		}
 	}
 
-	g_static_rw_lock_init( &vmi_lock );
-
-	vmi_send = g_queue_new();
-	vmi_recv = g_queue_new();
-
-	vmi_com_count=0;
-	vmi_user=NULL;
-	last_check=0;
-
-	// create xmpp backup thread
-        if( ( vmi_com_thread = g_thread_create_full (((void *)vmi_com), NULL, 0, TRUE, TRUE, 0, NULL)) == NULL)
-                errx(1, "%s: Unable to start the VMI communication thread", __func__);
-        else
-                g_printerr("%s: VMI communication thread started\n", H(22));
-
-	return 1;
+	return FALSE;
 }
 
-void mod_vmi(struct mod_args *args)
+// Loop each target
+void build_vmi_vms(gpointer data, gpointer user_data) {
+
+	struct target *t=(struct target *)data;
+	g_tree_foreach(t->back_tags, (GTraverseFunc)build_vmi_vms2, user_data);
+
+}
+
+gboolean find_free_vm(gpointer key, gpointer value, gpointer data) {
+
+	uint32_t *vmID=(uint32_t *)key;
+	struct vmi_vm *vm=(struct vmi_vm *)value;
+	uint32_t *response=(uint32_t *)data;
+	int found=0;
+
+	printf("Searching for free VM: %s (%u)\n", vm->name, *vmID);
+
+	pthread_mutex_lock(&(vm->lock));
+
+	// the VM could have been revert by a scheduled scan, check status
+	if(!vm->paused) {
+		char buf[100];
+		bzero(buf,100);
+		sprintf(buf,"status,%s\n",vm->name);
+		write(vmi_sock, buf, strlen(buf));
+		bzero(buf,100);
+		read(vmi_sock,buf,100);
+		if(!strcmp(buf,"paused\n\r"))
+			vm->paused=1;
+	}
+
+	if(vm->paused) {
+
+		char buf[100];
+		bzero(buf,100);
+		sprintf(buf, "activate,%s\n",vm->name);
+
+		int n = write(vmi_sock, buf, strlen(buf));
+        	if (n < 0)
+                	errx(1,"%s ERROR writing to socket\n",__func__);
+
+		bzero(buf,100);
+		n = read(vmi_sock, buf, 100);
+        	if(n<0 || strcmp(buf, "activated\n\r"))
+                	errx(1,"%s Error receiving from Honeymon!\n",__func__);
+		else
+			g_printerr("%s Found free VM and activated it: %u!\n", H(22), *vmID);
+
+		vm->paused=0;
+		*response=*vmID;
+		found=1;
+	}
+	pthread_mutex_unlock(&(vm->lock));
+
+	if(found)
+		return TRUE;
+	else
+		return FALSE;
+}
+
+void mod_vmi_pick(struct mod_args *args)
 {
-	g_printerr("%s VMI Module called\n", H(args->pkt->conn->id));
+
+	g_printerr("%s VMI Backpick Module called\n", H(args->pkt->conn->id));
+
+	uint32_t free_vm=0;
+	g_tree_foreach(vmi_vms, (GTraverseFunc)find_free_vm, (gpointer)&free_vm);
+
+	if(free_vm!=0) {
+		//printf("%s Picking %u.\n", H(args->pkt->conn->id), free_vm);
+                args->backend_use=free_vm;
+                args->node->result = 1;
+	} else {
+		g_printerr("%s No available backend found, rejecting!\n", H(args->pkt->conn->id));
+		args->node->result = 0;
+	}
+}
+
+void mod_vmi_back(struct mod_args *args)
+{
+
+	g_printerr("%s VMI Back Module called\n", H(args->pkt->conn->id));
+
+}
+
+void mod_vmi_control(struct mod_args *args)
+{
+
+	g_printerr("%s VMI Control Module called\n", H(args->pkt->conn->id));
 
 	//int expiration = 24*3600; /* a day */
 
-	GTimeVal t;
+	/*GTimeVal t;
         g_get_current_time(&t);
-        gint now = (t.tv_sec);
+        gint now = (t.tv_sec);*/
 
 	/*! get the IP address from the packet */
 	gchar **key_src,**key_dst;
@@ -293,8 +264,12 @@ void mod_vmi(struct mod_args *args)
 
 	//g_printerr("%s source IP is %s\n", H(args->pkt->conn->id), key_src[0]);
 
-	gchar *mode;
-	gchar *vmname;
+	return;
+}
+
+void mod_vmi(struct mod_args *args) {
+
+        gchar *mode;
          /*! get the backup file for this module */
         if ( NULL ==    (mode = (gchar *)g_hash_table_lookup(args->node->arg, "mode"))) {
                 /*! We can't decide */
@@ -302,133 +277,65 @@ void mod_vmi(struct mod_args *args)
                 g_printerr("%s mandatory argument 'mode' undefined (back/control)!\n", H(args->pkt->conn->id));
                 return;
         }
-	if ( NULL ==    (vmname = (gchar *)g_hash_table_lookup(args->node->arg, "vmname"))) {
-                /*! We can't decide */
-                args->node->result = -1;
-                g_printerr("%s mandatory argument 'vmname'!\n", H(args->pkt->conn->id));
-                return;
+
+	if(!strcmp(mode,"pick"))
+		mod_vmi_pick(args);
+	else
+	if(!strcmp(mode,"back"))
+		mod_vmi_back(args);
+	else
+	if(!strcmp(mode,"control"))
+		mod_vmi_control(args);
+	else
+		args->node->result=-1;
+}
+
+//////////////////////
+
+int init_mod_vmi() {
+
+	gchar *vmi_server_ip, *vmi_server_port;
+
+        if(NULL == (vmi_server_ip=(gchar *)g_hash_table_lookup(config,"vmi_server_ip"))) {
+                // Not defined so skipping init
+                return 0;
         }
 
-	if(g_static_rw_lock_writer_trylock(&vmi_lock)) {
+        if(NULL == (vmi_server_port=(gchar *)g_hash_table_lookup(config,"vmi_server_port"))) {
+                errx(1,"%s: VMI Server port not defined!!\n",__func__);
+        }
 
-		g_printerr("%s Got the lock for VMI\n",H(22));
+	g_printerr("%s Init mod vmi\n", H(22));
 
-		if(vmi_user != NULL)
-			check_vm_state(vmname);
+	/* socket: create the socket */
+	vmi_sock = socket(AF_INET, SOCK_STREAM, 0);
+    	if (vmi_sock < 0)
+        	errx(1, "%s: ERROR opening socket",__func__);
 
-		if(strcmp(mode,"back")==0) {
-			if(vmi_user==NULL) {
-				if(args->pkt->packet.ip->protocol==6) {
-					g_printerr("%s Vm is free, accept!\n",H(22));
-					assign_vm(key_src[0]);
-					args->node->result =  1;
-				} else {
-					g_printerr("%s Vm is free, but I don't like this connection\n", H(22));
-				}
-			} else
-			if(strcmp(key_src[0],vmi_user)!=0) {
-				// vm is used, decline
-				g_printerr("%s Vm is in use right now by %s\n",H(22),vmi_user);
-				args->node->result = 0;
-			} else {
-				args->node->result = 1;
-				IP_last_seen=now;
-				g_printerr("%s Vm is used by this IP: %s and you are: %s, accepted!\n",H(22), vmi_user, key_src[0]);
-			}
-		}
+	/* build the server's Internet address */
+	bzero((char *) &vmi_addr, sizeof(vmi_addr));
+    	vmi_addr.sin_family = AF_INET;
+    	vmi_addr.sin_addr.s_addr = inet_addr(vmi_server_ip);
+    	vmi_addr.sin_port = htons(atoi(vmi_server_port));
 
-		if(strcmp(mode,"control")==0) {
-			if(vmi_user==NULL) {
-				if(args->pkt->origin==HIH) {
-					// No forwarded session and the VM is generating outbound traffic?
-					g_printerr("%s No forwarded session and the VM is generating outbound traffic\n", H(22));
-					args->node->result=0;
-				} else {
-					args->node->result=1;
-				}
-			} else
-			if(strcmp(key_src[0],vmi_user)==0 || strcmp(key_dst[0],vmi_user)==0) {
-				// packet is part of a forwarded connection
+	/* connect: create a connection with the server */
+    	if (connect(vmi_sock, (struct sockaddr *)&vmi_addr, sizeof(vmi_addr)) < 0)
+		errx(1, "%s: ERROR connecting", __func__);
 
-				IP_last_seen=now;
-				/*if(now-last_check>60 && g_queue_is_empty(vmi_send)) {
-					// haven't checked in a minute, do it
-					g_printerr("%s Initiating VM check from Control because of timeout!\n", H(22));
-					struct vmi_msg *command = (struct vmi_msg *)malloc(sizeof(struct vmi_msg));
-                                	command->com_id=vmi_com_count;
-                                	command->vmname=(char *)malloc(strlen(vmname));
-                                	strcpy(command->vmname,vmname);
-                                	command->command=(char *)malloc(6*sizeof(char));
-                                	strcpy(command->command,"check");
+	int n = write(vmi_sock, "hello\n", strlen("hello\n"));
+	if (n < 0)
+      		errx(1,"%s ERROR writing to socket\n",__func__);
 
-                                	g_queue_push_head(vmi_send, command);
-				}*/
+	char buf[100];
+    	bzero(buf, 100);
+    	n = read(vmi_sock, buf, 100);
+	if(n<0 || strcmp(buf, "hi\n\r"))
+		errx(1,"%s Error receiving from Honeymon!\n",__func__);
+    	else
+    		printf("%s VMI-Honeymon is active, query VM states..\n", H(22));
 
-				args->node->result=1;
-			} else
-			if(args->pkt->origin==HIH) {
-               			// Cought pkt from HIH thats going somewhere other then the attacker!
-				// Let it go for a while or dump VM right away?
-				g_printerr("%s Cought a unrecognized connection from the HIH during a forwaded session!\n",H(22));
+	vmi_vms=g_tree_new_full((GCompareDataFunc)intcmp, NULL, (GDestroyNotify)noop, (GDestroyNotify)free_vmi_vm);
+        g_ptr_array_foreach(targets, (GFunc)build_vmi_vms, (gpointer)&vmi_sock);
 
-				// Clearing the queue, dump has priority
-				if(!g_queue_is_empty(vmi_send)) {
-					g_queue_foreach(vmi_send,(GFunc)free_vmi_msg,NULL);
-					g_queue_clear(vmi_send);
-				}
-
-				struct vmi_msg *command = (struct vmi_msg *)malloc(sizeof(struct vmi_msg));
-	                        command->com_id=vmi_com_count;
-	                        command->vmname=(char *)malloc(strlen(vmname));
-  	                      	strcpy(command->vmname,vmname);
-        	                command->command=(char *)malloc(5*sizeof(char));
-                	        strcpy(command->command,"dump");
-
-                        	g_queue_push_head(vmi_send, command);
-
-				args->node->result=0;
-			} else {
-				// unrelated
-				args->node->result=1;
-			}
-		}
-
-		g_static_rw_lock_writer_unlock(&vmi_lock);
-	} else {
-		// VMI comm is locked
-		if(strcmp(mode,"back")==0) {
-			g_printerr("%s VMI is locked\n",H(22));
-			args->node->result = 0;
-			return;
-		}
-		if(strcmp(mode,"control")==0) {
-			if(vmi_user == NULL) {
-				// routine comm queue check lock?
-				if(args->pkt->origin==HIH) {
-					// WEIRD
-					args->node->result=0;
-				} else {
-					args->node->result=1;
-				}
-				return;
-			} else
-			if(strcmp(key_src[0],vmi_user)==0 || strcmp(key_dst[0],vmi_user)==0) {
-				// this packet is from the forwarded attacker and we are checking right now
-				IP_last_seen=now;
-				args->node->result = 0;
-				return;
-			} else
-			if(args->pkt->origin==HIH) {
-				// HOW IS THIS POSSIBLE?
-				args->node->result = 0;
-				return;
-			} else {
-				// unrelated
-				args->node->result = 1;
-				return;
-			}
-		}
-	}
-
-	return;
+	return 0;
 }
