@@ -103,6 +103,8 @@ int free_pkt(struct pkt_struct *pkt);
 
 int init_conn(struct pkt_struct *pkt, struct conn_struct **conn);
 
+int check_pre_dnat_routing(struct pkt_struct *pkt, struct conn_struct **conn, char *uplink_ip, int *create, int *update);
+
 int store_pkt(struct conn_struct *conn, struct pkt_struct *pkt);
 
 void clean();

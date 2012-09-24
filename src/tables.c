@@ -436,41 +436,25 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 		} else {
 
 			/* It could still be a packet before DNAT that needs to be sent to clone */
-			if(ICONFIG("multi_uplink")==1) {
+			if(ICONFIG("multi_uplink")<=1) {
 				char *uplink_ip=config_lookup("uplink_ip");
-				if(uplink_ip != NULL) {
-					char **split = g_strsplit(pkt->key_dst, ":", 0 );
-
-					if(!strcmp(split[0], uplink_ip)) {
-						uint32_t i;
-						for (i = 0; i < targets->len; i++) {
-							struct target *t=g_ptr_array_index(targets,i);
-							uint32_t backends=g_tree_nnodes(t->back_handlers);
-							while(backends>0) {
-
-								char *back_ip=addr_ntoa((struct addr *)g_tree_lookup(t->back_handlers, &backends));
-								snprintf(pkt->key, 64, "%s:%s:%s", pkt->key_src, back_ip, split[1]);
-								//printf("Looping through back ips: %s\n", pkt->key);
-								if(TRUE == g_tree_lookup_extended(conn_tree, pkt->key, NULL,(gpointer *) conn)) {
-		                                                        //g_printerr("YES, connection found with mark: %u\n", (*conn)->mark);
-                		                                        update = 1;
-									break;
-								}
-								backends--;
-							}
-
-							if(update) break;
-						}
-
-						if(!update)
-							create = 1;
-					} else {
-						// No connection was found with _any_ of the backends, its not a pre-DNAT packet
-						create =1;
-					}
+				if(check_pre_dnat_routing(pkt, conn, uplink_ip, &update, &create)==0) {
+					create=1;
 				}
 			} else if(ICONFIG("multi_uplink")>1) {
-				/* T0MA TODO! */
+				int i;
+				int f=0;
+				for(i=ICONFIG("multi_uplink");i>0;i--) {
+					char *q=malloc(snprintf(NULL, 0, "uplink%i_ip", i) + 1);
+					sprintf(q, "uplink%i_ip", i);
+					char *uplink_ip=config_lookup(q);
+					free(q);
+
+					if(check_pre_dnat_routing(pkt, conn, uplink_ip, &update, &create)>0)
+						f=1;
+				}
+
+				if(!f) create=1;
 			} else {
 				/* Still nothing found, we need to initiate a new structure. We don't know yet if the source is EXT or INT...
 				   pcap filter defined in targets will help us figuring this out */
@@ -707,6 +691,51 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 	#endif
 	*/
 	return OK;
+}
+
+/*! check_pre_dnat_routing
+ \brief check for connections initiated from a hih (required for clone routing)
+ \param[in] pkt: the packet
+ \param[in] uplink_ip: the uplink ip to check for
+ \param[out] create: create conn struct
+ \param[out] update: update conn struct
+ */
+int check_pre_dnat_routing(struct pkt_struct *pkt, struct conn_struct **conn, char *uplink_ip, int *create, int *update) {
+	char **split = g_strsplit(pkt->key_dst, ":", 0 );
+
+	if(!strcmp(split[0], uplink_ip)) {
+		// uplink match, let's see if connection originally came from one of the HIHs
+
+		uint32_t i;
+		for (i = 0; i < targets->len; i++) {
+			struct target *t=g_ptr_array_index(targets,i);
+			uint32_t backends=g_tree_nnodes(t->back_handlers);
+			while(backends>0) {
+
+				char *back_ip=addr_ntoa((struct addr *)g_tree_lookup(t->back_handlers, &backends));
+				snprintf(pkt->key, 64, "%s:%s:%s", pkt->key_src, back_ip, split[1]);
+				//printf("Looping through back ips: %s\n", pkt->key);
+				if(TRUE == g_tree_lookup_extended(conn_tree, pkt->key, NULL,(gpointer *) conn)) {
+		        		//g_printerr("YES, connection found with mark: %u\n", (*conn)->mark);
+                			*update = 1;
+					return 2;
+				}
+
+				backends--;
+			}
+
+		}
+
+		if(!update) {
+			// No connection was found with _any_ of the backends, its not a pre-DNAT packet
+			*create = 1;
+			return 1;
+		}
+
+	}
+
+	// doesn't match uplink
+	return 0;
 }
 
 /*! test_honeypot_addr
