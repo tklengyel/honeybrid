@@ -48,12 +48,18 @@ struct vmi_msg {
 	char *conn_out;
 };
 
+struct vm_search {
+	gchar *srcIP;
+	uint32_t vmID;
+};
+
 struct vmi_vm {
-	char *attacker;
+	gchar *attacker;
 	char *name;
 	uint32_t vmID;
 	uint32_t start;
 	uint32_t last_seen;
+	uint32_t logID;
 	int socket;
 	int paused;
 
@@ -148,6 +154,7 @@ gboolean build_vmi_vms2(gpointer key, gpointer value, gpointer data) {
                                 vm->start=0;
                                 vm->last_seen=0;
 				vm->paused=1;
+				vm->logID=0;
 
                                 pthread_mutex_init(&(vm->lock),NULL);
 
@@ -173,7 +180,7 @@ gboolean find_free_vm(gpointer key, gpointer value, gpointer data) {
 
 	uint32_t *vmID=(uint32_t *)key;
 	struct vmi_vm *vm=(struct vmi_vm *)value;
-	uint32_t *response=(uint32_t *)data;
+	struct vm_search *search=(struct vm_search *)data;
 	int found=0;
 
 	printf("Searching for free VM: %s (%u)\n", vm->name, *vmID);
@@ -188,8 +195,11 @@ gboolean find_free_vm(gpointer key, gpointer value, gpointer data) {
 		write(vmi_sock, buf, strlen(buf));
 		bzero(buf,100);
 		read(vmi_sock,buf,100);
-		if(!strcmp(buf,"paused\n\r"))
+		if(!strcmp(buf,"paused\n\r")) {
 			vm->paused=1;
+			free(vm->attacker);
+			vm->attacker=NULL;
+		}
 	}
 
 	if(vm->paused) {
@@ -204,14 +214,20 @@ gboolean find_free_vm(gpointer key, gpointer value, gpointer data) {
 
 		bzero(buf,100);
 		n = read(vmi_sock, buf, 100);
-        	if(n<0 || strcmp(buf, "activated\n\r"))
+        	if(n<=0)
                 	errx(1,"%s Error receiving from Honeymon!\n",__func__);
-		else
-			g_printerr("%s Found free VM and activated it: %u!\n", H(22), *vmID);
 
+		char *p;
+		char delim[]=",";
+		strtok_r(buf,delim,&p);
+		vm->logID=atoi(strtok_r(NULL,delim,&p));
 		vm->paused=0;
-		*response=*vmID;
+		vm->attacker=g_strdup(search->srcIP);
+		search->vmID=*vmID;
 		found=1;
+
+		g_printerr("%s Found free VM and activated it: %u!\n", H(22), *vmID);
+
 	}
 	pthread_mutex_unlock(&(vm->lock));
 
@@ -221,22 +237,45 @@ gboolean find_free_vm(gpointer key, gpointer value, gpointer data) {
 		return FALSE;
 }
 
+gboolean find_used_vm(gpointer key, gpointer value, gpointer data) {
+	uint32_t *vmID=(uint32_t *)key;
+        struct vmi_vm *vm=(struct vmi_vm *)value;
+        struct vm_search *search=(struct vm_search *)data;
+
+	if(!vm->paused && !strcmp(search->srcIP, vm->attacker)) {
+		printf("This attacker is already using a VM: %u\n", *vmID);
+		search->vmID=*vmID;
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
 void mod_vmi_pick(struct mod_args *args)
 {
 
 	g_printerr("%s VMI Backpick Module called\n", H(args->pkt->conn->id));
 
-	uint32_t free_vm=0;
-	g_tree_foreach(vmi_vms, (GTraverseFunc)find_free_vm, (gpointer)&free_vm);
+	struct vm_search search;
+        search.srcIP = *(g_strsplit( args->pkt->key_src, ":", 0));
+	search.vmID=0;
 
-	if(free_vm!=0) {
+	g_tree_foreach(vmi_vms, (GTraverseFunc)find_used_vm, (gpointer)&search);
+
+	if(search.vmID==0) {
+		g_tree_foreach(vmi_vms, (GTraverseFunc)find_free_vm, (gpointer)&search);
+	}
+
+	if(search.vmID!=0) {
 		//printf("%s Picking %u.\n", H(args->pkt->conn->id), free_vm);
-                args->backend_use=free_vm;
+                args->backend_use=search.vmID;
                 args->node->result = 1;
 	} else {
 		g_printerr("%s No available backend found, rejecting!\n", H(args->pkt->conn->id));
 		args->node->result = 0;
 	}
+
+	free(search.srcIP);
 }
 
 void mod_vmi_back(struct mod_args *args)

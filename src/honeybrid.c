@@ -447,7 +447,7 @@ init_parser(char *filename)
 {
 	FILE *fp = fopen(filename, "r");
 	if (!fp)
-		err(1,"fopen");
+		err(1,"fopen(%s)", filename);
 
 	//extern int yydebug;
 	//yydebug = 1;
@@ -590,7 +590,7 @@ process_packet(struct nfq_data *tb)
 		return to_return;
 	}
 
-	if(conn->mark != pkt->mark) {
+	if(conn->mark != 0 && conn->mark != pkt->mark) {
 		g_printerr("%s Packet marked as %u!\n",H(conn->id),conn->mark);
 		pkt->mark=conn->mark;
 		to_return->mark=pkt->mark;
@@ -633,7 +633,7 @@ process_packet(struct nfq_data *tb)
 		return to_return;
 	}
 
-	printf("WHAT TO DO? ORIGIN: %i AND STATE %i AND MARK %u\n", pkt->origin, conn->state, pkt->mark);
+	//printf("WHAT TO DO? ORIGIN: %i AND STATE %i AND MARK %u\n", pkt->origin, conn->state, pkt->mark);
 
 	switch( pkt->origin ) {
 	/*! Packet is from the low interaction honeypot */
@@ -787,7 +787,7 @@ static int q_cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data
 	struct verdict *decision = process_packet(nfa);
 	int to_return;
 
-	printf("Final result: %u and set mark to %u\n", decision->statement, decision->mark);
+	//printf("Final result: %u and set mark to %u\n", decision->statement, decision->mark);
 
 	if(decision->statement == 1) {
 		/*! nfq_set_verdict2
@@ -1074,7 +1074,7 @@ int main(int argc, char *argv[]) {
 	/*! parsing arguments */
 	if(argc < 2)
 		usage(argv);
-	while ((argument = getopt(argc, argv, "sc:x:V:q:h:d:?")) != -1)
+	while ((argument = getopt(argc, argv, "sc:x:V:q:h:d?")) != -1)
 	{
 		switch (argument)
 		{
@@ -1159,7 +1159,6 @@ int main(int argc, char *argv[]) {
 	init_syslog(argc, argv);
 	/*! initialize data structures */
 	init_variables();
-
 	/*! parse the configuration files and store values in memory */
 	init_parser(config_file_name);
 

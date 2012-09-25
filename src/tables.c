@@ -382,7 +382,7 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 	char *key1 = malloc(64);
         sprintf(key1, "%s:%s", pkt->key_dst, pkt->key_src);
 
-	g_printerr("%s Looking for connections between %s and %s!\n", H(0), pkt->key_src, pkt->key_dst);
+	//g_printerr("%s Looking for connections between %s and %s!\n", H(0), pkt->key_src, pkt->key_dst);
 
 	int update = 0;
 	int create = 0;
@@ -438,9 +438,12 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 			/* It could still be a packet before DNAT that needs to be sent to clone */
 			if(ICONFIG("multi_uplink")<=1) {
 				char *uplink_ip=config_lookup("uplink_ip");
-				if(check_pre_dnat_routing(pkt, conn, uplink_ip, &update, &create)==0) {
+				if(check_pre_dnat_routing(pkt, conn, uplink_ip, &create, &update)==0) {
+					update=0;
 					create=1;
-				}
+				} //else {
+				//	printf("Update is %i and Create is %i\n", update, create);
+				//}
 			} else if(ICONFIG("multi_uplink")>1) {
 				int i;
 				int f=0;
@@ -450,7 +453,7 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 					char *uplink_ip=config_lookup(q);
 					free(q);
 
-					if(check_pre_dnat_routing(pkt, conn, uplink_ip, &update, &create)>0)
+					if(check_pre_dnat_routing(pkt, conn, uplink_ip, &create, &update)>0)
 						f=1;
 				}
 
