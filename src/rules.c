@@ -1731,7 +1731,7 @@ yyreduce:
     {
 		(yyval.target)->front_handler = (yyvsp[(3) - (4)].addr);
 		g_printerr("\tIP %s (%d) copied to front handler\n", addr_ntoa((yyvsp[(3) - (4)].addr)), (yyvsp[(3) - (4)].addr)->addr_ip);
-		g_printerr("\tResult IP %s (%d)\n", addr_ntoa((yyval.target)->front_handler), (yyval.target)->front_handler->addr_ip);
+		//g_printerr("\tResult IP %s (%d)\n", addr_ntoa($$->front_handler), $$->front_handler->addr_ip);
 		(yyval.target)->front_rule = NULL;
 	}
     break;

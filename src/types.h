@@ -142,6 +142,7 @@ struct hih_struct
 	unsigned lih_syn_seq;
 	unsigned delta;
 	int lih_addr;
+	char *redirect_key;
 };
 
 /*! expected_data_struct
@@ -213,8 +214,12 @@ struct conn_struct
 
 	u_int32_t mark;	// adding support for multiple uplinks
 
+	uint32_t honeymon_IDX;
+
+	#ifdef HAVE_XMPP
 	uint8_t dionaeaDownload;
 	unsigned int dionaeaDownloadTime;
+	#endif
 };
 
 /*! pkt_struct
@@ -238,7 +243,7 @@ struct pkt_struct
 	char *key;
 	int position;
 
-	 u_int32_t mark;	// adding support for multiple uplinks
+	u_int32_t mark;	// adding support for multiple uplinks
 };
 
 

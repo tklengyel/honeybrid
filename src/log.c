@@ -382,34 +382,65 @@ void connection_log(struct conn_struct *conn)
 	}
 	*/
 
-	char *logbuf = malloc(5024);	//1024 might be too short!
+	char *logbuf=NULL;
 
 	/*! Output according to the format configured */
 	#ifdef HAVE_MYSQL
 	if ( ICONFIG("output")==4 ) {
 		if(init_mysql_log()==0) {
-			snprintf(logbuf,5024,"INSERT INTO log VALUES('', %.3f,%.3f,%i,'%s','%s','%s','%s','%s',%d,%d,'%s',%d,'%s','%s','%s','%s','%s',%i,%i);",
-               		conn->start_microtime,
-               	 	total_duration,
-               	 	(int)conn->mark,
-                	proto->str,
-                	tuple[0],
-                	tuple[1],
-                	tuple[2],
-                	tuple[3],
-                	conn->total_packet,
-                	conn->total_byte,
-                	status->str,
-                	conn->id,
-                	//status_info[INVALID]->str,
-                	status_info[INIT]->str,
-                	status_info[DECISION]->str,
-                	status_info[REPLAY]->str,
-                	status_info[FORWARD]->str,
-                	status_info[PROXY]->str,
-                	conn->dionaeaDownload,
-        	        conn->dionaeaDownloadTime
-	                );
+
+			logbuf=malloc(snprintf(
+				NULL, 0,
+				"INSERT INTO honeybrid VALUES ("
+				"'',"
+				"%.3f, %.3f, %i,"
+				"'%s', '%s', '%s',"
+				"'%s', '%s', %d,"
+				"%d, '%s', %d,"
+				"'%s', '%s', '%s',"
+				"'%s', '%s',"
+				"%u"
+				#ifdef HAVE_XMPP
+				",%i,%i"
+				#endif
+				");",
+	               		conn->start_microtime, total_duration, (int)conn->mark,
+                		proto->str, tuple[0], tuple[1],
+                		tuple[2], tuple[3], conn->total_packet,
+                		conn->total_byte, status->str, conn->id,
+                		status_info[INIT]->str, status_info[DECISION]->str, status_info[REPLAY]->str,
+                		status_info[FORWARD]->str, status_info[PROXY]->str,
+				conn->honeymon_IDX
+				#ifdef HAVE_XMPP
+				conn->dionaeaDownload, conn->dionaeaDownloadTime
+				#endif
+				) + 1);
+
+			sprintf(logbuf,
+				"INSERT INTO honeybrid VALUES ("
+				"'',"
+				"%.3f, %.3f, %i,"
+				"'%s', '%s', '%s',"
+				"'%s', '%s', %d,"
+				"%d, '%s', %d,"
+				"'%s', '%s', '%s',"
+				"'%s', '%s',"
+				"%u"
+				#ifdef HAVE_XMPP
+				",%i,%i"
+				#endif
+				");",
+	               		conn->start_microtime, total_duration, (int)conn->mark,
+                		proto->str, tuple[0], tuple[1],
+                		tuple[2], tuple[3], conn->total_packet,
+                		conn->total_byte, status->str, conn->id,
+                		status_info[INIT]->str, status_info[DECISION]->str, status_info[REPLAY]->str,
+                		status_info[FORWARD]->str, status_info[PROXY]->str,
+				conn->honeymon_IDX
+				#ifdef HAVE_XMPP
+				,conn->dionaeaDownload, conn->dionaeaDownloadTime
+				#endif
+			);
 
 			if(mysql_query(mysqlConn, logbuf)) {
 				g_printerr("Logging to MySQL failed: %s\n", mysql_error(mysqlConn));
@@ -418,7 +449,45 @@ void connection_log(struct conn_struct *conn)
 	} else
 	#endif
 	if ( NULL != g_hash_table_lookup(config,"log_format") && NULL != strstr(g_hash_table_lookup(config,"log_format"),"csv") ) {
-		sprintf(logbuf,"%s,%.3f,%d,%s,%s,%s,%s,%s,%d,%d,%s,%d,%s,%s,%s,%s,%s,%i,%i\n",
+
+		logbuf=malloc(snprintf(
+                                NULL, 0,
+				#ifdef HAVE_XMPP
+				"%s,%.3f,%d,%s,%s,%s,%s,%s,%d,%d,%s,%d,%s,%s,%s,%s,%s,%i,%i\n",
+				#else
+				"%s,%.3f,%d,%s,%s,%s,%s,%s,%d,%d,%s,%d,%s,%s,%s,%s,%s\n",
+				#endif
+				conn->start_timestamp->str,
+				total_duration,
+				conn->mark,
+				proto->str,
+				tuple[0],
+				tuple[1],
+				tuple[2],
+				tuple[3],
+				conn->total_packet,
+				conn->total_byte,
+				status->str,
+				conn->id,
+				//status_info[INVALID]->str,
+				status_info[INIT]->str,
+				status_info[DECISION]->str,
+				status_info[REPLAY]->str,
+				status_info[FORWARD]->str,
+				status_info[PROXY]->str
+				#ifdef HAVE_XMPP
+				,
+				conn->dionaeaDownload,
+				conn->dionaeaDownloadTime
+				#endif
+			) + 1);
+
+		sprintf(logbuf,
+		#ifdef HAVE_XMPP
+		"%s,%.3f,%d,%s,%s,%s,%s,%s,%d,%d,%s,%d,%s,%s,%s,%s,%s,%i,%i\n",
+		#else
+		"%s,%.3f,%d,%s,%s,%s,%s,%s,%d,%d,%s,%d,%s,%s,%s,%s,%s\n",
+		#endif
 		conn->start_timestamp->str,
 		total_duration,
 		conn->mark,
@@ -436,9 +505,12 @@ void connection_log(struct conn_struct *conn)
 		status_info[DECISION]->str,
 		status_info[REPLAY]->str,
 		status_info[FORWARD]->str,
-		status_info[PROXY]->str,
+		status_info[PROXY]->str
+		#ifdef HAVE_XMPP
+		,
 		conn->dionaeaDownload,
 		conn->dionaeaDownloadTime
+		#endif
 		);
 
 		if(ICONFIG("output")==2)
@@ -446,7 +518,45 @@ void connection_log(struct conn_struct *conn)
 		else
 			fprintf(logfd, "%s", logbuf);
         } else {
-		sprintf(logbuf,"%s %.3f %d %s %s:%s -> %s:%s %d %d %s ** %d %s %s %s %s %s | %i %i \n",
+
+		logbuf=malloc(snprintf(
+                                NULL, 0,
+				#ifdef HAVE_XMPP
+				"%s %.3f %d %s %s:%s -> %s:%s %d %d %s ** %d %s %s %s %s %s | %i %i\n",
+				#else
+				"%s %.3f %d %s %s:%s -> %s:%s %d %d %s ** %d %s %s %s %s %s\n",
+				#endif
+				conn->start_timestamp->str,
+				total_duration,
+				conn->mark,
+				proto->str,
+				tuple[0],
+				tuple[1],
+				tuple[2],
+				tuple[3],
+				conn->total_packet,
+				conn->total_byte,
+				status->str,
+				conn->id,
+				//status_info[INVALID]->str,
+				status_info[INIT]->str,
+				status_info[DECISION]->str,
+				status_info[REPLAY]->str,
+				status_info[FORWARD]->str,
+				status_info[PROXY]->str
+				#ifdef HAVE_XMPP
+				,
+				conn->dionaeaDownload,
+				conn->dionaeaDownloadTime
+				#endif
+			) + 1);
+
+		sprintf(logbuf,
+		#ifdef HAVE_XMPP
+		"%s %.3f %d %s %s:%s -> %s:%s %d %d %s ** %d %s %s %s %s %s | %i %i \n",
+		#else
+		"%s %.3f %d %s %s:%s -> %s:%s %d %d %s ** %d %s %s %s %s %s\n",
+		#endif
 		conn->start_timestamp->str,
 		total_duration,
 		conn->mark,
@@ -464,9 +574,12 @@ void connection_log(struct conn_struct *conn)
 		status_info[DECISION]->str,
 		status_info[REPLAY]->str,
 		status_info[FORWARD]->str,
-		status_info[PROXY]->str,
+		status_info[PROXY]->str
+		#ifdef HAVE_XMPP
+		,
 		conn->dionaeaDownload,
 		conn->dionaeaDownloadTime
+		#endif
 		);
 
 		if(ICONFIG("output")==2)

@@ -23,7 +23,9 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <errno.h>
 #include <netdb.h>
+#include <glib.h>
 
 #include <string.h>
 #include <unistd.h>
@@ -38,33 +40,13 @@
 
 #define ATTACK_TIMEOUT 600
 
+GThread vmi_status_updater;
 GTree *vmi_vms;
 GTree *bannedIPs;
 int vmi_sock;
 
 struct sockaddr_in vmi_addr;    /* VMI server address */
 unsigned short vmi_port;    /* VMI server port */
-
-/*struct vmi_msg {
-	char *vm_name;
-	char *attacker;
-	char *conn_out;
-};*/
-
-struct vm_search {
-	gchar *srcIP;
-	uint32_t vmID;
-};
-
-struct attacker_search {
-	gchar *outIP;
-	gchar *attacker;
-	uint32_t mark;
-
-	char *vmName;
-	gint found;
-	gint event;
-};
 
 struct vmi_vm {
 	gchar *attacker;
@@ -76,19 +58,29 @@ struct vmi_vm {
 	gint start;
 	gint event;
 
-	pthread_mutex_t lock;
+	GStaticRWLock lock;
+
+	// To manipulate connections associated
+	// we need to keys
+	GSList *conn_keys;
 };
 
-/*void free_vmi_msg(gpointer data) {
-        struct vmi_msg *tofree = (struct vmi_msg *)data;
-	if(tofree->vm_name!=NULL)
-		free(tofree->vm_name);
-	if(tofree->attacker!=NULL)
-		free(tofree->attacker);
-	if(tofree->conn_out!=NULL)
-		free(tofree->conn_out);
-        free(tofree);
-}*/
+struct vm_search {
+	gchar *srcIP;
+	struct vmi_vm *vm;
+};
+
+struct attacker_search {
+	gchar *srcIP;
+	gchar *outIP;
+	gchar *attacker;
+	uint32_t mark;
+	gint banned;
+
+	struct vmi_vm *vm;
+	gint found;
+	gint event;
+};
 
 void noop(gpointer data) {}
 
@@ -99,7 +91,6 @@ void free_vmi_vm(gpointer data) {
 	if(vm->name!=NULL)
 		free(vm->name);
 
-	pthread_mutex_destroy(&(vm->lock));
         free(vm);
 }
 
@@ -129,7 +120,7 @@ gboolean build_vmi_vms2(gpointer key, gpointer value, gpointer data) {
                 	if (nl) *nl = '\0';
 
 			if(!strcmp(vmi_buffer,"active")) {
-				g_printerr("%s VM %s is active, pausing!\n", H(22), (char *)value);
+				g_printerr("%s VM %s is active, pausing!\n", H(22), vm_name);
 
 				bzero(vmi_buffer,100);
 				sprintf(vmi_buffer,"pause,%s\n", vm_name);
@@ -150,14 +141,14 @@ gboolean build_vmi_vms2(gpointer key, gpointer value, gpointer data) {
 				vm->attacker=NULL;
 				vm->paused=1;
 				vm->event=0;
+				g_static_rw_lock_init( &(vm->lock) );
 
-				pthread_mutex_init(&(vm->lock),NULL);
+				g_tree_insert(vmi_vms, (gpointer)vm->name, (gpointer)vm);
 
-				g_tree_insert(vmi_vms, key, (gpointer)vm);
 			} else
 			if(!strcmp(vmi_buffer,"paused")) {
 
-				g_printerr("%s VM %s is paused, enabling!\n", H(22), (char *)value);
+				g_printerr("%s VM %s is paused, enabling!\n", H(22), vm_name);
                                 struct vmi_vm *vm=g_malloc0(sizeof(struct vmi_vm));
 
                                 vm->vmID=*(uint32_t*)key;
@@ -166,11 +157,9 @@ gboolean build_vmi_vms2(gpointer key, gpointer value, gpointer data) {
 				vm->paused=1;
 				vm->logID=0;
 				vm->event=0;
+				g_static_rw_lock_init( &(vm->lock) );
 
-                                pthread_mutex_init(&(vm->lock),NULL);
-
-                                g_tree_insert(vmi_vms, key, (gpointer)vm);
-
+                                g_tree_insert(vmi_vms, (gpointer)vm->name, (gpointer)vm);
 			} else
 				g_printerr("%s VM %s is inactive!\n",H(22), (char *)value);
 		}
@@ -189,14 +178,12 @@ void build_vmi_vms(gpointer data, gpointer user_data) {
 
 gboolean find_free_vm(gpointer key, gpointer value, gpointer data) {
 
-	uint32_t *vmID=(uint32_t *)key;
+	//uint32_t *vmID=(uint32_t *)key;
 	struct vmi_vm *vm=(struct vmi_vm *)value;
 	struct vm_search *search=(struct vm_search *)data;
 	int found=0;
 
-	printf("Searching for free VM: %s (%u)\n", vm->name, *vmID);
-
-	pthread_mutex_lock(&(vm->lock));
+	printf("Searching for free VM: %s\n", vm->name);
 
 	if(vm->paused) {
 
@@ -216,6 +203,8 @@ gboolean find_free_vm(gpointer key, gpointer value, gpointer data) {
 		char *p;
 		char delim[]=",";
 		strtok_r(buf,delim,&p);
+
+		g_static_rw_lock_writer_lock(&(vm->lock));
 		vm->logID=atoi(strtok_r(NULL,delim,&p));
 		vm->paused=0;
 		vm->attacker=g_strdup(search->srcIP);
@@ -223,14 +212,14 @@ gboolean find_free_vm(gpointer key, gpointer value, gpointer data) {
 	        g_get_current_time(&t);
         	vm->start = (t.tv_sec);
 		vm->event=0;
+		g_static_rw_lock_writer_unlock(&(vm->lock));
 
-		search->vmID=*vmID;
+		search->vm=vm;
 		found=1;
 
-		g_printerr("%s Found free VM and activated it: %u!\n", H(22), *vmID);
+		g_printerr("%s Found free VM and activated it: %u!\n", H(22), vm->vmID);
 
 	}
-	pthread_mutex_unlock(&(vm->lock));
 
 	if(found)
 		return TRUE;
@@ -239,27 +228,30 @@ gboolean find_free_vm(gpointer key, gpointer value, gpointer data) {
 }
 
 gboolean find_used_vm(gpointer key, gpointer value, gpointer data) {
-	uint32_t *vmID=(uint32_t *)key;
         struct vmi_vm *vm=(struct vmi_vm *)value;
         struct vm_search *search=(struct vm_search *)data;
 
-	if(!vm->paused && !strcmp(search->srcIP, vm->attacker)) {
+	printf("Searching for used VM: %s (%u)\n", vm->name, vm->vmID);
 
-		char buf[100];
-		bzero(buf,100);
-		sprintf(buf,"status,%s\n",vm->name);
-		write(vmi_sock, buf, strlen(buf));
-		bzero(buf,100);
-		read(vmi_sock,buf,100);
-		if(!strcmp(buf,"paused\n\r")) {
-			vm->paused=1;
-			free(vm->attacker);
-			vm->attacker=NULL;
-		} else {
-			printf("This attacker is already using a VM: %u\n", *vmID);
-			search->vmID=*vmID;
+	if(!vm->paused) {
+		g_static_rw_lock_reader_lock(&(vm->lock));
+		if(!strcmp(search->srcIP, vm->attacker)) {
+			printf("This attacker is already using a VM: %u\n", vm->vmID);
+			search->vm=vm;
+			g_static_rw_lock_reader_unlock(&(vm->lock));
 			return TRUE;
 		}
+		g_static_rw_lock_reader_unlock(&(vm->lock));
+	}
+
+	return FALSE;
+}
+
+gboolean find_if_banned(gpointer key, gpointer value, gpointer data) {
+	struct attacker_search *attacker=(struct attacker_search *)data;
+	if(!strcmp((char *)key,attacker->srcIP)) {
+		attacker->banned=1;
+		return TRUE;
 	}
 
 	return FALSE;
@@ -273,20 +265,45 @@ void mod_vmi_pick(struct mod_args *args)
 	struct vm_search search;
 	gchar **values=g_strsplit( args->pkt->key_src, ":", 0);
         search.srcIP = values[0];
-	search.vmID=0;
+	search.vm=NULL;
 
-	g_tree_foreach(vmi_vms, (GTraverseFunc)find_used_vm, (gpointer)&search);
+	struct attacker_search attacker;
+	attacker.srcIP=values[0];
+	attacker.banned=0;
 
-	if(search.vmID==0) {
-		g_tree_foreach(vmi_vms, (GTraverseFunc)find_free_vm, (gpointer)&search);
+	//printf("Check if attacker is banned..\n");
+	g_tree_foreach(bannedIPs, (GTraverseFunc)find_if_banned,(gpointer)&attacker);
+
+	if(attacker.banned==0) {
+
+		//printf("Check if he already uses a clone\n");
+
+		g_tree_foreach(vmi_vms, (GTraverseFunc)find_used_vm, (gpointer)&search);
+
+		if(search.vm==NULL) {
+
+			//printf("Check if we have any clones available\n");
+
+			g_tree_foreach(vmi_vms, (GTraverseFunc)find_free_vm, (gpointer)&search);
+		}
 	}
+	//else {
+	//	printf("Attacker %s is banned!\n", attacker.srcIP);
+	//}
 
-	if(search.vmID!=0) {
-		//printf("%s Picking %u.\n", H(args->pkt->conn->id), free_vm);
-                args->backend_use=search.vmID;
+	if(search.vm!=NULL) {
+		//printf("%s Picking %s (%u).\n", H(args->pkt->conn->id), search.vm->name, search.vm->vmID);
+                args->backend_use=search.vm->vmID;
                 args->node->result = 1;
+		args->pkt->conn->honeymon_IDX=search.vm->logID;
+
+		// save the connection keys
+		g_static_rw_lock_writer_lock(&(search.vm->lock));
+		search.vm->conn_keys = g_slist_append(search.vm->conn_keys, strdup(args->pkt->conn->key));
+		g_static_rw_lock_writer_unlock(&(search.vm->lock));
+
 	} else {
-		g_printerr("%s No available backend found, rejecting!\n", H(args->pkt->conn->id));
+		//g_printerr("%s No available backend found, rejecting!\n", H(args->pkt->conn->id));
 		args->node->result = 0;
 	}
 
@@ -295,7 +312,7 @@ void mod_vmi_pick(struct mod_args *args)
 
 void mod_vmi_back(struct mod_args *args)
 {
-	g_printerr("%s VMI Back Module called\n", H(args->pkt->conn->id));
+/*	g_printerr("%s VMI Back Module called\n", H(args->pkt->conn->id));
 
 	GTimeVal t;
         g_get_current_time(&t);
@@ -341,30 +358,35 @@ void mod_vmi_back(struct mod_args *args)
 		g_tree_insert(bannedIPs, (gpointer)attacker, (gpointer)startTime);
 	}
 	else		args->node->result = 0;
-
+*/
 }
 
 gboolean control_check_attacker(gpointer key, gpointer value, gpointer data) {
 	struct vmi_vm *vm=(struct vmi_vm *)value;
 	struct attacker_search *search=(struct attacker_search *)data;
-	uint32_t vmID=*(uint32_t *)key;
 
 	GTimeVal t;
         g_get_current_time(&t);
         gint now = (t.tv_sec);
 
-	if(!vm->paused && vmID==search->mark && now-(vm->start)<=ATTACK_TIMEOUT) {
+	if(!vm->paused && vm->vmID==search->mark && now-(vm->start)<=ATTACK_TIMEOUT) {
+
+		printf("Attack session found on clone %s!\n", vm->name);
+
 		search->found=1;
-		search->vmName=strdup(vm->name);
 		search->attacker=strdup(vm->attacker);
+		search->vm=vm;
 
 		if(vm->event)
 			search->event=1;
 		else
 		// Is the clone going somewhere else than the attacker?
-		if(strcmp(search->attacker, vm->attacker)) {
+		if(strcmp(search->outIP, vm->attacker)) {
 			search->event=1;
+
+			g_static_rw_lock_writer_lock(&(vm->lock));
 			vm->event=1;
+			g_static_rw_lock_writer_unlock(&(vm->lock));
 		}
 
 		return TRUE;
@@ -387,7 +409,7 @@ void mod_vmi_control(struct mod_args *args)
 	//key_src = g_strsplit( args->pkt->key_src, ":", 0);
 	key_dst =  g_strsplit(args->pkt->key_dst, ":", 2);
 
-	//g_printerr("%s source IP is %s\n", H(args->pkt->conn->id), key_src[0]);
+	//g_printerr("Control module is looking for an attack session from %s\n", key_dst[0]);
 
 	struct attacker_search search;
 	search.found=0;
@@ -395,24 +417,26 @@ void mod_vmi_control(struct mod_args *args)
 	search.outIP=key_dst[0];
 	search.attacker=NULL;
 	search.mark=args->pkt->mark;
-	search.vmName=NULL;
+	search.vm=NULL;
 
 	g_tree_foreach(vmi_vms, (GTraverseFunc)control_check_attacker, (gpointer)&search);
 
-	if(search.found && search.vmName!=NULL) {
+	if(search.found && search.vm!=NULL) {
+
+		args->pkt->conn->honeymon_IDX=search.vm->logID;
+
 		if(search.event) {
 			g_printerr("%s Cought network event, sending signal!\n", H(args->pkt->conn->id));
 			args->node->result = 0;
 
-			char *buf = g_malloc0(snprintf(NULL, 0, "%s,%s,%s\n", search.vmName, search.attacker, search.outIP) + 1);
-                	sprintf(buf,"%s,%s,%s\n",search.vmName,search.attacker,search.outIP);
+			char *buf = g_malloc0(snprintf(NULL, 0, "%s,%s,%s\n", search.vm->name, search.attacker, search.outIP) + 1);
+                	sprintf(buf,"%s,%s,%s\n",search.vm->name,search.attacker,search.outIP);
                 	write(vmi_sock, buf, strlen(buf));
 			free(buf);
 		}
 		else
 			args->node->result = 1;
 
-		free(search.vmName);
 		free(search.attacker);
 	} else {
 		args->node->result = 0;
@@ -446,6 +470,86 @@ void mod_vmi(struct mod_args *args) {
 }
 
 //////////////////////
+
+void vm_status_updater_thread() {
+
+	printf("%s Honeymon VM status updater thread started\n", H(66));
+
+	int vmi_sock_updater = socket(AF_INET, SOCK_STREAM, 0);
+	if (vmi_sock_updater < 0)
+                errx(1, "%s: ERROR opening socket",__func__);
+
+	if(connect(vmi_sock_updater, (struct sockaddr *)&vmi_addr, sizeof(vmi_addr))<0)
+		errx(1, "%s: ERROR connecting", __func__);
+
+	char delim[]=",";
+	char *signal = malloc(snprintf(NULL, 0, "listening\n") + 1);
+        sprintf(signal,"listening\n");
+	while(1) {
+        	int n=write(vmi_sock_updater, signal, strlen(signal));
+		if(n<0) {
+			printf("Updater thread failed to send signal: %s!\n", strerror(errno));
+			break;
+		}
+
+		char buf[100];
+        	bzero(buf,100);
+        	n=read(vmi_sock_updater,buf,100);
+
+		if(n>0) {
+
+			char *nl = strrchr(buf, '\r');
+                        if (nl) *nl = '\0';
+                        nl = strrchr(buf, '\n');
+                        if (nl) *nl = '\0';
+			char *p;
+
+                	char *first=strtok_r(buf,delim,&p);
+			char *second=strtok_r(NULL,delim,&p);
+			if(!strcmp(first,"reverted") && second != NULL) {
+
+				struct vmi_vm *vm=g_tree_lookup(vmi_vms, (gpointer)second);
+
+				if(vm!=NULL) {
+					g_static_rw_lock_writer_lock(&(vm->lock));
+
+					if(vm->attacker!=NULL) {
+
+						g_printerr("%s Setting connections to DROP and banning %s\n", H(62), vm->attacker);
+
+						GSList *r=vm->conn_keys;
+						struct conn_struct *conn;
+						if(r!=NULL) {
+							g_static_rw_lock_writer_lock(&rwlock);
+							while(r!=NULL) {
+								conn=(struct conn_struct *)g_tree_lookup(conn_tree, r->data);
+								conn->state=DROP;
+								free((char *)r->data);
+								r=r->next;
+							}
+							g_static_rw_lock_writer_unlock(&rwlock);
+						}
+						g_slist_free(vm->conn_keys);
+
+						g_tree_insert(bannedIPs, (gpointer)strdup(vm->attacker), (gpointer)NULL);
+						free(vm->attacker);
+					}
+
+					vm->attacker=NULL;
+					vm->conn_keys=NULL;
+
+                               		vm->paused=1;
+                                	vm->event=0;
+
+					g_static_rw_lock_writer_unlock(&(vm->lock));
+
+				}
+			}
+		}
+	}
+
+        free(signal);
+}
 
 int init_mod_vmi() {
 
@@ -489,10 +593,12 @@ int init_mod_vmi() {
     	else
     		printf("%s VMI-Honeymon is active, query VM states..\n", H(22));
 
-	vmi_vms=g_tree_new_full((GCompareDataFunc)intcmp, NULL, (GDestroyNotify)noop, (GDestroyNotify)free_vmi_vm);
+	vmi_vms=g_tree_new_full((GCompareDataFunc)strcmp, NULL, (GDestroyNotify)noop, (GDestroyNotify)free_vmi_vm);
         g_ptr_array_foreach(targets, (GFunc)build_vmi_vms, (gpointer)&vmi_sock);
 
-	bannedIPs=g_tree_new_full((GCompareDataFunc)strcmp, NULL, (GDestroyNotify)free, (GDestroyNotify)free);
+	bannedIPs=g_tree_new_full((GCompareDataFunc)strcmp, NULL, (GDestroyNotify)free, (GDestroyNotify)noop);
+
+	g_thread_create_full((void *)vm_status_updater_thread, NULL, 0, TRUE, TRUE, 0, NULL);
 
 	return 0;
 }

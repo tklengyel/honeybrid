@@ -409,21 +409,26 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 
 		update = 1;
 	} else {
-		char *value;
+		char *value=NULL;
 
 		/* Nothing found, looking up in the redirection table */
-		if ( 	high_redirection_table != NULL &&
-			(value = g_hash_table_lookup(high_redirection_table, key0)) != NULL) {
+		if (high_redirection_table != NULL) {
+			g_static_rw_lock_reader_lock(&hihlock);
+			value = g_hash_table_lookup(high_redirection_table, key0);
+			g_static_rw_lock_reader_unlock(&hihlock);
+		}
+
+		if(value!=NULL) {
 			g_printerr("%s ~~~~ This packet is part of a replayed connection ~~~~~\n", H(0));
 			/* Structure found! It means destination is EXT and source is INT */
 
 			char **split = g_strsplit( value, ":", 0 );
 			/* split[0]=IP, split[1]=port, split[2]=mark */
 			pkt->mark=(uint32_t)atoi(split[2]);
-
 			snprintf(pkt->key, 64, "%s:%s:%s", pkt->key_dst, split[0], split[1]);
+			g_strfreev(split);
 
-			g_printerr("%s ====== Corresponding LIH session: %s, Mark: %u ==== \n",H(0),pkt->key,pkt->mark);
+			//g_printerr("%s ====== Corresponding LIH session: %s, Mark: %u ==== \n",H(0),pkt->key,pkt->mark);
 
 			pkt->origin = HIH;
 			update = 1;
@@ -624,9 +629,11 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 		conn_init->start_timestamp = g_string_new("");
                 g_string_printf(conn_init->start_timestamp,"%d-%02d-%02d %02d:%02d:%02d.%.6d", (1900+tm->tm_year), (1+tm->tm_mon), tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec, (int)tv.tv_usec);
 
+		#ifdef HAVE_XMPP
 		/* Dionaea (updated by mod_xmpp) */
 		conn_init->dionaeaDownload=0;
 		conn_init->dionaeaDownloadTime=0;
+		#endif
 
 		/*! insert entry in B-Tree
 		 * (set up a lock to protect the writing)
@@ -851,7 +858,9 @@ char * lookup_honeypot_addr( gchar *testkey, int list ) {
 			return NULL;
 
                 char *lihdest;
+		g_static_rw_lock_reader_lock(&hihlock);
 		lihdest = g_strdup((char *)g_hash_table_lookup(high_redirection_table, testkey));
+		g_static_rw_lock_reader_unlock(&hihlock);
 
                 if(!lihdest)
                         return NULL;
@@ -992,7 +1001,7 @@ void clean()
 		entrytoclean = g_ptr_array_new();
 
 		/*! call the clean function for each value, delete the value if TRUE is returned */
-		g_tree_traverse( conn_tree,(GHRFunc) expire_conn, G_IN_ORDER, &delay );
+		g_tree_foreach( conn_tree,(GTraverseFunc) expire_conn, &delay );
 
 		/*! remove each key listed from the btree */
 		g_ptr_array_foreach(entrytoclean,(GFunc) free_conn, NULL);
@@ -1033,9 +1042,11 @@ int setup_redirection(struct conn_struct *conn, uint32_t hih_use)
                 g_string_printf(key_hih_ext, "%s:%s:%s", addr_ntoa(hihaddr), tmp[3], conn->key_ext );
 
 		if (high_redirection_table == NULL) {
-			high_redirection_table = g_hash_table_new(g_str_hash, g_str_equal);
+			high_redirection_table = g_hash_table_new_full(g_str_hash, g_str_equal, free, free);
 			g_printerr("%s [** high_redirection_table created **]\n", H(conn->id));
 		}
+
+		g_static_rw_lock_writer_lock(&hihlock);
 		if (g_hash_table_lookup(high_redirection_table, key_hih_ext->str) == NULL) {
 
 			/* Insert as value: conn->key_lih:conn->mark */
@@ -1049,6 +1060,7 @@ int setup_redirection(struct conn_struct *conn, uint32_t hih_use)
 			g_printerr("%s [** HIH already busy with the same tuple, can't proceed **]\n", H(conn->id));
 			return NOK;
 		}
+		g_static_rw_lock_writer_unlock(&hihlock);
 
 		GTimeVal t;
 	        g_get_current_time(&t);
@@ -1064,6 +1076,7 @@ int setup_redirection(struct conn_struct *conn, uint32_t hih_use)
 		conn->hih.addr = 	htonl(addr2int(addr_ntoa(hihaddr)));
 		conn->hih.lih_addr = 	htonl(addr2int(conn->key_lih));
 		conn->hih.port = 	htons((short)atoi(tmp[3]));
+		conn->hih.redirect_key= strdup(key_hih_ext->str);
 		/*! We then update the status of the connection structure */
 		conn->stat_time[ DECISION ] = microtime;
 		//conn->state = REPLAY;

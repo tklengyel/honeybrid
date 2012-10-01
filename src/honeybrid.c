@@ -284,7 +284,7 @@ int close_conn_tree()
 	entrytoclean = g_ptr_array_new();
 
         /*! call the clean function for each value, delete the value if TRUE is returned */
-        g_tree_traverse( conn_tree,(GHRFunc) expire_conn, G_IN_ORDER, &delay );
+        g_tree_foreach( conn_tree,(GTraverseFunc) expire_conn, &delay );
 
         /*! remove each key listed from the btree */
         g_ptr_array_foreach(entrytoclean,(GFunc) free_conn, NULL);
@@ -511,6 +511,7 @@ init_variables()
 
 	/*! init the security locks */
 	g_static_rw_lock_init( &rwlock );
+	g_static_rw_lock_init( &hihlock );
 	#ifdef DE_THREAD
 	g_static_rw_lock_init( &DE_queue_lock );
 	#endif
