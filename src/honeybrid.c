@@ -241,11 +241,12 @@ int close_hash()
 
 	if (high_redirection_table != NULL) {
 		g_printerr("%s: Destroying table high_redirection_table\n", __func__);
-		g_hash_table_foreach_remove(high_redirection_table, (GHRFunc) free_table, NULL);
+		g_static_rw_lock_writer_lock(&hihlock);
 		g_hash_table_destroy(high_redirection_table);
+		g_static_rw_lock_writer_unlock(&hihlock);
 	}
 
-	if (DE_rules != NULL) {
+	//if (DE_rules != NULL) {
 		/*! this table generates invalid free error in valgrind
 		 */
 		/*! and also a seg fault...
@@ -253,7 +254,7 @@ int close_hash()
 		g_hash_table_foreach_remove(DE_rules, (GHRFunc) free_table, NULL);
 		g_hash_table_destroy(DE_rules);
 		*/
-	}
+	//}
 
 	if (config != NULL) {
 		g_printerr("%s: Destroying table config\n", __func__);
@@ -759,6 +760,8 @@ process_packet(struct nfq_data *tb)
 			//	forward(pkt);
 			//}
 			break;
+		case DROP:
+			to_return->statement=0;
 		default:
 			store_pkt(conn, pkt);
 			break;

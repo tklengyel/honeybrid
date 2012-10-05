@@ -629,6 +629,8 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 		conn_init->start_timestamp = g_string_new("");
                 g_string_printf(conn_init->start_timestamp,"%d-%02d-%02d %02d:%02d:%02d.%.6d", (1900+tm->tm_year), (1+tm->tm_mon), tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec, (int)tv.tv_usec);
 
+		conn_init->honeymon_IDX=0;
+
 		#ifdef HAVE_XMPP
 		/* Dionaea (updated by mod_xmpp) */
 		conn_init->dionaeaDownload=0;
