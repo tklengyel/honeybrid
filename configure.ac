@@ -55,7 +55,10 @@ AC_ARG_ENABLE(libev,
    fi
  ])
 
-AC_CHECK_LIB(netfilter_queue, nfq_set_verdict2, [CORE_LIBS="$CORE_LIBS -lnetfilter_queue"],[AC_ERROR([libnetfilter_queue is too old. Please upgrade it to 1.0.0 or later!])])
+AC_CHECK_LIB(nfnetlink, nfnl_fd, [], [AC_ERROR([libnfnetlink library is missing nfnl_fd, try to compile it from source!])])
+AC_CHECK_LIB(netfilter_queue, [nfq_set_verdict2], 
+	[CORE_LIBS="$CORE_LIBS -lnetfilter_queue"],
+	[AC_ERROR([libnetfilter_queue is too old. Please upgrade it to 1.0.0 or later!])])
 AC_CHECK_LIB(pcap, pcap_compile_nopcap, [CORE_LIBS="$CORE_LIBS -lpcap"], [AC_ERROR(PCAP library missing)])
 AC_CHECK_LIB(dumbnet, addr_ntoa, [CORE_LIBS="$CORE_LIBS -ldumbnet"], [AC_ERROR(Dumbnet library missing)])
 AC_SUBST(CORE_LIBS)

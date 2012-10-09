@@ -27,6 +27,9 @@
 /* libev enabled */
 #undef HAVE_LIBEV
 
+/* Define to 1 if you have the `nfnetlink' library (-lnfnetlink). */
+#undef HAVE_LIBNFNETLINK
+
 /* Define to 1 if your system has a GNU libc compatible `malloc' function, and
    to 0 otherwise. */
 #undef HAVE_MALLOC
