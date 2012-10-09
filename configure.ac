@@ -11,7 +11,7 @@
 AC_PREREQ(2.61)
 #AC_INIT(FULL-PACKAGE-NAME, VERSION, BUG-REPORT-ADDRESS)
 AC_INIT([honeybrid],
-        [0.1.2],
+        [0.1.3],
         [Robin Berthier robinb@umd.edu],
         [honeybrid])
 AM_INIT_AUTOMAKE
