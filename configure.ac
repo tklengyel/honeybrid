@@ -44,11 +44,17 @@ AC_FUNC_VPRINTF
 AC_CHECK_FUNCS([dup2 gettimeofday inet_ntoa memset socket strdup strerror strstr])
 
 CORE_LIBS=""
-AC_CHECK_LIB(ev, ev_loop, [
-	AC_DEFINE([HAVE_LIBEV], [1], [libev enabled])
-	AC_MSG_NOTICE([Using libev for event handling])
-	CORE_LIBS="$CORE_LIBS -lev"
-	], [AC_MSG_NOTICE([Not using libev for event handling])])
+AC_ARG_ENABLE(libev,
+ [  --enable-libev=yes    specify if you want to compile Honeybrid with libev (EXPERIMENTAL)],
+ [ if   test "x$enableval" = "xyes" ; then
+	AC_CHECK_LIB(ev, ev_loop, [
+		AC_DEFINE([HAVE_LIBEV], [1], [libev enabled])
+		AC_MSG_NOTICE([Using libev for event handling])
+		CORE_LIBS="$CORE_LIBS -lev"
+	], [AC_MSG_NOTICE([Libev not found])])
+   fi
+ ])
+
 AC_CHECK_LIB(netfilter_queue, nfq_set_verdict2, [CORE_LIBS="$CORE_LIBS -lnetfilter_queue"],[AC_ERROR([libnetfilter_queue is too old. Please upgrade it to 1.0.0 or later!])])
 AC_CHECK_LIB(pcap, pcap_compile_nopcap, [CORE_LIBS="$CORE_LIBS -lpcap"], [AC_ERROR(PCAP library missing)])
 AC_CHECK_LIB(dumbnet, addr_ntoa, [CORE_LIBS="$CORE_LIBS -ldumbnet"], [AC_ERROR(Dumbnet library missing)])
