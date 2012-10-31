@@ -1070,7 +1070,9 @@ int setup_redirection(struct conn_struct *conn, uint32_t hih_use)
 	        microtime +=  ((gdouble)t.tv_sec);
 	        microtime += (((gdouble)t.tv_usec)/1000000.0);
 
-		printf("Interface for HIH: %s, TCP sock: %i UDP sock: %i\n", hihiface->name, hihiface->tcp_socket, hihiface->udp_socket);
+		if(hihiface!=NULL)
+			printf("Interface for HIH: %s, TCP sock: %i UDP sock: %i\n", 
+				hihiface->name, hihiface->tcp_socket, hihiface->udp_socket);
 
 		///conn->key_hih = hihaddr;
 		conn->hih.hihID=	hih_use;

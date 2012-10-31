@@ -199,7 +199,10 @@ int forward(struct pkt_struct* pkt)
 	/*!If packet from EXT, we forward it to HIH*/
 	else if(pkt->origin == EXT)
 	{
-		g_printerr("%s forwarding packet to HIH %u on interface %s\n", H(pkt->conn->id), pkt->conn->hih.hihID, pkt->conn->hih.iface->name);
+		if(pkt->conn->hih.iface!=NULL)
+			g_printerr("%s forwarding packet to HIH %u on interface %s\n", 
+				H(pkt->conn->id), pkt->conn->hih.hihID, pkt->conn->hih.iface->name);
+
 		fwd->daddr = pkt->conn->hih.addr;
 
 		/*!If TCP, we update the destination port, the acknowledgement number if any, and the checksum*/
