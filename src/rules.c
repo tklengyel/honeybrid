@@ -509,8 +509,8 @@ static const yytype_uint16 yyrline[] =
 {
        0,    83,    83,    84,    85,    86,    92,    95,    96,    99,
      103,   107,   114,   127,   173,   177,   190,   203,   218,   238,
-     257,   269,   275,   282,   288,   302,   315,   334,   355,   360,
-     370,   375,   381,   387,   393
+     257,   269,   275,   282,   288,   305,   321,   343,   367,   372,
+     382,   387,   393,   399,   405
 };
 #endif
 
@@ -1539,7 +1539,7 @@ yyreduce:
 /* Line 1455 of yacc.c  */
 #line 114 "rules.y"
     {
-		char *s = malloc(snprintf(NULL, 0, "%s", addr_ntoa((yyvsp[(4) - (5)].addr))) + 1);
+		char *s = g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa((yyvsp[(4) - (5)].addr))) + 1);
 		sprintf(s, "%s", addr_ntoa((yyvsp[(4) - (5)].addr)));
                 g_hash_table_insert(config, (yyvsp[(1) - (5)].string), s);
                 g_printerr("\tDefining IP: '%s' => '%s'\n", (yyvsp[(1) - (5)].string), s);
@@ -1774,28 +1774,34 @@ yyreduce:
 		*id=*(uint32_t *)((yyval.target)->backendIDs->data)+1;
 		(yyval.target)->backendIDs=g_slist_prepend((yyval.target)->backendIDs, (gpointer)id);
 
+		char *back_ip=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa((yyvsp[(3) - (4)].addr))) + 1);
+                sprintf(back_ip, "%s", addr_ntoa((yyvsp[(3) - (4)].addr)));
+
 		g_tree_insert((yyval.target)->back_handlers, (yyval.target)->backendIDs->data, (yyvsp[(3) - (4)].addr));
-		g_tree_insert((yyval.target)->back_ips, addr_ntoa((yyvsp[(3) - (4)].addr)), (yyvsp[(3) - (4)].addr));
+		g_tree_insert((yyval.target)->back_ips, back_ip, (yyvsp[(3) - (4)].addr));
 		
-		g_printerr("\tBackend %u with IP %s copied to handler without rule\n", *(uint32_t*)((yyval.target)->backendIDs->data), addr_ntoa((yyvsp[(3) - (4)].addr)));
+		g_printerr("\tBackend %u with IP %s copied to handler without rule\n", *(uint32_t*)((yyval.target)->backendIDs->data), back_ip);
         }
     break;
 
   case 25:
 
 /* Line 1455 of yacc.c  */
-#line 302 "rules.y"
+#line 305 "rules.y"
     {
 
 		uint32_t *id=g_malloc0(sizeof(uint32_t));
                 *id=*(uint32_t *)((yyval.target)->backendIDs->data)+1;
                 (yyval.target)->backendIDs=g_slist_prepend((yyval.target)->backendIDs, (gpointer)id);
 
+		char *back_ip=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa((yyvsp[(3) - (7)].addr))) + 1);
+                sprintf(back_ip, "%s", addr_ntoa((yyvsp[(3) - (7)].addr)));
+
 		g_tree_insert((yyval.target)->back_handlers, (yyval.target)->backendIDs->data, (yyvsp[(3) - (7)].addr));
 		g_tree_insert((yyval.target)->back_ips, addr_ntoa((yyvsp[(3) - (7)].addr)), (yyvsp[(3) - (7)].addr));
 		g_tree_insert((yyval.target)->back_rules, (yyval.target)->backendIDs->data, DE_create_tree((yyvsp[(5) - (7)].gstring)->str));
 	
-       		g_printerr("\tBackend %u with IP %s copied to handler with rule: %s\n", *(uint32_t*)((yyval.target)->backendIDs->data), addr_ntoa((yyvsp[(3) - (7)].addr)), (yyvsp[(5) - (7)].gstring)->str);
+       		g_printerr("\tBackend %u with IP %s copied to handler with rule: %s\n", *(uint32_t*)((yyval.target)->backendIDs->data), back_ip, (yyvsp[(5) - (7)].gstring)->str);
        		g_string_free((yyvsp[(5) - (7)].gstring), TRUE);
         }
     break;
@@ -1803,7 +1809,7 @@ yyreduce:
   case 26:
 
 /* Line 1455 of yacc.c  */
-#line 315 "rules.y"
+#line 321 "rules.y"
     {
 
                 uint32_t *id=g_malloc0(sizeof(uint32_t));
@@ -1814,12 +1820,15 @@ yyreduce:
 		iface->name=strdup((yyvsp[(8) - (10)].gstring)->str);
 		iface->mark=*id;
 
+		char *back_ip=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa((yyvsp[(6) - (10)].addr))) + 1);
+		sprintf(back_ip, "%s", addr_ntoa((yyvsp[(6) - (10)].addr)));
+
                 g_tree_insert((yyval.target)->back_handlers, (yyval.target)->backendIDs->data, (yyvsp[(6) - (10)].addr));
-		g_tree_insert((yyval.target)->back_ips, addr_ntoa((yyvsp[(6) - (10)].addr)), (yyvsp[(6) - (10)].addr));
+		g_tree_insert((yyval.target)->back_ips, back_ip, (yyvsp[(6) - (10)].addr));
 		g_tree_insert((yyval.target)->back_ifs, (yyval.target)->backendIDs->data, (gpointer)iface);
 		g_tree_insert((yyval.target)->back_tags, (yyval.target)->backendIDs->data, strdup((yyvsp[(4) - (10)].gstring)->str));
 
-                g_printerr("\tBackend %u with IP %s on interface %s and tag %s copied to handler without a rule\n", *(uint32_t*)((yyval.target)->backendIDs->data), addr_ntoa((yyvsp[(6) - (10)].addr)), (yyvsp[(8) - (10)].gstring)->str, (yyvsp[(4) - (10)].gstring)->str);
+                g_printerr("\tBackend %u with IP %s on interface %s and tag %s copied to handler without a rule\n", *(uint32_t*)((yyval.target)->backendIDs->data), back_ip, (yyvsp[(8) - (10)].gstring)->str, (yyvsp[(4) - (10)].gstring)->str);
                 g_string_free((yyvsp[(4) - (10)].gstring), TRUE);
 		g_string_free((yyvsp[(8) - (10)].gstring), TRUE);
         }
@@ -1828,7 +1837,7 @@ yyreduce:
   case 27:
 
 /* Line 1455 of yacc.c  */
-#line 334 "rules.y"
+#line 343 "rules.y"
     {
 
                 uint32_t *id=g_malloc0(sizeof(uint32_t));
@@ -1839,13 +1848,16 @@ yyreduce:
 		iface->name=strdup((yyvsp[(8) - (13)].gstring)->str);
 		iface->mark=*id;
 
+		char *back_ip=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa((yyvsp[(6) - (13)].addr))) + 1);
+                sprintf(back_ip, "%s", addr_ntoa((yyvsp[(6) - (13)].addr)));
+
                 g_tree_insert((yyval.target)->back_handlers, (yyval.target)->backendIDs->data, (yyvsp[(6) - (13)].addr));
-		g_tree_insert((yyval.target)->back_ips, addr_ntoa((yyvsp[(6) - (13)].addr)), (yyvsp[(6) - (13)].addr));
+		g_tree_insert((yyval.target)->back_ips, back_ip, (yyvsp[(6) - (13)].addr));
 		g_tree_insert((yyval.target)->back_ifs, (yyval.target)->backendIDs->data, (gpointer)iface);
                 g_tree_insert((yyval.target)->back_rules, (yyval.target)->backendIDs->data, DE_create_tree((yyvsp[(11) - (13)].gstring)->str));
 		g_tree_insert((yyval.target)->back_tags, (yyval.target)->backendIDs->data, strdup((yyvsp[(4) - (13)].gstring)->str));
 
-                g_printerr("\tBackend %u with IP %s on interface %s and tag %s copied to handler with rule: %s\n", *(uint32_t*)((yyval.target)->backendIDs->data), addr_ntoa((yyvsp[(6) - (13)].addr)), (yyvsp[(8) - (13)].gstring)->str, (yyvsp[(4) - (13)].gstring)->str, (yyvsp[(11) - (13)].gstring)->str);
+                g_printerr("\tBackend %u with IP %s on interface %s and tag %s copied to handler with rule: %s\n", *(uint32_t*)((yyval.target)->backendIDs->data), back_ip, (yyvsp[(8) - (13)].gstring)->str, (yyvsp[(4) - (13)].gstring)->str, (yyvsp[(11) - (13)].gstring)->str);
                 g_string_free((yyvsp[(4) - (13)].gstring), TRUE);
 		g_string_free((yyvsp[(8) - (13)].gstring), TRUE);
 		g_string_free((yyvsp[(11) - (13)].gstring), TRUE);
@@ -1855,7 +1867,7 @@ yyreduce:
   case 28:
 
 /* Line 1455 of yacc.c  */
-#line 355 "rules.y"
+#line 367 "rules.y"
     {
 		(yyval.target)->control_rule = DE_create_tree((yyvsp[(4) - (6)].gstring)->str);
 		g_string_free((yyvsp[(4) - (6)].gstring), TRUE);
@@ -1865,7 +1877,7 @@ yyreduce:
   case 29:
 
 /* Line 1455 of yacc.c  */
-#line 360 "rules.y"
+#line 372 "rules.y"
     { 
 		if (addr_pton((yyvsp[(1) - (1)].string), (yyval.addr)) < 0)
                         yyerror("\tIllegal IP address");
@@ -1878,7 +1890,7 @@ yyreduce:
   case 30:
 
 /* Line 1455 of yacc.c  */
-#line 370 "rules.y"
+#line 382 "rules.y"
     { 
 		//$$ = malloc(sizeof(char));
 		//snprintf($$, 1, " ");
@@ -1889,7 +1901,7 @@ yyreduce:
   case 31:
 
 /* Line 1455 of yacc.c  */
-#line 375 "rules.y"
+#line 387 "rules.y"
     {
 		if ((yyval.gstring)->len > 0) { g_string_append_printf((yyval.gstring), " "); }
 		(yyval.gstring) = g_string_append((yyval.gstring), (yyvsp[(2) - (2)].string));
@@ -1901,7 +1913,7 @@ yyreduce:
   case 32:
 
 /* Line 1455 of yacc.c  */
-#line 381 "rules.y"
+#line 393 "rules.y"
     { 
 		if ((yyval.gstring)->len > 0) { g_string_append_printf((yyval.gstring), " "); }
 		g_string_append_printf((yyval.gstring), "%d", (yyvsp[(2) - (2)].number));
@@ -1913,7 +1925,7 @@ yyreduce:
   case 33:
 
 /* Line 1455 of yacc.c  */
-#line 387 "rules.y"
+#line 399 "rules.y"
     { 
 		if ((yyval.gstring)->len > 0) { g_string_append_printf((yyval.gstring), " "); }
 		(yyval.gstring) = g_string_append((yyval.gstring), (yyvsp[(2) - (2)].string));
@@ -1925,7 +1937,7 @@ yyreduce:
   case 34:
 
 /* Line 1455 of yacc.c  */
-#line 393 "rules.y"
+#line 405 "rules.y"
     { 
 		if ((yyval.gstring)->len > 0) { g_string_append_printf((yyval.gstring), " "); }
 		(yyval.gstring) = g_string_append((yyval.gstring), (yyvsp[(2) - (2)].string));
@@ -1937,7 +1949,7 @@ yyreduce:
 
 
 /* Line 1455 of yacc.c  */
-#line 1941 "rules.c"
+#line 1953 "rules.c"
       default: break;
     }
   YY_SYMBOL_PRINT ("-> $$ =", yyr1[yyn], &yyval, &yyloc);
@@ -2149,7 +2161,7 @@ yyreturn:
 
 
 /* Line 1675 of yacc.c  */
-#line 401 "rules.y"
+#line 413 "rules.y"
 
 
 static void  yyerror(const char *msg) {

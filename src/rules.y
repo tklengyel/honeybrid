@@ -112,7 +112,7 @@ parameter: WORD EQ WORD {
 		g_printerr("\t'%s' => '%d'\n", $1, $3);
         }
 	|  WORD EQ QUOTE honeynet QUOTE {
-		char *s = malloc(snprintf(NULL, 0, "%s", addr_ntoa($4) + 1));
+		char *s = g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($4)) + 1);
 		sprintf(s, "%s", addr_ntoa($4));
                 g_hash_table_insert(config, $1, s);
                 g_printerr("\tDefining IP: '%s' => '%s'\n", $1, s);
@@ -245,7 +245,8 @@ rule: 	{
 		$$->back_handlers = g_tree_new((GCompareFunc)intcmp);
 		$$->back_ips = g_tree_new((GCompareFunc)strcmp);
 		$$->back_rules = g_tree_new((GCompareFunc)intcmp);
-		/* T0MA TODO: Create interface destroy function and hook it in here! */
+		$$->back_tags = g_tree_new((GCompareFunc)intcmp);
+		/* T0MA TODO: Create interface destroy function and create trees with destruct function specified! */
 		$$->back_ifs = g_tree_new((GCompareFunc)intcmp);
 		/* Since the trees need pointers for the keys (uints), they need to live somewhere */
 		$$->backendIDs=NULL;
@@ -268,7 +269,7 @@ rule: 	{
 	| rule FRONTEND honeynet SEMICOLON {
 		$$->front_handler = $3;
 		g_printerr("\tIP %s (%d) copied to front handler\n", addr_ntoa($3), $3->addr_ip);
-		g_printerr("\tResult IP %s (%d)\n", addr_ntoa($$->front_handler), $$->front_handler->addr_ip);
+		//g_printerr("\tResult IP %s (%d)\n", addr_ntoa($$->front_handler), $$->front_handler->addr_ip);
 		$$->front_rule = NULL;
 	} 
 	| rule FRONTEND honeynet QUOTE equation QUOTE SEMICOLON {
@@ -280,7 +281,8 @@ rule: 	{
 	}
 	| rule BACKPICK QUOTE equation QUOTE SEMICOLON {
                 g_printerr("\tCreating backend picking rule: %s\n", $4->str);
-		$$->back_picker = DE_create_tree($4->str);		
+		$$->back_picker = DE_create_tree($4->str);
+		g_printerr("\tBackpick module is at %p\n", $$->back_picker->module);	
 		g_string_free($4, TRUE);
         }
 	| rule BACKEND honeynet SEMICOLON {
@@ -292,10 +294,13 @@ rule: 	{
 		*id=*(uint32_t *)($$->backendIDs->data)+1;
 		$$->backendIDs=g_slist_prepend($$->backendIDs, (gpointer)id);
 
+		char *back_ip=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($3)) + 1);
+                sprintf(back_ip, "%s", addr_ntoa($3));
+
 		g_tree_insert($$->back_handlers, $$->backendIDs->data, $3);
-		g_tree_insert($$->back_ips, addr_ntoa($3), $3);
+		g_tree_insert($$->back_ips, back_ip, $3);
 		
-		g_printerr("\tBackend %u with IP %s copied to handler without rule\n", *(uint32_t*)($$->backendIDs->data), addr_ntoa($3));
+		g_printerr("\tBackend %u with IP %s copied to handler without rule\n", *(uint32_t*)($$->backendIDs->data), back_ip);
         }
 	| rule BACKEND honeynet QUOTE equation QUOTE SEMICOLON {
 
@@ -303,31 +308,61 @@ rule: 	{
                 *id=*(uint32_t *)($$->backendIDs->data)+1;
                 $$->backendIDs=g_slist_prepend($$->backendIDs, (gpointer)id);
 
+		char *back_ip=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($3)) + 1);
+                sprintf(back_ip, "%s", addr_ntoa($3));
+
 		g_tree_insert($$->back_handlers, $$->backendIDs->data, $3);
 		g_tree_insert($$->back_ips, addr_ntoa($3), $3);
 		g_tree_insert($$->back_rules, $$->backendIDs->data, DE_create_tree($5->str));
 	
-       		g_printerr("\tBackend %u with IP %s copied to handler with rule: %s\n", *(uint32_t*)($$->backendIDs->data), addr_ntoa($3), $5->str);
+       		g_printerr("\tBackend %u with IP %s copied to handler with rule: %s\n", *(uint32_t*)($$->backendIDs->data), back_ip, $5->str);
        		g_string_free($5, TRUE);
         }
-	| rule BACKEND honeynet QUOTE equation QUOTE QUOTE equation QUOTE SEMICOLON {
+	| rule BACKEND QUOTE equation QUOTE honeynet QUOTE equation QUOTE SEMICOLON {
 
                 uint32_t *id=g_malloc0(sizeof(uint32_t));
                 *id=*(uint32_t *)($$->backendIDs->data)+1;
                 $$->backendIDs=g_slist_prepend($$->backendIDs, (gpointer)id);
 
 		struct interface *iface=g_malloc0(sizeof(struct interface));
-		iface->name=strdup($5->str);
+		iface->name=strdup($8->str);
 		iface->mark=*id;
 
-                g_tree_insert($$->back_handlers, $$->backendIDs->data, $3);
-		g_tree_insert($$->back_ips, addr_ntoa($3), $3);
-		g_tree_insert($$->back_ifs, $$->backendIDs->data, (gpointer)iface);
-                g_tree_insert($$->back_rules, $$->backendIDs->data, DE_create_tree($8->str));
+		char *back_ip=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($6)) + 1);
+		sprintf(back_ip, "%s", addr_ntoa($6));
 
-                g_printerr("\tBackend %u with IP %s on interface %s copied to handler with rule: %s\n", *(uint32_t*)($$->backendIDs->data), addr_ntoa($3), $5->str, $8->str);
-                g_string_free($5, TRUE);
+                g_tree_insert($$->back_handlers, $$->backendIDs->data, $6);
+		g_tree_insert($$->back_ips, back_ip, $6);
+		g_tree_insert($$->back_ifs, $$->backendIDs->data, (gpointer)iface);
+		g_tree_insert($$->back_tags, $$->backendIDs->data, strdup($4->str));
+
+                g_printerr("\tBackend %u with IP %s on interface %s and tag %s copied to handler without a rule\n", *(uint32_t*)($$->backendIDs->data), back_ip, $8->str, $4->str);
+                g_string_free($4, TRUE);
 		g_string_free($8, TRUE);
+        }
+	| rule BACKEND QUOTE equation QUOTE honeynet QUOTE equation QUOTE QUOTE equation QUOTE SEMICOLON {
+
+                uint32_t *id=g_malloc0(sizeof(uint32_t));
+                *id=*(uint32_t *)($$->backendIDs->data)+1;
+                $$->backendIDs=g_slist_prepend($$->backendIDs, (gpointer)id);
+
+		struct interface *iface=g_malloc0(sizeof(struct interface));
+		iface->name=strdup($8->str);
+		iface->mark=*id;
+
+		char *back_ip=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($6)) + 1);
+                sprintf(back_ip, "%s", addr_ntoa($6));
+
+                g_tree_insert($$->back_handlers, $$->backendIDs->data, $6);
+		g_tree_insert($$->back_ips, back_ip, $6);
+		g_tree_insert($$->back_ifs, $$->backendIDs->data, (gpointer)iface);
+                g_tree_insert($$->back_rules, $$->backendIDs->data, DE_create_tree($11->str));
+		g_tree_insert($$->back_tags, $$->backendIDs->data, strdup($4->str));
+
+                g_printerr("\tBackend %u with IP %s on interface %s and tag %s copied to handler with rule: %s\n", *(uint32_t*)($$->backendIDs->data), back_ip, $8->str, $4->str, $11->str);
+                g_string_free($4, TRUE);
+		g_string_free($8, TRUE);
+		g_string_free($11, TRUE);
         }
 	| rule LIMIT QUOTE equation QUOTE SEMICOLON {
 		$$->control_rule = DE_create_tree($4->str);

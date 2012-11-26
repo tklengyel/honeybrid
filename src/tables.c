@@ -244,8 +244,8 @@ int init_pkt( unsigned char *nf_packet, struct pkt_struct *pkt, u_int32_t mark)
 	pkt->DE = 0;
 	pkt->packet.ip = malloc( ntohs(((struct iphdr*)nf_packet)->tot_len) ); ///TODO: check if it's correctly freed
 	pkt->key = malloc(64);
-	pkt->key_src = malloc(32);
-	pkt->key_dst = malloc(32);
+	pkt->key_src=NULL;
+	pkt->key_dst=NULL;
 	pkt->position = 0;
 	pkt->size = ntohs(((struct iphdr*)nf_packet)->tot_len);
 	pkt->mark = mark;
@@ -300,10 +300,12 @@ int init_pkt( unsigned char *nf_packet, struct pkt_struct *pkt, u_int32_t mark)
 
 		/*! key_src is the tuple with the source information
 		 * {Source IP}:{Source Port} */
+		pkt->key_src=malloc(snprintf(NULL, 0, "%s:%d",inet_ntoa(*(struct in_addr*)&pkt->packet.ip->saddr),ntohs(pkt->packet.tcp->source))+1);
 		sprintf( pkt->key_src,"%s:%d",inet_ntoa(*(struct in_addr*)&pkt->packet.ip->saddr),ntohs(pkt->packet.tcp->source) );
 
 		/*! key_dst is the one with the destination information
 		 * {Dest IP}:{Dest Port} */
+		pkt->key_dst=malloc(snprintf(NULL, 0, "%s:%d",inet_ntoa(*(struct in_addr*)&pkt->packet.ip->daddr),ntohs(pkt->packet.tcp->dest))+1);
 		sprintf( pkt->key_dst,"%s:%d",inet_ntoa(*(struct in_addr*)&pkt->packet.ip->daddr),ntohs(pkt->packet.tcp->dest) );
 
 		/* The volume of data is the total size of the packet minus the size of the IP and TCP headers */
@@ -314,8 +316,10 @@ int init_pkt( unsigned char *nf_packet, struct pkt_struct *pkt, u_int32_t mark)
 		pkt->packet.payload = (char*)pkt->packet.udp + 8;
 		/*! Process UDP packet */
 		/*! key_src */
+		pkt->key_src=malloc(snprintf(NULL, 0, "%s:%d",inet_ntoa(*(struct in_addr*)&pkt->packet.ip->saddr),ntohs(pkt->packet.udp->source))+1);
 		sprintf( pkt->key_src,"%s:%u",inet_ntoa(*(struct in_addr*)&pkt->packet.ip->saddr),ntohs(pkt->packet.udp->source) );
 		/*! key_dst */
+		pkt->key_dst=malloc(snprintf(NULL, 0, "%s:%d",inet_ntoa(*(struct in_addr*)&pkt->packet.ip->daddr),ntohs(pkt->packet.udp->dest))+1);
 		sprintf( pkt->key_dst,"%s:%u",inet_ntoa(*(struct in_addr*)&pkt->packet.ip->daddr),ntohs(pkt->packet.udp->dest) );
 		/* The volume of data is the value of udp->ulen minus the size of the UPD header (always 8 bytes) */
 		pkt->data = pkt->packet.udp->len - 8;
@@ -377,9 +381,9 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 	 */
 
 	/* Creating keys for both directions (0 and 1)*/
-	char *key0 = malloc(64);
+	char *key0 =  malloc(snprintf(NULL, 0, "%s:%s", pkt->key_src, pkt->key_dst)+1);
         sprintf(key0, "%s:%s", pkt->key_src, pkt->key_dst);
-	char *key1 = malloc(64);
+	char *key1 = malloc(snprintf(NULL, 0, "%s:%s", pkt->key_dst, pkt->key_src)+1);
         sprintf(key1, "%s:%s", pkt->key_dst, pkt->key_src);
 
 	//g_printerr("%s Looking for connections between %s and %s!\n", H(0), pkt->key_src, pkt->key_dst);
@@ -549,9 +553,10 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 
 			if (found < 0) {
 				/*! if not, then this packet is for an unconfigured target, we drop it */
-				g_printerr("%s No honeypot IP found for this address, dropping for now\n", H(0));
+				g_printerr("%s No honeypot IP found for this address (%s), pkt key: %s, dropping for now.\n", H(0), inet_ntoa(*(struct in_addr*)&pkt->packet.ip->saddr), pkt->key);
 				return NOK;
 			}
+
 		} else {
 			// \todo We should now check if the destination is a valid LIH
 			// If not, we should either drop or NAT
@@ -619,7 +624,7 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
 		conn_init->replay_problem = 0;
 		conn_init->invalid_problem = 0;
 		///conn_init->decision_rule = malloc(512);
-		conn_init->decision_rule = g_string_new(NULL);
+		conn_init->decision_rule = g_string_new("");
 
 		struct tm *tm;
                 struct timeval tv;
@@ -730,6 +735,7 @@ int check_pre_dnat_routing(struct pkt_struct *pkt, struct conn_struct **conn, ch
 				if(TRUE == g_tree_lookup_extended(conn_tree, pkt->key, NULL,(gpointer *) conn)) {
 		        		//g_printerr("YES, connection found with mark: %u\n", (*conn)->mark);
                 			*update = 1;
+					g_strfreev(split);
 					return 2;
 				}
 
@@ -741,12 +747,14 @@ int check_pre_dnat_routing(struct pkt_struct *pkt, struct conn_struct **conn, ch
 		if(!update) {
 			// No connection was found with _any_ of the backends, its not a pre-DNAT packet
 			*create = 1;
+			g_strfreev(split);
 			return 1;
 		}
 
 	}
 
 	// doesn't match uplink
+	g_strfreev(split);
 	return 0;
 }
 
@@ -786,6 +794,9 @@ int test_honeypot_addr( char *key, int list ) {
 	g_strfreev(addr);
 	g_strfreev(byte);
 	g_string_free(testkey,TRUE);
+	g_string_free(classA,TRUE);
+	g_string_free(classB,TRUE);
+	g_string_free(classC,TRUE);
 
 	/*! We test which list we want to search */
 	if ( list == LIH && g_hash_table_lookup(low_honeypot_addr, &intaddr) != NULL)
@@ -972,7 +983,6 @@ void free_conn(gpointer key, gpointer trash)
 
 	if (TRUE != g_tree_remove(conn_tree,key)) {
 		g_printerr("%s Error while removing tuple %s\n", H(8), (char*)key);
-		free(key);
 	}
 	g_static_rw_lock_writer_unlock (&rwlock);
 }
@@ -1070,9 +1080,9 @@ int setup_redirection(struct conn_struct *conn, uint32_t hih_use)
 	        microtime +=  ((gdouble)t.tv_sec);
 	        microtime += (((gdouble)t.tv_usec)/1000000.0);
 
-		if(hihiface!=NULL)
-			printf("Interface for HIH: %s, TCP sock: %i UDP sock: %i\n", 
-				hihiface->name, hihiface->tcp_socket, hihiface->udp_socket);
+		//if(hihiface!=NULL)
+		//	printf("Interface for HIH: %s, TCP sock: %i UDP sock: %i\n", 
+		//		hihiface->name, hihiface->tcp_socket, hihiface->udp_socket);
 
 		///conn->key_hih = hihaddr;
 		conn->hih.hihID=	hih_use;

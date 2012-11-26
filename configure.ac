@@ -11,8 +11,8 @@
 AC_PREREQ(2.61)
 #AC_INIT(FULL-PACKAGE-NAME, VERSION, BUG-REPORT-ADDRESS)
 AC_INIT([honeybrid],
-        [0.1.3],
-        [Robin Berthier robinb@umd.edu],
+        [0.1.4],
+        [Tamas K Lengyel, tamas.lengyel@engr.uconn.edu],
         [honeybrid])
 AM_INIT_AUTOMAKE
 AC_CONFIG_SRCDIR([config.h.in])
