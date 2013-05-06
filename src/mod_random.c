@@ -38,14 +38,13 @@
 #include "netcode.h"
 
 /*! mod_random requires the configuration of the following mandatory parameter:
-	- "value", to define a basis for the probability to accept the packet, which is 1 out of value
- */ 
+ - "value", to define a basis for the probability to accept the packet, which is 1 out of value
+ */
 
 /*! mod_random
  \param[in] args, struct that contain the node and the data to process
  */
-void mod_random(struct mod_args *args)
-{
+void mod_random(struct mod_args *args) {
 	g_printerr("%s Module called\n", H(args->pkt->conn->id));
 
 	unsigned int value = 0;
@@ -54,10 +53,11 @@ void mod_random(struct mod_args *args)
 	gchar *param;
 
 	/*! getting the value provided as parameter */
-	if (	(param = (char *)g_hash_table_lookup(args->node->arg, "value")) == NULL ) {
+	if ((param = (char *) g_hash_table_lookup(args->node->arg, "value")) == NULL) {
 		/*! We can't decide */
 		args->node->result = -1;
-		g_printerr("%s Incorrect value parameter: %d\n", H(args->pkt->conn->id), value);
+		g_printerr("%s Incorrect value parameter: %d\n", H(args->pkt->conn->id),
+				value);
 		return;
 	} else {
 		value = atoi(param);
@@ -65,22 +65,25 @@ void mod_random(struct mod_args *args)
 
 	if (value < selector) {
 		/*! We can't decide */
-                args->node->result = -1;
-                g_printerr("%s Incorrect value parameter: %d\n", H(args->pkt->conn->id), value);
-                return;
+		args->node->result = -1;
+		g_printerr("%s Incorrect value parameter: %d\n", H(args->pkt->conn->id),
+				value);
+		return;
 	}
 
 	/*! deciding based on a probability of 1 out of "value": */
-	proba = (int) (((double)value) * (rand() / (RAND_MAX + 1.0)));	
+	proba = (int) (((double) value) * (rand() / (RAND_MAX + 1.0)));
 
 	if (proba == selector) {
 		/*! We accept this packet */
 		args->node->result = 1;
-		g_printerr("%s PACKET MATCH RULE for random(%d)\n", H(args->pkt->conn->id), value);
+		g_printerr("%s PACKET MATCH RULE for random(%d)\n",
+				H(args->pkt->conn->id), value);
 	} else {
 		/*! We reject this packet */
 		args->node->result = 0;
-		g_printerr("%s PACKET DOES NOT MATCH RULE for random(%d)\n", H(args->pkt->conn->id), value);
+		g_printerr("%s PACKET DOES NOT MATCH RULE for random(%d)\n",
+				H(args->pkt->conn->id), value);
 	}
 }
 

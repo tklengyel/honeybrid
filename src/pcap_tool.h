@@ -32,9 +32,8 @@
  */
 int pcap_record;
 
-
 /*!
-  \def PCAPSIZE
+ \def PCAPSIZE
  *
  * max size of a packet in PCAP
  */
@@ -46,7 +45,6 @@ int pcap_record;
  * Main descriptor for the pcap context
  */
 pcap_t *pcap_main_desc;
-
 
 /*!
  \def pcap_output_current

@@ -20,11 +20,10 @@
 
 #include <pcap.h>
 
-int     daemon(int, int);
+int daemon(int, int);
 
-int	yyparse(void);
-extern	FILE *yyin;
-
+int yyparse(void);
+extern FILE *yyin;
 
 /*! File to store PID */
 #define PIDFILE "/var/run/honeybrid.pid"
@@ -37,7 +36,6 @@ extern	FILE *yyin;
 
 /*! Decision Engine thread enabled */
 //#define DE_THREAD
-
 /*! Two strategies: with thread or with libev 
  *  If HAVE_LIBEV is defined, the program loops on the main libev loop:
  *	- packets on queue are processed through libev callback
@@ -47,15 +45,14 @@ extern	FILE *yyin;
  *	- connection structures are cleaned by a thread
  */
 //#define HAVE_LIBEV
-
 /*!
-  \def DESTSIZE
+ \def DESTSIZE
  *
  * max size of an IP address (4*3 = 12 + 3 dots = 15) */
 #define DESTSIZE 15
 
 /*!
-  \def CONF_MAX_LINE
+ \def CONF_MAX_LINE
  *
  * max size of a line in the configuration file */
 #define CONF_MAX_LINE 1024

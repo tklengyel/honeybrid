@@ -18,7 +18,6 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-
 #ifndef _LOG_H_
 #define _LOG_H_
 
@@ -30,18 +29,17 @@
 
 /*! 
  \def verbosity channel
-  1 errors only
-  2 minimal redirection information
-  3 full redirection information
-  4 internal processing events
-  5 permanent internal processing events
+ 1 errors only
+ 2 minimal redirection information
+ 3 full redirection information
+ 4 internal processing events
+ 5 permanent internal processing events
  */
 #define LOG_MIN    1
 #define LOG_LOW    2
 #define LOG_MED    3
 #define LOG_HIGH   4
 #define LOG_ALL    5
-
 
 /*!
  \def log identifiers
@@ -80,13 +78,12 @@ int LOG_LEVEL;
 GSList *log_list;
 
 /*!
-\def loglock
-\brief security writing lock for the lgo singly linked list
+ \def loglock
+ \brief security writing lock for the lgo singly linked list
  */
 GStaticRWLock loglock;
 
-struct log_event
-{
+struct log_event {
 	char *sdata;
 	char *ddata;
 	int level;
@@ -126,4 +123,3 @@ int init_mysql_log();
 #endif
 
 #endif ///_LOG_H_
-

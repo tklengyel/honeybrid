@@ -35,20 +35,22 @@
 /*! mod_backpick_random
  \param[in] args, struct that contain the node and the data to process
  */
-void mod_backpick_random(struct mod_args *args)
-{
+void mod_backpick_random(struct mod_args *args) {
 	g_printerr("%s Random backpick module called\n", H(args->pkt->conn->id));
 	int n_backends = 0;
 
-	if((n_backends=g_tree_nnodes(args->pkt->conn->target->back_handlers)) <= 0) {
-		g_printerr("%s No backends are defined for this target, rejecting\n", H(args->pkt->conn->id));
+	if ((n_backends = g_tree_nnodes(args->pkt->conn->target->back_handlers))
+			<= 0) {
+		g_printerr("%s No backends are defined for this target, rejecting\n",
+				H(args->pkt->conn->id));
 		args->node->result = 0;
 	} else {
 
-		uint32_t pick = rand() % n_backends+1;
+		uint32_t pick = rand() % n_backends + 1;
 
-		g_printerr("%s Picking %d out of %d backends\n", H(args->pkt->conn->id), pick, n_backends);
-		args->backend_use=pick;
+		g_printerr("%s Picking %d out of %d backends\n", H(args->pkt->conn->id),
+				pick, n_backends);
+		args->backend_use = pick;
 		args->node->result = 1;
 	}
 }

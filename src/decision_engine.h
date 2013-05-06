@@ -39,8 +39,7 @@
  */
 GHashTable *DE_rules;
 
-struct decision_holder
-{
+struct decision_holder {
 	struct pkt_struct *pkt;
 	struct node *node;
 	struct mod_args args;

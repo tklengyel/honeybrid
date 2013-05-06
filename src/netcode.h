@@ -28,9 +28,8 @@
 #include "tables.h"
 #include "types.h"
 
-
 /*!
-  \def BUFSIZE
+ \def BUFSIZE
  *
  * number of bytes in the payload we want to copy to userspace
  * a regular ethernet connection limit payload size to 1500 bytes
@@ -50,19 +49,17 @@
  \brief Raw socket descriptor for TCP/IP raw socket
  *
  */
-int udp_rsd,tcp_rsd; // generic socket
+int udp_rsd, tcp_rsd; // generic socket
 
-struct pseudotcphdr
-{
+struct pseudotcphdr {
 	int saddr;
 	int daddr;
-	short res1:8;
-	short proto:8;
+	short res1 :8;
+	short proto :8;
 	short tcp_len;
 };
 
-struct tcp_chk_packet
-{
+struct tcp_chk_packet {
 	struct pseudotcphdr pseudohdr;
 	struct tcphdr tcp;
 	char payload[BUFSIZE];

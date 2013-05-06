@@ -41,34 +41,32 @@ static char rcsid[] = "$OpenBSD: daemon.c,v 1.4 1995/02/25 13:41:16 cgd Exp $";
 #include <fcntl.h>
 #include <unistd.h>
 
-int
-daemon(nochdir, noclose)
-        int nochdir, noclose;
-{
-        int fd;
+int daemon(nochdir, noclose)
+	int nochdir, noclose; {
+	int fd;
 
-        switch (fork()) {
-        case -1:
-                return (-1);
-        case 0:
-                break;
-        default:
-                _exit(0);
-        }
+	switch (fork()) {
+	case -1:
+		return (-1);
+	case 0:
+		break;
+	default:
+		_exit(0);
+	}
 
-        if (setsid() == -1)
-                return (-1);
+	if (setsid() == -1)
+		return (-1);
 
-        if (!nochdir)
-                (void)chdir("/");
+	if (!nochdir)
+		(void) chdir("/");
 
-        if (!noclose && (fd = open("/dev/null", O_RDWR, 0)) != -1) {
-                (void)dup2(fd, STDIN_FILENO);
-                (void)dup2(fd, STDOUT_FILENO);
-                (void)dup2(fd, STDERR_FILENO);
-                if (fd > 2)
-                        (void)close (fd);
-        }
-        return (0);
+	if (!noclose && (fd = open("/dev/null", O_RDWR, 0)) != -1) {
+		(void) dup2(fd, STDIN_FILENO);
+		(void) dup2(fd, STDOUT_FILENO);
+		(void) dup2(fd, STDERR_FILENO);
+		if (fd > 2)
+			(void) close(fd);
+	}
+	return (0);
 }
 

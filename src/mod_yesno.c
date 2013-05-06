@@ -32,7 +32,7 @@
 #include "tables.h"
 
 /*! mod_yesno requires the configuration of the following mandatory parameter:
-	- "value", if 0 it rejects everything, if 1 it accepts everything
+ - "value", if 0 it rejects everything, if 1 it accepts everything
  */
 
 /*! mod_yesno
@@ -40,30 +40,32 @@
  *
  \param[out] set result to 1 when 'arg' is "yes", 0 otherwise
  */
-void mod_yesno(struct mod_args *args)
-{
+void mod_yesno(struct mod_args *args) {
 	g_printerr("%s Module called\n", H(args->pkt->conn->id));
 
 	int value = 0;
 	gchar *param;
 
-	if ((param = (char *)g_hash_table_lookup(args->node->arg, "value")) == NULL) {
-                /*! We can't decide */
-                args->node->result = -1;
-                g_printerr("%s mandatory argument 'value' undefined!\n", H(args->pkt->conn->id));
-                return;
-        } else {
+	if ((param = (char *) g_hash_table_lookup(args->node->arg, "value")) == NULL) {
+		/*! We can't decide */
+		args->node->result = -1;
+		g_printerr("%s mandatory argument 'value' undefined!\n",
+				H(args->pkt->conn->id));
+		return;
+	} else {
 		value = atoi(param);
 	}
 
-	if(0 == value) {
+	if (0 == value) {
 		/*! We accept this packet */
 		args->node->result = 1;
-		g_printerr("%s PACKET MATCH RULE for yesno(%d)\n", H(args->pkt->conn->id), value);
+		g_printerr("%s PACKET MATCH RULE for yesno(%d)\n",
+				H(args->pkt->conn->id), value);
 	} else {
 		/*! We reject this packet */
 		args->node->result = 0;
-		g_printerr("%s PACKET DOES NOT MATCH RULE for yesno(%d)\n", H(args->pkt->conn->id), value);
+		g_printerr("%s PACKET DOES NOT MATCH RULE for yesno(%d)\n",
+				H(args->pkt->conn->id), value);
 	}
 }
 

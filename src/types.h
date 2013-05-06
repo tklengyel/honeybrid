@@ -36,21 +36,19 @@
  \brief structure to hold target information: PCAP filter and rules to accept/forward/redirect/control packets
  */
 
-struct target
-{
-	struct bpf_program *filter;	/* PCAP compiled filter to select packets for this target */
-	struct addr *front_handler;	/* Honeypot IP address(es) handling the first response (front end) */
-	struct node *front_rule;	/* Rules of decision modules to accept packet to be handled by the frontend */
-	GTree *back_handlers;		/* Honeypot IP address(es) handling the second response (back end) with key hihID value IP */
-	GTree *back_ips;		/* Honeypot IP address(es) handling the second response (back end) with key IP value hihID */
-	GTree *back_rules;		/* Rule(s) of decision modules to accept packets to be transited from front to back end */
-	GTree *back_ifs;		/* Network interface the backend is running on (enforced with raw socket) */
-	GTree *back_tags;		/* Additional tag describing the backend */
-	struct node *back_picker;	/* Rule(s) to pick which backend to use (such as VM name, etc.) */
-	struct node *control_rule;	/* Rules of decision modules to limit outbound packets from honeypots */
-	GSList *backendIDs;		/* Backend ID list */
+struct target {
+	struct bpf_program *filter; /* PCAP compiled filter to select packets for this target */
+	struct addr *front_handler; /* Honeypot IP address(es) handling the first response (front end) */
+	struct node *front_rule; /* Rules of decision modules to accept packet to be handled by the frontend */
+	GTree *back_handlers; /* Honeypot IP address(es) handling the second response (back end) with key hihID value IP */
+	GTree *back_ips; /* Honeypot IP address(es) handling the second response (back end) with key IP value hihID */
+	GTree *back_rules; /* Rule(s) of decision modules to accept packets to be transited from front to back end */
+	GTree *back_ifs; /* Network interface the backend is running on (enforced with raw socket) */
+	GTree *back_tags; /* Additional tag describing the backend */
+	struct node *back_picker; /* Rule(s) to pick which backend to use (such as VM name, etc.) */
+	struct node *control_rule; /* Rules of decision modules to limit outbound packets from honeypots */
+	GSList *backendIDs; /* Backend ID list */
 };
-
 
 /*!
  \def ethernet_hdr
@@ -63,7 +61,6 @@ struct ethernet_hdr {
 	u_short ether_type; /* IP? ARP? RARP? etc */
 };
 
-
 /*!
  \def packet
  *
@@ -74,8 +71,7 @@ struct ethernet_hdr {
  *
  */
 
-struct packet
-{
+struct packet {
 	struct iphdr *ip;
 	struct tcphdr *tcp;
 	struct udphdr *udp;
@@ -93,8 +89,7 @@ struct packet
  \param payload[BUFSIZE], payload buffer
  *
  */
-struct tcp_packet
-{
+struct tcp_packet {
 	struct iphdr ip;
 	struct tcphdr tcp;
 	char *payload;
@@ -110,8 +105,7 @@ struct tcp_packet
  \param payload[BUFSIZE], payload buffer
  *
  */
-struct udp_packet
-{
+struct udp_packet {
 	struct iphdr ip;
 	struct udphdr udp;
 	char *payload;
@@ -119,12 +113,11 @@ struct udp_packet
 
 /*! \brief Structure to hold network interface information
  */
-struct interface
-{
-        char *name;
-        int tcp_socket;
-        int udp_socket;
-        int mark;
+struct interface {
+	char *name;
+	int tcp_socket;
+	int udp_socket;
+	int mark;
 };
 
 /*! hih_struct
@@ -133,8 +126,7 @@ struct interface
  \param addr, IP address
  \param port, port
  */
-struct hih_struct
-{
+struct hih_struct {
 	int hihID;
 	int addr;
 	struct interface *iface;
@@ -153,8 +145,7 @@ struct hih_struct
  \param tcp_seq_ack, expected TCP ack number
  \param payload, expected payload
  */
-struct expected_data_struct
-{
+struct expected_data_struct {
 	unsigned short ip_proto;
 	unsigned tcp_seq;
 	unsigned tcp_ack_seq;
@@ -177,8 +168,7 @@ struct expected_data_struct
  \param lock, set to 1 when a packet is currently processed for this connection
  \param hih, hih info
  */
-struct conn_struct
-{
+struct conn_struct {
 	char *key;
 	char *key_ext;
 	char *key_lih;
@@ -201,25 +191,25 @@ struct conn_struct
 	struct target *target;
 
 	/* statistics */
-	gdouble  stat_time[8]; // = {0,0,0,0,0,0,0};
-	int   stat_packet[8]; // = {0,0,0,0,0,0,0};
-	int   stat_byte[8]; // = {0,0,0,0,0,0,0};
-	int   total_packet;
-	int   total_byte;
-	int   decision_packet_id;
+	gdouble stat_time[8]; // = {0,0,0,0,0,0,0};
+	int stat_packet[8]; // = {0,0,0,0,0,0,0};
+	int stat_byte[8]; // = {0,0,0,0,0,0,0};
+	int total_packet;
+	int total_byte;
+	int decision_packet_id;
 	///char* decision_rule;
 	GString *decision_rule;
-	int   replay_problem;
-	int   invalid_problem; //unused
+	int replay_problem;
+	int invalid_problem; //unused
 
-	u_int32_t mark;	// adding support for multiple uplinks
+	u_int32_t mark; // adding support for multiple uplinks
 
 	uint32_t honeymon_IDX;
 
-	#ifdef HAVE_XMPP
-	uint8_t dionaeaDownload;
-	unsigned int dionaeaDownloadTime;
-	#endif
+#ifdef HAVE_XMPP
+uint8_t dionaeaDownload;
+unsigned int dionaeaDownloadTime;
+#endif
 };
 
 /*! pkt_struct
@@ -230,8 +220,7 @@ struct conn_struct
  \param data, to provide the number of bytes in the packet
  \param DE, (0) if the packet was received before the decision to redirect, (1) otherwise
  */
-struct pkt_struct
-{
+struct pkt_struct {
 	struct packet packet;
 	int origin;
 	int data;
@@ -243,16 +232,14 @@ struct pkt_struct
 	char *key;
 	int position;
 
-	u_int32_t mark;	// adding support for multiple uplinks
+	u_int32_t mark; // adding support for multiple uplinks
 };
-
 
 /*! \brief Structure to pass arguments to the Decision Engine
  \param conn, pointer to the refered conn_struct
  \param packetposition, position of the packet to process in the Singly Linked List
  */
-struct DE_submit_args
-{
+struct DE_submit_args {
 	struct conn_struct *conn;
 	int packetposition;
 };

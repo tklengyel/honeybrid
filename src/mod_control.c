@@ -34,19 +34,17 @@
 #include "modules.h"
 #include "netcode.h"
 
-
 /*! control
  \brief calculate the number of packets sent by a same source over a given period of time. If too many packets are sent, following packets are rejected
-        Parameters required:
-                function = hash;
-                backup   = /etc/honeybrid/control.tb
-		expiration = 600
-		max_packet = 1000
+ Parameters required:
+ function = hash;
+ backup   = /etc/honeybrid/control.tb
+ expiration = 600
+ max_packet = 1000
  \param[in] pkts, struct that contain the packet to control
  \param[out] set result to 1 if rate limit reached, 0 otherwise
  */
-void mod_control(struct mod_args *args)
-{
+void mod_control(struct mod_args *args) {
 	gchar *backup_file;
 
 	if (args->pkt == NULL) {
@@ -65,107 +63,111 @@ void mod_control(struct mod_args *args)
 	GKeyFile *backup;
 
 	GTimeVal t;
-        g_get_current_time(&t);
-        gint now = (t.tv_sec);
+	g_get_current_time(&t);
+	gint now = (t.tv_sec);
 
-	if ( args->pkt->key_src == NULL ) {
+	if (args->pkt->key_src == NULL) {
 		g_printerr("%s Error, key_src is NULL\n", H(args->pkt->conn->id));
 		args->node->result = -1;
 		return;
 	}
 
 	/*! get the IP address from the packet */
-        key_src = g_strsplit( args->pkt->key_src, ":", 0 );
+	key_src = g_strsplit(args->pkt->key_src, ":", 0);
 
 	g_printerr("%s source IP is %s\n", H(args->pkt->conn->id), key_src[0]);
 
-        /*! get the backup file for this module */
-        if ( NULL ==    (backup = (GKeyFile *)g_hash_table_lookup(args->node->arg, "backup"))) {
-                /*! We can't decide */
-                args->node->result = -1;
-                g_printerr("%s mandatory argument 'backup' undefined!\n", H(args->pkt->conn->id));
-                return;
-        }
+	/*! get the backup file for this module */
+	if (NULL
+			== (backup = (GKeyFile *) g_hash_table_lookup(args->node->arg,
+					"backup"))) {
+		/*! We can't decide */
+		args->node->result = -1;
+		g_printerr("%s mandatory argument 'backup' undefined!\n",
+				H(args->pkt->conn->id));
+		return;
+	}
 	/*! get the backup file path for this module */
-        if ( NULL ==    (backup_file = (gchar *)g_hash_table_lookup(args->node->arg, "backup_file"))) {
-                /*! We can't decide */
-                args->node->result = -1;
-                g_printerr("%s error, backup file path missing\n", H(args->pkt->conn->id));
-                return;
-        }
+	if (NULL
+			== (backup_file = (gchar *) g_hash_table_lookup(args->node->arg,
+					"backup_file"))) {
+		/*! We can't decide */
+		args->node->result = -1;
+		g_printerr("%s error, backup file path missing\n",
+				H(args->pkt->conn->id));
+		return;
+	}
 
 	/*! get control parameters */
-	if ( NULL ==    (param = (gchar *)g_hash_table_lookup(args->node->arg, "expiration"))) {
+	if (NULL
+			== (param = (gchar *) g_hash_table_lookup(args->node->arg,
+					"expiration"))) {
 		/*! no value set for expiration, we go with the default one */
 		expiration = 600;
-        } else {
+	} else {
 		expiration = atoi(param);
 	}
-	if ( NULL ==    (param = (gchar *)g_hash_table_lookup(args->node->arg, "max_packet"))) {
+	if (NULL
+			== (param = (gchar *) g_hash_table_lookup(args->node->arg,
+					"max_packet"))) {
 		/*! no value set for expiration, we go with the default one */
 		max_packet = 1000;
-        } else {
+	} else {
 		max_packet = atoi(param);
 	}
 
-	if ( NULL ==    (info = g_key_file_get_string_list(
-                                        backup,
-                                        "source",       /* generic group name \todo: group by port number? */
-                                        key_src[0],
-                                        NULL,
-                                        NULL)
-                        )
-           ) {
-                g_printerr("%s IP not found... new entry created\n", H(args->pkt->conn->id));
+	if (NULL == (info = g_key_file_get_string_list(backup, "source", /* generic group name \todo: group by port number? */
+	key_src[0], NULL, NULL))) {
+		g_printerr("%s IP not found... new entry created\n",
+				H(args->pkt->conn->id));
 
 		info = malloc(3 * sizeof(char *));
 
-                /*! 20 characters should be enough to hold even very large numbers */
-                info[0] = malloc(20 * sizeof(gchar));
-                info[1] = malloc(20 * sizeof(gchar));
-                info[2] = malloc(20 * sizeof(gchar));
-                g_snprintf(info[0], 20, "1");           /*! counter */
-                g_snprintf(info[1], 20, "%d", now);     /*! first seen */
-                g_snprintf(info[2], 20, "0");           /*! duration */
+		/*! 20 characters should be enough to hold even very large numbers */
+		info[0] = malloc(20 * sizeof(gchar));
+		info[1] = malloc(20 * sizeof(gchar));
+		info[2] = malloc(20 * sizeof(gchar));
+		g_snprintf(info[0], 20, "1"); /*! counter */
+		g_snprintf(info[1], 20, "%d", now); /*! first seen */
+		g_snprintf(info[2], 20, "0"); /*! duration */
 
-        } else {
-                /*! We check if we need to expire this entry */
-                int age = atoi(info[2]);
-                if ( age > expiration ) {
-                        g_printerr("%s IP found but expired... entry renewed\n", H(args->pkt->conn->id));
+	} else {
+		/*! We check if we need to expire this entry */
+		int age = atoi(info[2]);
+		if (age > expiration) {
+			g_printerr("%s IP found but expired... entry renewed\n",
+					H(args->pkt->conn->id));
 
-                        g_snprintf(info[0], 20, "1");          /*! counter */
-                        g_snprintf(info[1], 20, "%d", now);    /*! first seen */
-                        g_snprintf(info[2], 20, "0");          /*! duration */
-                } else {
-                        g_printerr("%s IP found... entry updated\n", H(args->pkt->conn->id));
+			g_snprintf(info[0], 20, "1"); /*! counter */
+			g_snprintf(info[1], 20, "%d", now); /*! first seen */
+			g_snprintf(info[2], 20, "0"); /*! duration */
+		} else {
+			g_printerr("%s IP found... entry updated\n",
+					H(args->pkt->conn->id));
 
-                        g_snprintf(info[0], 20, "%d", atoi(info[0]) + 1);       /*! counter */
-                        g_snprintf(info[2], 20, "%d", now - atoi(info[1]));     /*! duration */
-                }
+			g_snprintf(info[0], 20, "%d", atoi(info[0]) + 1); /*! counter */
+			g_snprintf(info[2], 20, "%d", now - atoi(info[1])); /*! duration */
+		}
 
-
-        }
+	}
 
 	if (atoi(info[0]) > max_packet) {
-		g_printerr("%s Rate limit reached! Packet rejected\n", H(args->pkt->conn->id));
+		g_printerr("%s Rate limit reached! Packet rejected\n",
+				H(args->pkt->conn->id));
 		args->node->result = 0;
 	} else {
-		g_printerr("%s Rate limit not reached. Packet accepted\n", H(args->pkt->conn->id));
+		g_printerr("%s Rate limit not reached. Packet accepted\n",
+				H(args->pkt->conn->id));
 		args->node->result = 1;
 	}
 
-        g_key_file_set_string_list(
-                backup,
-                "source",
-                key_src[0],
-                (const gchar * const *)info,
-                3);
+	g_key_file_set_string_list(backup, "source", key_src[0],
+			(const gchar * const *) info, 3);
 
 	save_backup(backup, backup_file);
 
-        /*! clean and exit */
-        //g_strfreev(key_src);
+	/*! clean and exit */
+	//g_strfreev(key_src);
 	return;
 }
 

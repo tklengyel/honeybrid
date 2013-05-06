@@ -37,21 +37,18 @@
  *
  \brief arguments sent to a module while processing the tree
  */
-struct mod_args
-{
+struct mod_args {
 	struct node *node;
 	struct pkt_struct *pkt;
 	uint32_t backend_test, backend_use;
 };
-
 
 /*!
  \def node
  *
  \brief node of an execution tree, composed of a module and a argument, called by processing the tree
  */
-struct node
-{
+struct node {
 	void (*module)(struct mod_args);
 	GHashTable *arg;
 	GString *module_name;
@@ -65,7 +62,6 @@ struct node
 /*! \def list of module to save
  */
 GHashTable *module_to_save;
-
 
 void init_modules();
 

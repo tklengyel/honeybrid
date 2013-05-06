@@ -42,11 +42,11 @@ int threading;
 GPtrArray* targets;
 
 /*! \brief security writing lock for the Binary Tree
-*/
+ */
 GStaticRWLock rwlock;
 
 /*! \brief security writing lock for the dynamic high interaction redirection table
-*/
+ */
 GStaticRWLock hihlock;
 
 /*! \brief global hash table that contain the values of the configuration file  */
@@ -56,8 +56,6 @@ GHashTable *config;
 
 /*! \brief global hash table to hold module paramaters */
 GHashTable *module;
-
-
 
 //////////////// DEPRECATED ///////////// \todo to remove and clean
 /*! \brief global hash table that contain the static correspondance between LIH services et HIH services  */
@@ -72,14 +70,10 @@ GHashTable *low_honeypot_addr;
 /*! \brief global integer table that contains the addresses of the high_interaction honeypots (integer version)  */
 GHashTable *high_honeypot_addr;
 
-int test_honeypot_addr( char *testkey, int list );
+int test_honeypot_addr(char *testkey, int list);
 
-char * lookup_honeypot_addr( gchar *testkey, int list );
+char * lookup_honeypot_addr(gchar *testkey, int list);
 //////////////////////////////////////////
-
-
-
-
 
 /*! \brief Balanced Binary Tree that keep meta informations about active connections
  *
@@ -103,7 +97,8 @@ int free_pkt(struct pkt_struct *pkt);
 
 int init_conn(struct pkt_struct *pkt, struct conn_struct **conn);
 
-int check_pre_dnat_routing(struct pkt_struct *pkt, struct conn_struct **conn, char *uplink_ip, int *create, int *update);
+int check_pre_dnat_routing(struct pkt_struct *pkt, struct conn_struct **conn,
+		char *uplink_ip, int *create, int *update);
 
 int store_pkt(struct conn_struct *conn, struct pkt_struct *pkt);
 
@@ -111,13 +106,14 @@ void clean();
 
 int setup_redirection(struct conn_struct *conn, uint32_t hih_id);
 
-int expire_conn(gpointer key, struct conn_struct *cur_conn, gint *expiration_delay);
+int expire_conn(gpointer key, struct conn_struct *cur_conn,
+		gint *expiration_delay);
 
 void free_conn(gpointer key, gpointer trash);
 
 char * config_lookup(char * parameter);
 
-gint IntComp(gconstpointer a,gconstpointer b);
+gint IntComp(gconstpointer a, gconstpointer b);
 void IntDest(void* a);
 
 /*! \brief constants to define the origin of a packet
@@ -138,7 +134,7 @@ void IntDest(void* a);
 #define CONTROL		7
 
 /*!
-  \def OK
+ \def OK
  *
  * Return code when everything's fine
  */
@@ -152,11 +148,10 @@ void IntDest(void* a);
 #define NOK		-1
 
 /*!
-  \def TIMEOUT
-  *
-  * Return code when something took too much time
-  */
+ \def TIMEOUT
+ *
+ * Return code when something took too much time
+ */
 #define TIMEOUT		-2
-
 
 #endif //__TABLE_H__
