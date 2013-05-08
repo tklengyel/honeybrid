@@ -32,22 +32,6 @@
 #define DE_REJECT	0
 #define DE_ACCEPT	1
 
-/*!
- \def DE_rules
- *
- \brief hash table to select a rule for a connection, key is the rule, value is the boolean decision tree root
- */
-GHashTable *DE_rules;
-
-struct decision_holder {
-	struct pkt_struct *pkt;
-	struct node *node;
-	struct mod_args args;
-	int result;
-
-	uint32_t backend_test, backend_use;
-};
-
 GStaticRWLock DE_queue_lock;
 
 GSList *DE_queue;
@@ -60,5 +44,6 @@ void DE_submit_packet();
 
 void DE_push_pkt(struct pkt_struct *pkt);
 int DE_process_packet(struct pkt_struct *pkt);
+void DE_destroy_tree(struct node *clean);
 
 #endif

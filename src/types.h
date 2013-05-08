@@ -26,10 +26,63 @@
 #include <netinet/ip.h>
 #include <pcap.h>
 #include <dumbnet.h>
-#include "modules.h"
 
 #define ETHER_ADDR_LEN	6
 #define ETHER_HDR_LEN	14
+
+/*! \brief constants to define the origin of a packet
+ */
+typedef enum {
+    EXT,
+    LIH,
+    HIH
+} packet_origin_t;
+
+/*! \brief constants to define the status of a connection
+ */
+typedef enum {
+    INVALID,
+    INIT,
+    DECISION,
+    REPLAY,
+    FORWARD,
+    PROXY,
+    DROP,
+    CONTROL
+} conn_status_t;
+
+/*! \brief output modes
+ */
+typedef enum {
+    OUTPUT_INVALID  = -1,
+    OUTPUT_SYSLOG   = 1,
+    OUTPUT_STDOUT   = 2,
+    OUTPUT_LOGFILES = 3,
+    OUTPUT_MYSQL    = 4
+} output_t;
+
+/*!
+ \def OK
+ *
+ * Return code when everything's fine
+ */
+#define OK      0
+
+/*!
+ *   \def NOK
+ *
+ * Return code when something when wrong
+ */
+#define NOK     -1
+
+/*!
+ \def TIMEOUT
+ *
+ * Return code when something took too much time
+ */
+#define TIMEOUT     -2
+
+/* ------------------------------------------------ */
 
 /* Forward-declaration of structures */
 struct target;
@@ -45,6 +98,9 @@ struct conn_struct;
 struct pkt_struct;
 struct DE_submit_args;
 struct verdict;
+struct mod_args;
+struct node;
+struct decision_holder;
 
 /* ------------------------------------------------ */
 
@@ -206,7 +262,6 @@ struct conn_struct
     char *key;
     char *key_ext;
     char *key_lih;
-    char *key_hih;
     int protocol;
     GString *start_timestamp;
     gdouble start_microtime;
@@ -290,4 +345,47 @@ struct verdict
     u_int32_t statement;
     u_int32_t mark;
 };
+
+
+/*!
+ \def mod_args
+ *
+ \brief arguments sent to a module while processing the tree
+ */
+struct mod_args {
+    struct node *node;
+    struct pkt_struct *pkt;
+    uint32_t backend_test, backend_use;
+};
+
+/*!
+ \def node
+ *
+ \brief node of an execution tree, composed of a module and a argument, called by processing the tree
+ */
+struct node {
+    void (*module)(struct mod_args);
+    GHashTable *arg;
+    GString *module_name;
+    GString *function;
+    struct node *true;
+    struct node *false;
+    int result;
+    int info_result;
+};
+
+/*!
+ \def decision_holder
+ *
+ \brief structure to hold decision input/output of the DE engine
+ */
+struct decision_holder {
+    struct pkt_struct *pkt;
+    struct node *node;
+    struct mod_args args;
+    int result;
+
+    uint32_t backend_test, backend_use;
+};
+
 #endif

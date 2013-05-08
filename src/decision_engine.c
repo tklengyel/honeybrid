@@ -53,10 +53,10 @@ int intcmp(gconstpointer v1, gconstpointer v2, gpointer extra)
 struct node *DE_build_subtree(const gchar *expr)
 {
     struct node *node;
-    node = (struct node *) malloc(sizeof(struct node)); /// TODO: to be freed when destroying DE_rules
+    node = (struct node *) g_malloc0(sizeof(struct node));
     node->module = NULL;
     char *modname;
-    char *function;
+    const char *function;
     void* function_pointer;
 
     /*! test presence of AND operator */
@@ -97,7 +97,7 @@ struct node *DE_build_subtree(const gchar *expr)
     {
         errx(1, "%s: Module '%s' unknown!", __func__, modname);
     }
-    if ((function = (char *) g_hash_table_lookup(node->arg, "function")) == NULL)
+    if ((function = (const char *) g_hash_table_lookup(node->arg, "function")) == NULL)
     {
         errx(1, "%s: Module function undefined!", __func__);
     }
@@ -124,6 +124,7 @@ struct node *DE_build_subtree(const gchar *expr)
     //#endif
 
     g_regex_unref(and_regex);
+    g_free(modname);
 
     /*! return pointer to this leaf  */
     return node;
@@ -183,9 +184,25 @@ struct node *DE_create_tree(const gchar *equation)
         node = headsubgroup;
     }
     g_strfreev(subgroups);
+    g_regex_unref(or_regex);
 
     return node;
 
+}
+
+/*! DE_destroy_tree
+ \brief destroy a boolean decision tree
+ *
+ \param[in] root node
+ */
+void DE_destroy_tree(struct node *clean) {
+    if(clean != NULL) {
+        DE_destroy_tree(clean->false);
+        DE_destroy_tree(clean->true);
+        if(clean->module_name) g_string_free(clean->module_name,TRUE);
+        if(clean->function) g_string_free(clean->function,TRUE);
+        g_free(clean);
+    }
 }
 
 /*! decide

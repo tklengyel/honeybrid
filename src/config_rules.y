@@ -13,6 +13,7 @@
 #include "tables.h"
 #include "types.h"
 #include "decision_engine.h"
+#include "modules.h"
 #include <sys/stat.h>
 #include <fcntl.h>
 
@@ -101,16 +102,19 @@ parameters: { /* nothing to do */ }
 parameter: WORD EQ WORD {
 		g_hash_table_insert(config, $1, $3);
 		g_printerr("\t'%s' => '%s'\n", $1, $3);
+		g_free($2);
 	}
 	|  WORD EQ EXPR {
 		g_hash_table_insert(config, $1, $3);
-                g_printerr("\t'%s' => '%s'\n", $1, $3);
+        g_printerr("\t'%s' => '%s'\n", $1, $3);
+        g_free($2);
 	}
 	|  WORD EQ NUMBER {
 		int *d =g_malloc(sizeof(int));
 		*d = $3;
 		g_hash_table_insert(config, $1, d);
 		g_printerr("\t'%s' => '%i'\n", $1, *d);
+		g_free($2);
     }
 	|  WORD EQ QUOTE honeynet QUOTE {
 		char *s = g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($4)) + 1);
@@ -118,6 +122,7 @@ parameter: WORD EQ WORD {
         g_hash_table_insert(config, $1, s);
         g_printerr("\tDefining IP: '%s' => '%s'\n", $1, s);
 		free($4);
+		g_free($2);
     }
 	;
 
@@ -126,11 +131,13 @@ parameter: WORD EQ WORD {
 uplink: UPLINK QUOTE WORD QUOTE OPEN uplink_settings END { 
 
         struct interface *iface=(struct interface *)$6;
-        iface->tag=g_strdup($3);
-        guint *key = g_malloc0(sizeof(guint));
-        *key=g_hash_table_size(uplink)+1;
-        g_hash_table_insert(uplink, iface->ip_str, iface);
-        g_printerr("\t'tag' => '%s'\n", $3);
+        if(iface && iface->ip_str) {
+            iface->tag=$3;
+            g_hash_table_insert(uplink, iface->ip_str, iface);
+            g_printerr("\t'tag' => '%s'\n", iface->tag);
+        } else {
+            errx(1, "Uplink deson't have IP defined!\n");
+        }
     }
     ;
 
@@ -147,14 +154,18 @@ uplink_settings: {
         iface->ip_str = g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($5)) + 1);
         sprintf(iface->ip_str, "%s", addr_ntoa($5));
         g_printerr("\t'%s' => '%s'\n", $2, iface->ip_str);
+        g_free($3);
+        g_free($2);
     }
     | uplink_settings WORD EQ QUOTE WORD QUOTE SEMICOLON {
         if(strcmp($2, "interface")) {
             errx(1, "Unrecognized option: %s. Did you mean: 'interface'?\n", $2); 
         }
         struct interface *iface=(struct interface *)$$;
-        iface->name = g_strdup($5);
+        iface->name = $5;
         g_printerr("\t'%s' => '%s'\n", $2, iface->name);
+        g_free($3);
+        g_free($2);
     }
     | uplink_settings WORD EQ NUMBER SEMICOLON {
         if(strcmp($2, "mark")) {
@@ -163,6 +174,8 @@ uplink_settings: {
         struct interface *iface=(struct interface *)$$;
         iface->mark=$4;
         g_printerr("\t'%s' => '%d'\n", $2, iface->mark);
+        g_free($3);
+        g_free($2);
     }
     ;
 
@@ -221,18 +234,21 @@ module_settings: {
 	                errx(1, "%s: Fatal error while creating module hash table.\n", __func__);
 	}
 	| module_settings WORD EQ WORD SEMICOLON {
-	    g_hash_table_insert((GHashTable *)$$, g_strdup($2), g_strdup($4));
+	    g_hash_table_insert((GHashTable *)$$, $2, $4);
 	    g_printerr("\t'%s' => '%s'\n", $2, $4);
+	    g_free($3);
 	}
 	| module_settings WORD EQ EXPR SEMICOLON {
-		g_hash_table_insert((GHashTable *)$$, g_strdup($2), g_strdup($4));
+		g_hash_table_insert((GHashTable *)$$, $2, $4);
         g_printerr("\t'%s' => '%s'\n", $2, $4);
+        g_free($3);
 	}
 	| module_settings WORD EQ NUMBER SEMICOLON {
 		int *d = g_malloc0(sizeof(int));
         *d = $4;
         g_hash_table_insert((GHashTable *)$$, $2, d);
         g_printerr("\t'%s' => '%i'\n", $2, *d);
+        g_free($3);
 	}
 	;
 
@@ -412,6 +428,7 @@ honeynet: EXPR {
 		if (addr_pton($1, $$) < 0) {
             yyerror("\tIllegal IP address");
         }
+        g_free($1);
 	}
 	;
 
@@ -421,6 +438,7 @@ equation: {
 	| equation WORD {
 		if ($$->len > 0) { g_string_append_printf($$, " "); }
 		$$ = g_string_append($$, $2);
+		g_free($2);
 	 }
 	| equation NUMBER { 
 		if ($$->len > 0) { g_string_append_printf($$, " "); }
@@ -429,10 +447,12 @@ equation: {
 	| equation EXPR { 
 		if ($$->len > 0) { g_string_append_printf($$, " "); }
 		$$ = g_string_append($$, $2);
+		g_free($2);
 	 }
 	| equation EQ { 
 		if ($$->len > 0) { g_string_append_printf($$, " "); }
 		$$ = g_string_append($$, $2);
+		g_free($2);
 	 }
 	;
 

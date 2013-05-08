@@ -25,9 +25,6 @@ int daemon(int, int);
 int yyparse(void);
 extern FILE *yyin;
 
-/*! File to store PID */
-#define PIDFILE "/var/run/honeybrid.pid"
-
 /*! writing lock initialization */
 #define G_STATIC_RW_LOCK_INIT { G_STATIC_MUTEX_INIT, NULL, NULL, 0, FALSE, 0, 0 }
 

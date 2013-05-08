@@ -31,37 +31,7 @@
 
 #include "log.h"
 #include "tables.h"
-
-/*!
- \def mod_args
- *
- \brief arguments sent to a module while processing the tree
- */
-struct mod_args {
-	struct node *node;
-	struct pkt_struct *pkt;
-	uint32_t backend_test, backend_use;
-};
-
-/*!
- \def node
- *
- \brief node of an execution tree, composed of a module and a argument, called by processing the tree
- */
-struct node {
-	void (*module)(struct mod_args);
-	GHashTable *arg;
-	GString *module_name;
-	GString *function;
-	struct node *true;
-	struct node *false;
-	int result;
-	int info_result;
-};
-
-/*! \def list of module to save
- */
-GHashTable *module_to_save;
+#include "types.h"
 
 void init_modules();
 

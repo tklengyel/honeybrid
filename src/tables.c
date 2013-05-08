@@ -50,6 +50,7 @@
 #include "tables.h"
 #include "log.h"
 #include "netcode.h"
+#include "decision_engine.h"
 
 /*!
  * \brief number of bytes of the buffer in the netfilter callback function
@@ -421,10 +422,10 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
      */
 
     /* Creating keys for both directions (0 and 1)*/
-    char *key0 = malloc(
+    char *key0 = g_malloc0(
             snprintf(NULL, 0, "%s:%s", pkt->key_src, pkt->key_dst) + 1);
     sprintf(key0, "%s:%s", pkt->key_src, pkt->key_dst);
-    char *key1 = malloc(
+    char *key1 = g_malloc0(
             snprintf(NULL, 0, "%s:%s", pkt->key_dst, pkt->key_src) + 1);
     sprintf(key1, "%s:%s", pkt->key_dst, pkt->key_src);
 
@@ -676,7 +677,6 @@ int init_conn(struct pkt_struct *pkt, struct conn_struct **conn)
         conn_init->key = g_strdup(pkt->key);
         conn_init->key_ext = g_strdup(pkt->key_src);
         conn_init->key_lih = g_strdup(pkt->key_dst);
-        conn_init->key_hih = NULL;
         conn_init->protocol = pkt->packet.ip->protocol;
         conn_init->access_time = curtime;
         conn_init->mark = pkt->mark;
@@ -1051,9 +1051,6 @@ int expire_conn(gpointer key, struct conn_struct *conn, gint *expiration_delay)
     g_get_current_time(&t);
     gint curtime = (t.tv_sec);
 
-    GSList *current;
-    struct pkt_struct* tmp;
-
     int delay = *expiration_delay;
 
     /*
@@ -1064,32 +1061,12 @@ int expire_conn(gpointer key, struct conn_struct *conn, gint *expiration_delay)
 
     if (((curtime - conn->access_time) > delay) || (conn->state < INIT))
     {
+
         /*! output final statistics about the connection */
         connection_log(conn);
 
-        g_printerr("%s Singly linked list freed - tuple = %s\n", H(conn->id),
-                (char*) key);
-
         /*! lock the structure, this will never be unlocked */
         g_static_rw_lock_writer_lock(&conn->lock);
-
-        /*! remove the singly linked lists */
-        current = conn->BUFFER;
-        if (current != NULL)
-        {
-            do
-            {
-                tmp = (struct pkt_struct*) g_slist_nth_data(current, 0);
-                free_pkt(tmp);
-            } while ((current = g_slist_next(current)) != NULL);
-        }
-
-        g_slist_free(conn->BUFFER);
-        g_free(conn->key_ext);
-        g_free(conn->key_lih);
-        ///g_free(conn->key_hih);
-        ///free(conn->decision_rule);
-        g_string_free(conn->decision_rule, TRUE);
 
         /*! list the entry for later removal */
         g_ptr_array_add(entrytoclean, key);
@@ -1108,10 +1085,37 @@ void free_conn(gpointer key, gpointer trash)
 
     g_static_rw_lock_writer_lock(&rwlock);
 
-    if (TRUE != g_tree_remove(conn_tree, key))
+    struct conn_struct *conn = (struct conn_struct *) g_tree_lookup(conn_tree,
+            key);
+
+    if (conn)
     {
-        g_printerr("%s Error while removing tuple %s\n", H(8), (char*) key);
+
+        g_tree_steal(conn_tree, key);
+
+        GSList *current = conn->BUFFER;
+        struct pkt_struct* tmp;
+        if (current != NULL)
+        {
+            do
+            {
+                tmp = (struct pkt_struct*) g_slist_nth_data(current, 0);
+                free_pkt(tmp);
+            } while ((current = g_slist_next(current)) != NULL);
+
+            g_slist_free(conn->BUFFER);
+        }
+
+        g_free(conn->key);
+        g_free(conn->key_ext);
+        g_free(conn->key_lih);
+        g_free(conn->hih.redirect_key);
+        g_free(conn->expected_data.payload);
+        g_string_free(conn->start_timestamp, TRUE);
+        g_string_free(conn->decision_rule, TRUE);
+        g_free(conn);
     }
+
     g_static_rw_lock_writer_unlock(&rwlock);
 }
 
@@ -1187,7 +1191,7 @@ int setup_redirection(struct conn_struct *conn, uint32_t hih_use)
         if (high_redirection_table == NULL)
         {
             high_redirection_table = g_hash_table_new_full(g_str_hash,
-                    g_str_equal, free, free);
+                    g_str_equal, g_free, g_free);
             g_printerr("%s [** high_redirection_table created **]\n",
                     H(conn->id));
         }
@@ -1201,11 +1205,12 @@ int setup_redirection(struct conn_struct *conn, uint32_t hih_use)
             GString *value = g_string_new("");
             g_string_printf(value, "%s:%u", conn->key_lih, conn->mark);
 
-            g_hash_table_insert(high_redirection_table, key_hih_ext->str,
-                    value->str);
+            g_hash_table_insert(high_redirection_table, g_strdup(key_hih_ext->str),
+                    g_strdup(value->str));
             g_printerr(
                     "%s [** high_redirection_table updated: key %s value %s **]\n",
                     H(conn->id), key_hih_ext->str, value->str);
+            g_string_free(value, TRUE);
         }
         else
         {
@@ -1227,19 +1232,20 @@ int setup_redirection(struct conn_struct *conn, uint32_t hih_use)
         //	printf("Interface for HIH: %s, TCP sock: %i UDP sock: %i\n",
         //		hihiface->name, hihiface->tcp_socket, hihiface->udp_socket);
 
-        ///conn->key_hih = hihaddr;
         conn->hih.hihID = hih_use;
         conn->hih.iface = hihiface;
         conn->hih.addr = htonl(addr2int(addr_ntoa(hihaddr)));
         conn->hih.lih_addr = htonl(addr2int(conn->key_lih));
         conn->hih.port = htons((short)atoi(tmp[3]));
-        conn->hih.redirect_key = strdup(key_hih_ext->str);
+        conn->hih.redirect_key = g_strdup(key_hih_ext->str);
         /*! We then update the status of the connection structure */
         conn->stat_time[DECISION] = microtime;
         //conn->state = REPLAY;
         switch_state(conn, REPLAY);
 
         g_strfreev(tmp);
+        g_string_free(key_hih_ext, TRUE);
+
 
         /*! We reset the LIH */
         reset_lih(conn);
@@ -1288,14 +1294,14 @@ int setup_redirection(struct conn_struct *conn, uint32_t hih_use)
  /brief lookup values from the config hash table. Make sure the required value is present
  */
 
-char *
+gpointer
 config_lookup(char * parameter)
 {
     if (NULL == g_hash_table_lookup(config, parameter))
     {
         errx(1, "Missing configuration parameter '%s'", parameter);
     }
-    return (char *) g_hash_table_lookup(config, parameter);
+    return g_hash_table_lookup(config, parameter);
 }
 
 gint IntComp(gconstpointer a, gconstpointer b, gconstpointer c)
@@ -1330,9 +1336,9 @@ void free_backend(gpointer data)
 
     if (backend)
     {
+        DE_destroy_tree(backend->rule);
         free_interface(backend->iface);
         g_free(backend);
     }
-
 }
 

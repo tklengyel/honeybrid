@@ -51,8 +51,8 @@ GStaticRWLock hihlock;
 
 /*! \brief global hash table that contain the values of the configuration file  */
 GHashTable *config;
-#define CONFIG(parameter)		config_lookup(parameter)
-#define ICONFIG(parameter)		atoi(config_lookup(parameter))
+#define CONFIG(parameter)		(const char *)(config_lookup(parameter))
+#define ICONFIG(parameter)      *(const int *)(config_lookup(parameter))
 
 /*! \brief global hash table to hold module paramaters */
 GHashTable *module;
@@ -73,21 +73,37 @@ GHashTable *low_honeypot_addr;
 /*! \brief global integer table that contains the addresses of the high_interaction honeypots (integer version)  */
 GHashTable *high_honeypot_addr;
 
-int test_honeypot_addr(char *testkey, int list);
-
-char * lookup_honeypot_addr(gchar *testkey, int list);
-//////////////////////////////////////////
-
 /*! \brief Balanced Binary Tree that keep meta informations about active connections
  *
  \param key, each entry is represented by the tuple of the connection (sourceIP+sourcePort+destIP+destPort)
  \param value, the associated value of an entry is a conn_struct structure  */
 GTree * conn_tree;
 
-unsigned c_id;
+/*! \def list of module to save
+ */
+GHashTable *module_to_save;
+
+/*!
+ \def DE_rules
+ *
+ \brief hash table to select a rule for a connection, key is the rule, value is the boolean decision tree root
+ */
+GHashTable *DE_rules;
 
 /*! \brief pointer table for btree cleaning */
 GPtrArray *entrytoclean;
+
+
+/* -------------------------------------------------- */
+
+/*! \brief connection id */
+uint64_t c_id;
+
+const char *pidfile;
+
+int test_honeypot_addr(char *testkey, int list);
+
+char * lookup_honeypot_addr(gchar *testkey, int list);
 
 char *lookup_proto(int proto);
 char *lookup_origin(int origin);
@@ -114,7 +130,7 @@ int expire_conn(gpointer key, struct conn_struct *cur_conn,
 
 void free_conn(gpointer key, gpointer trash);
 
-char * config_lookup(char * parameter);
+gpointer config_lookup(char * parameter);
 
 gint IntComp(gconstpointer a, gconstpointer b, gconstpointer c);
 void IntDest(void* a);
@@ -122,48 +138,6 @@ void IntDest(void* a);
 void free_interface(gpointer data);
 
 void free_backend(gpointer data);
-
-/*! \brief constants to define the origin of a packet
- */
-typedef enum {
-    EXT,
-    LIH,
-    HIH
-} packet_origin_t;
-
-/*! \brief constants to define the status of a connection
- */
-typedef enum {
-    INVALID,
-    INIT,
-    DECISION,
-    REPLAY,
-    FORWARD,
-    PROXY,
-    DROP,
-    CONTROL
-} conn_status_t;
-
-/*!
- \def OK
- *
- * Return code when everything's fine
- */
-#define OK		0
-
-/*!
- *   \def NOK
- *
- * Return code when something when wrong
- */
-#define NOK		-1
-
-/*!
- \def TIMEOUT
- *
- * Return code when something took too much time
- */
-#define TIMEOUT		-2
 
 #define ghashtable_foreach(table, i, key, val) \
         g_hash_table_iter_init(i, table); \
