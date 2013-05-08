@@ -174,30 +174,6 @@ int close_thread() {
 	return 0;
 }
 
-/*! free_table
- \brief Function to free memory in the different table created */
-int free_table(gchar *key, gchar *value, gpointer data) {
-	if (key != NULL) {
-		g_free(key);
-	}
-	if (value != NULL) {
-		g_free(value);
-	}
-	return TRUE;
-
-}
-
-/*! free_hash
- \brief Function to free memory in the different subhash created */
-int free_hash(gchar *key, GHashTable *value, gpointer data) {
-	if (key != NULL && value != NULL) {
-		g_hash_table_foreach_remove(value, (GHRFunc) free_table, NULL);
-		g_hash_table_destroy(value);
-	}
-	return TRUE;
-
-}
-
 /*! close_hash function
  \brief Destroy the different hashes used by honeybrid */
 int close_hash() {
@@ -205,30 +181,8 @@ int close_hash() {
 	 */
 	if (log_table != NULL) {
 		g_printerr("%s: Destroying table log_table\n", __func__);
-		g_hash_table_foreach_remove(log_table, (GHRFunc) free_table, NULL);
 		g_hash_table_destroy(log_table);
 	}
-
-	/* \todo TODO deprecated
-	 if (low_redirection_table != NULL) {
-	 g_printerr("%s: Destroying table low_redirection_table\n", __func__);
-	 g_hash_table_foreach_remove(low_redirection_table, (GHRFunc) free_table, NULL);
-	 g_hash_table_destroy(low_redirection_table);
-	 }
-
-
-	 //if (low_honeypot_addr != NULL) {	//DEPRECATED
-	 g_print("close_hash():\tDestroying table low_honeypot_addr\n");
-	 g_hash_table_foreach_remove(low_honeypot_addr, (GHRFunc) free_table, NULL);
-	 g_hash_table_destroy(low_honeypot_addr);
-	 //}
-
-	 if (high_honeypot_addr != NULL) {
-	 g_print("close_hash():\tDestroying table high_honeypot_addr\n");
-	 g_hash_table_foreach_remove(high_honeypot_addr, (GHRFunc) free_table, NULL);
-	 g_hash_table_destroy(high_honeypot_addr);
-	 }
-	 */
 
 	if (high_redirection_table != NULL) {
 		g_printerr("%s: Destroying table high_redirection_table\n", __func__);
@@ -248,7 +202,6 @@ int close_hash() {
 	//}
 	if (config != NULL) {
 		g_printerr("%s: Destroying table config\n", __func__);
-		g_hash_table_foreach_remove(config, (GHRFunc) free_table, NULL);
 		g_hash_table_destroy(config);
 	}
 	/*
@@ -300,15 +253,9 @@ void free_target(struct target *t, gpointer user_data) {
 	g_free(t->filter);
 	g_free(t->front_handler);
 	g_tree_destroy(t->back_handlers);
-	g_tree_destroy(t->back_rules);
-	g_tree_destroy(t->back_ifs);
-	g_tree_destroy(t->back_ips);
-	g_slist_foreach(t->backendIDs, (GFunc) free_backendIDs, NULL);
-	g_slist_free(t->backendIDs);
-	if (t->front_rule != NULL)
-		g_free(t->front_rule);
-	if (t->control_rule != NULL)
-		g_free(t->control_rule);
+	g_tree_destroy(t->unique_backend_ips);
+	g_free(t->front_rule);
+	g_free(t->control_rule);
 	g_free(t);
 }
 
@@ -434,7 +381,7 @@ void init_parser(char *filename) {
 
 void init_variables() {
 	/*! create the hash table to store the config */
-	if (NULL == (config = g_hash_table_new(g_str_hash, g_str_equal)))
+	if (NULL == (config = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free)))
 		errx(1, "%s: Fatal error while creating config hash table.\n",
 				__func__);
 
@@ -444,32 +391,24 @@ void init_variables() {
 				__func__);
 
 	/*! create the hash table to store module information */
-	if (NULL == (module = g_hash_table_new(g_str_hash, g_str_equal)))
+	if (NULL == (module = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free)))
 		errx(1, "%s: Fatal error while creating module hash table.\n",
 				__func__);
 
 	/*! create the hash table for the log engine */
-	if (NULL == (log_table = g_hash_table_new(g_str_hash, g_str_equal)))
+	if (NULL == (log_table = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free)))
 		errx(1, "%s: Fatal error while creating log_table hash table.\n",
 				__func__);
-
-	/*! create the hash table for the redirection table \todo DEPRECATED
-	 if (NULL == (low_redirection_table = g_hash_table_new(g_str_hash, g_str_equal)))
-	 errx(1,"%s: Fatal error while creating redirection_table hash table.\n", __func__);
-	 */
-	/*! create the hash table for the LIH list \todo DEPRECATED
-	 if (NULL == (low_honeypot_addr = g_hash_table_new(g_int_hash, g_int_equal)))
-	 errx(1,"%s: Fatal error while creating low_honeypot_addr hash table.\n", __func__);
-	 */
-	/*! create the hash table for the HIH list \todo DEPRECATED
-	 if (NULL == (high_honeypot_addr = g_hash_table_new(g_int_hash, g_int_equal)))
-	 errx(1, "%s: Error while creating high_honeypot_addr hash table.\n", __func__);
-	 */
 
 	/*! create the hash table to store the pointers to the boolean execution trees */
 	if (NULL == (DE_rules = g_hash_table_new(g_str_hash, g_str_equal)))
 		errx(1, "%s: Fatal error while creating DE_mod hash table.\n",
-				__func__);
+                __func__);
+
+    /*! create the hash table for the log engine */
+    if (NULL == (uplink = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, free_interface)))
+        errx(1, "%s: Fatal error while creating uplink hash table.\n",
+                __func__);
 
 	/*! init the log singly linked list */
 	log_list = NULL;

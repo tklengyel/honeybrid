@@ -40,7 +40,7 @@ char* int_append(char * root, int num);
 %token OPEN END SEMICOLON QUOTE DOT
 
 /* Honeybrid configuration keywords */
-%token MODULE FILTER FRONTEND BACKEND BACKPICK LIMIT CONFIGURATION TARGET
+%token MODULE FILTER FRONTEND BACKEND BACKPICK LIMIT CONFIGURATION TARGET UPLINK
 
 /* Content Variables */
 %token <number> NUMBER
@@ -48,7 +48,8 @@ char* int_append(char * root, int num);
 %token <string> EQ
 %token <string> EXPR
 
-%type <hash>    settings
+%type <hash>    module_settings
+%type <hash>    uplink_settings
 %type <target>  rule
 %type <gstring>  equation 
 %type <addr>    honeynet
@@ -82,6 +83,7 @@ char* int_append(char * root, int num);
 %%
 configuration:	/* empty */
 	| configuration config { 	g_printerr("Main config parsed\n"); }
+	| configuration uplink { 	g_printerr("Uplink parsed\n"); }
 	| configuration module {	g_printerr("Module parsed\n"); }
 	| configuration target {	g_printerr("Target parsed\n"); }
 	;
@@ -105,26 +107,70 @@ parameter: WORD EQ WORD {
                 g_printerr("\t'%s' => '%s'\n", $1, $3);
 	}
 	|  WORD EQ NUMBER {
-		//char *s = malloc(sizeof($3));
-		char *s = malloc(128);
-		snprintf(s, 128, "%d",$3);
-		g_hash_table_insert(config, $1, s);
-		g_printerr("\t'%s' => '%d'\n", $1, $3);
-        }
+		int *d =g_malloc(sizeof(int));
+		*d = $3;
+		g_hash_table_insert(config, $1, d);
+		g_printerr("\t'%s' => '%i'\n", $1, *d);
+    }
 	|  WORD EQ QUOTE honeynet QUOTE {
 		char *s = g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($4)) + 1);
 		sprintf(s, "%s", addr_ntoa($4));
-                g_hash_table_insert(config, $1, s);
-                g_printerr("\tDefining IP: '%s' => '%s'\n", $1, s);
+        g_hash_table_insert(config, $1, s);
+        g_printerr("\tDefining IP: '%s' => '%s'\n", $1, s);
 		free($4);
-        }
+    }
 	;
 
 
 
+uplink: UPLINK QUOTE WORD QUOTE OPEN uplink_settings END { 
+
+        struct interface *iface=(struct interface *)$6;
+        iface->tag=g_strdup($3);
+        guint *key = g_malloc0(sizeof(guint));
+        *key=g_hash_table_size(uplink)+1;
+        g_hash_table_insert(uplink, iface->ip_str, iface);
+        g_printerr("\t'tag' => '%s'\n", $3);
+    }
+    ;
+
+uplink_settings: {
+        if (NULL == ($$ = g_malloc0(sizeof(struct interface))))
+            errx(1, "%s: Fatal error while creating uplink table.\n", __func__);
+    }
+    | uplink_settings WORD EQ QUOTE honeynet QUOTE SEMICOLON {
+        if(strcmp($2, "ip")) {
+            errx(1, "Unrecognized option: %s. Did you mean: 'ip'?\n", $2); 
+        }
+        struct interface *iface=(struct interface *)$$;
+        iface->ip = $5;
+        iface->ip_str = g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($5)) + 1);
+        sprintf(iface->ip_str, "%s", addr_ntoa($5));
+        g_printerr("\t'%s' => '%s'\n", $2, iface->ip_str);
+    }
+    | uplink_settings WORD EQ QUOTE WORD QUOTE SEMICOLON {
+        if(strcmp($2, "interface")) {
+            errx(1, "Unrecognized option: %s. Did you mean: 'interface'?\n", $2); 
+        }
+        struct interface *iface=(struct interface *)$$;
+        iface->name = g_strdup($5);
+        g_printerr("\t'%s' => '%s'\n", $2, iface->name);
+    }
+    | uplink_settings WORD EQ NUMBER SEMICOLON {
+        if(strcmp($2, "mark")) {
+            errx(1, "Unrecognized option: %s. Did you mean: 'mark'?\n", $2); 
+        }
+        struct interface *iface=(struct interface *)$$;
+        iface->mark=$4;
+        g_printerr("\t'%s' => '%d'\n", $2, iface->mark);
+    }
+    ;
 
 
-module: MODULE QUOTE WORD QUOTE OPEN settings END {
+
+
+
+module: MODULE QUOTE WORD QUOTE OPEN module_settings END {
 		g_hash_table_insert(module, $3, $6);
 		g_printerr("\tmodule '%s' defined with %d parameters\n", $3, g_hash_table_size((GHashTable *)$6));
 		if (NULL == g_hash_table_lookup((GHashTable *)$6, "function")) {
@@ -170,46 +216,25 @@ module: MODULE QUOTE WORD QUOTE OPEN settings END {
 	}
 	;
 
-settings: { 
-		if (NULL == ($$ = (struct GHashTable *)g_hash_table_new(g_str_hash, g_str_equal)))
+module_settings: { 
+		if (NULL == ($$ = (struct GHashTable *)g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free)))
 	                errx(1, "%s: Fatal error while creating module hash table.\n", __func__);
 	}
-	| settings WORD EQ WORD SEMICOLON {
-		if (g_strcmp0($2, "function") == 0) {
-			/*! We store a pointer to the module function in the module hash table 
-			    If the module function isn't defined in get_module(), the application will exit and display an error message */
-                        g_hash_table_insert((GHashTable *)$$, "function", $4);
-		}
-		if (g_strcmp0($2, "backup") == 0) {
-			GString *tmp = g_string_new($4);
-                        g_hash_table_insert((GHashTable *)$$, "backup_file", g_string_free(tmp, FALSE));
-		}
-		g_hash_table_insert((GHashTable *)$$, $2, $4);
-                g_printerr("\t'%s' => '%s'\n", $2, $4);
+	| module_settings WORD EQ WORD SEMICOLON {
+	    g_hash_table_insert((GHashTable *)$$, g_strdup($2), g_strdup($4));
+	    g_printerr("\t'%s' => '%s'\n", $2, $4);
 	}
-	| settings WORD EQ EXPR SEMICOLON {
-		if (g_strcmp0($2, "function") == 0) {
-			/*! We store a pointer to the module function in the module hash table 
-			    If the module function isn't defined in get_module(), the application will exit and display an error message */
-                        g_hash_table_insert((GHashTable *)$$, "function", $4);
-		}
-		if (g_strcmp0($2, "backup") == 0) {
-			GString *tmp = g_string_new($4);
-                        g_hash_table_insert((GHashTable *)$$, "backup_file", g_string_free(tmp, FALSE));
-		}
-		g_hash_table_insert((GHashTable *)$$, $2, $4);
-                g_printerr("\t'%s' => '%s'\n", $2, $4);
+	| module_settings WORD EQ EXPR SEMICOLON {
+		g_hash_table_insert((GHashTable *)$$, g_strdup($2), g_strdup($4));
+        g_printerr("\t'%s' => '%s'\n", $2, $4);
 	}
-	| settings WORD EQ NUMBER SEMICOLON {
-		char *s = malloc(sizeof(double));
-                sprintf(s, "%d",$4);
-                g_hash_table_insert((GHashTable *)$$, $2, s);
-                g_printerr("\t'%s' => '%d'\n", $2, $4);
+	| module_settings WORD EQ NUMBER SEMICOLON {
+		int *d = g_malloc0(sizeof(int));
+        *d = $4;
+        g_hash_table_insert((GHashTable *)$$, $2, d);
+        g_printerr("\t'%s' => '%i'\n", $2, *d);
 	}
 	;
-
-
-
 
 
 /*
@@ -238,21 +263,13 @@ target: TARGET OPEN rule END {
 rule: 	{
 		g_printerr("\tAllocating memory for new structure 'target'\n");
 		$$ = (struct target *)g_malloc0(sizeof(struct target));
-		$$->front_handler = (struct addr *)g_malloc0(sizeof(struct addr));
-		$$->back_picker = NULL;
-		$$->front_rule = NULL;
-		$$->control_rule = NULL;
-		$$->back_handlers = g_tree_new((GCompareFunc)intcmp);
-		$$->back_ips = g_tree_new((GCompareFunc)strcmp);
-		$$->back_rules = g_tree_new((GCompareFunc)intcmp);
-		$$->back_tags = g_tree_new((GCompareFunc)intcmp);
-		/* T0MA TODO: Create interface destroy function and create trees with destruct function specified! */
-		$$->back_ifs = g_tree_new((GCompareFunc)intcmp);
-		/* Since the trees need pointers for the keys (uints), they need to live somewhere */
-		$$->backendIDs=NULL;
-		uint32_t *startID=malloc(sizeof(uint32_t));
-		*startID=0;
-		$$->backendIDs=g_slist_prepend($$->backendIDs, (gpointer)startID);
+		
+		// This tree holds the main backend structures
+		$$->back_handlers = g_tree_new_full((GCompareDataFunc)intcmp, NULL, g_free, free_backend);
+		
+		// This tree just contains the unique backend IP's
+		// The key (char *ip) lives in the struct allocated for back_handlers so don't free it on this tree
+		$$->unique_backend_ips = g_tree_new((GCompareFunc)g_strcmp0);
 	}
 	| rule FILTER QUOTE equation QUOTE SEMICOLON {
 		//g_printerr("Read pcap filter: '%s'\n", $4);
@@ -286,127 +303,136 @@ rule: 	{
 		g_string_free($4, TRUE);
         }
 	| rule BACKEND honeynet SEMICOLON {
-		if($$->back_picker == NULL) {
-			yyerror("Backend needs a rule if no backend picking rule is defined!\n");
-		}
-		
-		uint32_t *id=malloc(sizeof(uint32_t));
-		*id=*(uint32_t *)($$->backendIDs->data)+1;
-		$$->backendIDs=g_slist_prepend($$->backendIDs, (gpointer)id);
-
-		char *back_ip=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($3)) + 1);
-                sprintf(back_ip, "%s", addr_ntoa($3));
-
-		g_tree_insert($$->back_handlers, $$->backendIDs->data, $3);
-		g_tree_insert($$->back_ips, back_ip, $3);
-		
-		g_printerr("\tBackend %u with IP %s copied to handler without rule\n", *(uint32_t*)($$->backendIDs->data), back_ip);
+    		if($$->back_picker == NULL) {
+    			yyerror("Backend needs a rule if no backend picking rule is defined!\n");
+    		}
+    		
+    		// This will be freed automatically when the tree is destroyed
+    		$$->backends++;
+    		uint32_t *key=g_malloc0(sizeof(uint32_t));
+    		*key=$$->backends;
+    		
+    		struct backend *back_handler = g_malloc0(sizeof(struct backend));
+    		back_handler->iface=g_malloc0(sizeof(struct interface));
+    
+            back_handler->iface->ip=$3;
+    		back_handler->iface->ip_str=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($3)) + 1);
+            sprintf(back_handler->iface->ip_str, "%s", addr_ntoa($3));
+    
+    		g_tree_insert($$->back_handlers, key, back_handler);
+    		g_tree_insert($$->unique_backend_ips, back_handler->iface->ip_str, NULL);
+    		
+    		g_printerr("\tBackend %u with IP %s copied to handler without rule\n",
+    		    *key, back_handler->iface->ip_str);
         }
 	| rule BACKEND honeynet QUOTE equation QUOTE SEMICOLON {
 
-		uint32_t *id=g_malloc0(sizeof(uint32_t));
-                *id=*(uint32_t *)($$->backendIDs->data)+1;
-                $$->backendIDs=g_slist_prepend($$->backendIDs, (gpointer)id);
-
-		char *back_ip=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($3)) + 1);
-                sprintf(back_ip, "%s", addr_ntoa($3));
-
-		g_tree_insert($$->back_handlers, $$->backendIDs->data, $3);
-		g_tree_insert($$->back_ips, addr_ntoa($3), $3);
-		g_tree_insert($$->back_rules, $$->backendIDs->data, DE_create_tree($5->str));
-	
-       		g_printerr("\tBackend %u with IP %s copied to handler with rule: %s\n", *(uint32_t*)($$->backendIDs->data), back_ip, $5->str);
-       		g_string_free($5, TRUE);
+    		// This will be freed automatically when the tree is destroyed
+            $$->backends++;
+            uint32_t *key=g_malloc0(sizeof(uint32_t));
+            *key=$$->backends;
+            
+            struct backend *back_handler = g_malloc0(sizeof(struct backend));
+            back_handler->iface=g_malloc0(sizeof(struct interface));
+    
+            back_handler->iface->ip=$3;
+            back_handler->iface->ip_str=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($3)) + 1);
+            sprintf(back_handler->iface->ip_str, "%s", addr_ntoa($3));
+            
+            back_handler->rule=DE_create_tree($5->str);
+    
+    		g_tree_insert($$->back_handlers, key, back_handler);
+    		g_tree_insert($$->unique_backend_ips, back_handler->iface->ip_str, NULL);
+    	
+            g_printerr("\tBackend %u with IP %s copied to handler with rule: %s\n",
+                *key, back_handler->iface->ip_str, $5->str);
+                
+           	g_string_free($5, TRUE);
         }
 	| rule BACKEND QUOTE equation QUOTE honeynet QUOTE equation QUOTE SEMICOLON {
 
-                uint32_t *id=g_malloc0(sizeof(uint32_t));
-                *id=*(uint32_t *)($$->backendIDs->data)+1;
-                $$->backendIDs=g_slist_prepend($$->backendIDs, (gpointer)id);
+            // This will be freed automatically when the tree is destroyed
+            $$->backends++;
+            uint32_t *key=g_malloc0(sizeof(uint32_t));
+            *key=$$->backends;
+            
+            struct backend *back_handler = g_malloc0(sizeof(struct backend));
+            back_handler->iface=g_malloc0(sizeof(struct interface));
 
-		struct interface *iface=g_malloc0(sizeof(struct interface));
-		iface->name=strdup($8->str);
-		iface->mark=*id;
+            back_handler->iface->tag=g_strdup($4->str);
+		    back_handler->iface->name=g_strdup($8->str);
+		    back_handler->iface->mark=*key; // Automatically assign iptables mark
+		    back_handler->iface->ip=$6;
+		    back_handler->iface->ip_str=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($6)) + 1);
+		    sprintf(back_handler->iface->ip_str, "%s", addr_ntoa($6));
 
-		char *back_ip=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($6)) + 1);
-		sprintf(back_ip, "%s", addr_ntoa($6));
+            g_tree_insert($$->back_handlers, key, back_handler);
+            g_tree_insert($$->unique_backend_ips, back_handler->iface->ip_str, NULL);
 
-                g_tree_insert($$->back_handlers, $$->backendIDs->data, $6);
-		g_tree_insert($$->back_ips, back_ip, $6);
-		g_tree_insert($$->back_ifs, $$->backendIDs->data, (gpointer)iface);
-		g_tree_insert($$->back_tags, $$->backendIDs->data, strdup($4->str));
-
-                g_printerr("\tBackend %u with IP %s on interface %s and tag %s copied to handler without a rule\n", *(uint32_t*)($$->backendIDs->data), back_ip, $8->str, $4->str);
-                g_string_free($4, TRUE);
-		g_string_free($8, TRUE);
+            g_printerr("\tBackend %u with IP %s on interface %s and tag %s copied to handler without a rule\n",
+                *key, back_handler->iface->ip_str, back_handler->iface->name, back_handler->iface->tag);
+                
+            g_string_free($4, TRUE);
+		    g_string_free($8, TRUE);
         }
 	| rule BACKEND QUOTE equation QUOTE honeynet QUOTE equation QUOTE QUOTE equation QUOTE SEMICOLON {
+              
+             // This will be freed automatically when the tree is destroyed
+            $$->backends++;
+            uint32_t *key=g_malloc0(sizeof(uint32_t));
+            *key=$$->backends;
+            
+            struct backend *back_handler = g_malloc0(sizeof(struct backend));
+            back_handler->iface=g_malloc0(sizeof(struct interface));
+            
+            back_handler->iface->tag=g_strdup($4->str);
+		    back_handler->iface->name=g_strdup($8->str);
+		    back_handler->iface->mark=*key; // Automatically assign iptables mark
+		    back_handler->iface->ip=$6;
+		    back_handler->iface->ip_str=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($6)) + 1);
+            sprintf(back_handler->iface->ip_str, "%s", addr_ntoa($6));
+            back_handler->rule=DE_create_tree($11->str);
+            
+            g_tree_insert($$->back_handlers, key, back_handler);
+            g_tree_insert($$->unique_backend_ips, back_handler->iface->ip_str, NULL);
 
-                uint32_t *id=g_malloc0(sizeof(uint32_t));
-                *id=*(uint32_t *)($$->backendIDs->data)+1;
-                $$->backendIDs=g_slist_prepend($$->backendIDs, (gpointer)id);
-
-		struct interface *iface=g_malloc0(sizeof(struct interface));
-		iface->name=strdup($8->str);
-		iface->mark=*id;
-
-		char *back_ip=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($6)) + 1);
-                sprintf(back_ip, "%s", addr_ntoa($6));
-
-                g_tree_insert($$->back_handlers, $$->backendIDs->data, $6);
-		g_tree_insert($$->back_ips, back_ip, $6);
-		g_tree_insert($$->back_ifs, $$->backendIDs->data, (gpointer)iface);
-                g_tree_insert($$->back_rules, $$->backendIDs->data, DE_create_tree($11->str));
-		g_tree_insert($$->back_tags, $$->backendIDs->data, strdup($4->str));
-
-                g_printerr("\tBackend %u with IP %s on interface %s and tag %s copied to handler with rule: %s\n", *(uint32_t*)($$->backendIDs->data), back_ip, $8->str, $4->str, $11->str);
-                g_string_free($4, TRUE);
-		g_string_free($8, TRUE);
-		g_string_free($11, TRUE);
+            g_printerr("\tBackend %u with IP %s on interface %s and tag %s copied to handler with rule: %s\n", 
+                *key, back_handler->iface->ip_str, back_handler->iface->name, back_handler->iface->tag, $11->str);
+            g_string_free($4, TRUE);
+		    g_string_free($8, TRUE);
+		    g_string_free($11, TRUE);
         }
 	| rule LIMIT QUOTE equation QUOTE SEMICOLON {
 		$$->control_rule = DE_create_tree($4->str);
 		g_string_free($4, TRUE);
 	}
 
-honeynet: EXPR { 
-		if (addr_pton($1, $$) < 0)
-                        yyerror("\tIllegal IP address");
-		//else 
-		//	g_printerr("\tIP %s (%d) added as honeypot\n", addr_ntoa($$), $$->addr_ip);
-                //g_free($1);
+honeynet: EXPR {
+        $$ = (struct addr *)g_malloc0(sizeof(struct addr));
+		if (addr_pton($1, $$) < 0) {
+            yyerror("\tIllegal IP address");
+        }
 	}
 	;
 
-	/* TODO: debug string concatenation... use g_string? */
 equation: { 
-		//$$ = malloc(sizeof(char));
-		//snprintf($$, 1, " ");
 		$$ = g_string_new("");
 	}
 	| equation WORD {
 		if ($$->len > 0) { g_string_append_printf($$, " "); }
 		$$ = g_string_append($$, $2);
-		//$$ = str_append($$, " ");
-		//$$ = str_append($$, $2);
 	 }
 	| equation NUMBER { 
 		if ($$->len > 0) { g_string_append_printf($$, " "); }
 		g_string_append_printf($$, "%d", $2);
-		//$$ = str_append($$, " ");
-		//$$ = int_append($$, $2);
 	 }
 	| equation EXPR { 
 		if ($$->len > 0) { g_string_append_printf($$, " "); }
 		$$ = g_string_append($$, $2);
-		//$$ = str_append($$, " ");
-		//$$ = str_append($$, $2);
 	 }
 	| equation EQ { 
 		if ($$->len > 0) { g_string_append_printf($$, " "); }
 		$$ = g_string_append($$, $2);
-		//$$ = str_append($$, " ");
-		//$$ = str_append($$, $2);
 	 }
 	;
 

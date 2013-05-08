@@ -538,13 +538,18 @@ int init_raw_sockets() {
 
 /* Loop through each target */
 void init_raw_sockets_backends(gpointer target, gpointer opt) {
-	g_tree_foreach(((struct target *) target)->back_ifs,
+	g_tree_foreach(((struct target *) target)->back_handlers,
 			(GTraverseFunc) init_raw_sockets_backends2, opt);
 }
 
 /* Loop through each backend interface*/
 gboolean init_raw_sockets_backends2(gpointer key, gpointer value, gpointer opt) {
-	struct interface *iface = (struct interface *) value;
+
+    struct backend *back_handler = (struct backend *) value;
+	struct interface *iface = back_handler->iface;
+
+	if(!iface->name) return FALSE;
+
 	g_printerr("%s Opening backend sockets on interface %s\n", H(0),
 			iface->name);
 	iface->tcp_socket = socket(PF_INET, SOCK_RAW, IPPROTO_TCP);
@@ -571,7 +576,7 @@ gboolean init_raw_sockets_backends2(gpointer key, gpointer value, gpointer opt) 
 		g_printerr("%s UDP socket binding failed on %s with ID %i\n", H(0),
 				iface->name, iface->udp_socket);
 
-	return 0;
+	return FALSE;
 }
 
 /*!

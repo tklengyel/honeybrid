@@ -15,7 +15,7 @@
 # $* the prefix shared by target and dependent files. 
 
 sbin_PROGRAMS = honeybrid
-honeybrid_SOURCES = rules.y syntax.l \
+honeybrid_SOURCES = config_rules.y config_syntax.l \
  daemon.c decision_engine.c err.c honeybrid.c log.c mod_control.c mod_counter.c \
  mod_hash.c mod_random.c mod_source.c modules.c mod_yesno.c netcode.c tables.c \
  mod_source_time.c mod_dionaea.c mod_dionaea.h mod_backpick_random.c mod_vmi.c \

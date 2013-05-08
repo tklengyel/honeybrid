@@ -1,4 +1,10 @@
  /*
+  * Compile with:
+  * flex -o config_syntax.c config_syntax.l
+  */
+
+
+ /*
   config {
     parameter = value;
   }
@@ -20,7 +26,7 @@
 #include <pcap.h>
 #include <dumbnet.h>
 #include <glib.h>
-#include "rules.h"
+#include "config_rules.h"
 
 #define YY_NO_INPUT
 %}
@@ -38,6 +44,7 @@ frontend 	{ return FRONTEND; }
 backend  	{ return BACKEND; }
 limit 	 	{ return LIMIT; }
 backpick	{ return BACKPICK; }
+uplink	    { return UPLINK; }
 
 	/* Delimiters */
 "{"		{ return OPEN; }

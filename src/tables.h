@@ -57,6 +57,9 @@ GHashTable *config;
 /*! \brief global hash table to hold module paramaters */
 GHashTable *module;
 
+/*! \brief global hash table to hold module paramaters */
+GHashTable *uplink;
+
 //////////////// DEPRECATED ///////////// \todo to remove and clean
 /*! \brief global hash table that contain the static correspondance between LIH services et HIH services  */
 GHashTable *low_redirection_table;
@@ -113,25 +116,33 @@ void free_conn(gpointer key, gpointer trash);
 
 char * config_lookup(char * parameter);
 
-gint IntComp(gconstpointer a, gconstpointer b);
+gint IntComp(gconstpointer a, gconstpointer b, gconstpointer c);
 void IntDest(void* a);
+
+void free_interface(gpointer data);
+
+void free_backend(gpointer data);
 
 /*! \brief constants to define the origin of a packet
  */
-#define EXT 0
-#define LIH 1
-#define HIH 2
+typedef enum {
+    EXT,
+    LIH,
+    HIH
+} packet_origin_t;
 
 /*! \brief constants to define the status of a connection
  */
-#define INVALID 	0
-#define INIT 		1
-#define DECISION 	2
-#define REPLAY 		3
-#define FORWARD 	4
-#define PROXY		5
-#define DROP		6
-#define CONTROL		7
+typedef enum {
+    INVALID,
+    INIT,
+    DECISION,
+    REPLAY,
+    FORWARD,
+    PROXY,
+    DROP,
+    CONTROL
+} conn_status_t;
 
 /*!
  \def OK
@@ -153,5 +164,9 @@ void IntDest(void* a);
  * Return code when something took too much time
  */
 #define TIMEOUT		-2
+
+#define ghashtable_foreach(table, i, key, val) \
+        g_hash_table_iter_init(i, table); \
+        while(g_hash_table_iter_next(i,(void**)key,(void**)val))
 
 #endif //__TABLE_H__

@@ -100,7 +100,8 @@ void free_vmi_vm(gpointer data) {
 gboolean build_vmi_vms2(gpointer key, gpointer value, gpointer data) {
 
 	//int *vmi_sock=(int *)data;
-	char *vm_name = (char *) value;
+    struct backend *back_handler = (struct backend *) value;
+	char *vm_name = back_handler->iface->tag;
 	char vmi_buffer[100];
 	bzero(vmi_buffer, 100);
 	sprintf(vmi_buffer, "status,%s\n", vm_name);
@@ -176,7 +177,7 @@ gboolean build_vmi_vms2(gpointer key, gpointer value, gpointer data) {
 void build_vmi_vms(gpointer data, gpointer user_data) {
 
 	struct target *t = (struct target *) data;
-	g_tree_foreach(t->back_tags, (GTraverseFunc) build_vmi_vms2, user_data);
+	g_tree_foreach(t->back_handlers, (GTraverseFunc) build_vmi_vms2, user_data);
 
 }
 
