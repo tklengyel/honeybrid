@@ -47,6 +47,8 @@
 #include <dumbnet.h>
 #include <ctype.h>
 
+#include <glib.h>
+
 #include "tables.h"
 #include "log.h"
 #include "netcode.h"
@@ -254,12 +256,12 @@ int init_pkt(unsigned char *nf_packet, struct pkt_struct *pkt, u_int32_t mark)
     /* Init a new structure for the current packet */
     pkt->origin = EXT;
     pkt->DE = 0;
-    pkt->packet.ip = malloc(ntohs(((struct iphdr*)nf_packet)->tot_len)); ///TODO: check if it's correctly freed
+    pkt->packet.ip = malloc(ntohs(((struct iphdr*) nf_packet)->tot_len)); ///TODO: check if it's correctly freed
     pkt->key = malloc(64);
     pkt->key_src = NULL;
     pkt->key_dst = NULL;
     pkt->position = 0;
-    pkt->size = ntohs(((struct iphdr*)nf_packet)->tot_len);
+    pkt->size = ntohs(((struct iphdr*) nf_packet)->tot_len);
     pkt->mark = mark;
 
     if (pkt->size > 1500 || pkt->size < 40)
@@ -866,150 +868,6 @@ int check_pre_dnat_routing(struct pkt_struct *pkt, struct conn_struct **conn,
     return 0;
 }
 
-/*! test_honeypot_addr
- *
- * \brief compare an IP with a list of honeypot addresses
- * \param[in] the key ip:port of the host we want to test in the list
- * \param[in] the list we want to look into, either Low or High
- *
- * \return 0 if the key is found in the list, anything else if not
- */
-int test_honeypot_addr(char *key, int list)
-{
-    gchar **addr;
-    GString *testkey = g_string_new(key);
-
-    /*! We extract the IP from the key */
-    addr = g_strsplit(testkey->str, ":", 0);
-
-    /*! small hack to be able to define matching pattern for multiple IP at once
-     */
-    gchar **byte;
-    byte = g_strsplit(addr[0], ".", 0);
-    GString *classA, *classB, *classC;
-    classA = g_string_new("");
-    classB = g_string_new("");
-    classC = g_string_new("");
-    g_string_printf(classA, "%s.0.0.0", byte[0]);
-    g_string_printf(classB, "%s.%s.0.0", byte[0], byte[1]);
-    g_string_printf(classC, "%s.%s.%s.0", byte[0], byte[1], byte[2]);
-
-    /*! We convert the IP from char to int */
-    int intaddr = addr2int(addr[0]);
-    int intaddrA = addr2int(classA->str);
-    int intaddrB = addr2int(classB->str);
-    int intaddrC = addr2int(classC->str);
-
-    g_strfreev(addr);
-    g_strfreev(byte);
-    g_string_free(testkey, TRUE);
-    g_string_free(classA, TRUE);
-    g_string_free(classB, TRUE);
-    g_string_free(classC, TRUE);
-
-    /*! We test which list we want to search */
-    if (list == LIH && g_hash_table_lookup(low_honeypot_addr, &intaddr) != NULL)
-        /*! if the IP is detected in the list of low honeypot addresses */
-        return OK;
-    /*! We then test by increasing the size of the network progressively: */
-    if (list == LIH && g_hash_table_lookup(low_honeypot_addr, &intaddrC) != NULL)
-        return OK;
-    if (list == LIH && g_hash_table_lookup(low_honeypot_addr, &intaddrB) != NULL)
-        return OK;
-    if (list == LIH && g_hash_table_lookup(low_honeypot_addr, &intaddrA) != NULL)
-        return OK;
-
-    if (list == HIH && g_hash_table_lookup(high_honeypot_addr, &intaddr) != NULL)
-        /*! if the IP is detected in the list of high honeypot addresses */
-        return OK;
-    return NOK;
-}
-
-/*! lookup_honeypot_addr
- *
- * \brief return the low/high interaction honeypot currently associated with the low/high interaction honeypot in argument
- * \param[in] the key of the honeypot, or honeypot+external host, we want to lookup in the redirection table
- * \param[in] the list we want to look into, either Low or High
- *
- * \return The honeypot IP found, NULL if nothing is found
- */
-char * lookup_honeypot_addr(gchar *testkey, int list)
-{
-
-    g_printerr("%s Looking up %s in list %d (LIH == 1, HIH == 2)\n", H(5),
-            testkey, list);
-
-    /*! We test which list we want to search */
-    if (list == LIH)
-    {
-        /*! ROBIN 2009-02-25: small hack to include full network definition */
-        gchar **addr;
-        addr = g_strsplit(testkey, ":", 0);
-
-        gchar **byte;
-        byte = g_strsplit(testkey, ".", 0);
-        GString *classA, *classB, *classC;
-        classA = g_string_new("");
-        classB = g_string_new("");
-        classC = g_string_new("");
-        g_string_printf(classA, "%s.0.0.0:%s", byte[0], addr[1]);
-        g_string_printf(classB, "%s.%s.0.0:%s", byte[0], byte[1], addr[1]);
-        g_string_printf(classC, "%s.%s.%s.0:%s", byte[0], byte[1], byte[2],
-                addr[1]);
-
-        /*! get the corresponding hih destination from the low interaction hash table */
-        char *hihdest;
-        hihdest = g_strdup(
-                (char *) g_hash_table_lookup(low_redirection_table, testkey));
-
-        if (!hihdest)
-            hihdest = g_strdup(
-                    (char *) g_hash_table_lookup(low_redirection_table,
-                            classC->str));
-        if (!hihdest)
-            hihdest = g_strdup(
-                    (char *) g_hash_table_lookup(low_redirection_table,
-                            classB->str));
-        if (!hihdest)
-            hihdest = g_strdup(
-                    (char *) g_hash_table_lookup(low_redirection_table,
-                            classA->str));
-        if (!hihdest)
-        {
-            g_printerr("%s Tested also %s, %s and %s but nothing matched\n",
-                    H(5), classC->str, classB->str, classA->str);
-            return NULL;
-        }
-
-        g_printerr("%s Found %s!\n", H(5), hihdest);
-
-        return hihdest;
-
-    }
-    else
-    {
-        /*! get the corresponding lih destination from the high interaction hash table */
-
-        /*! Check first if the high_redirection_table is not null */
-        if (high_redirection_table == NULL)
-            return NULL;
-
-        char *lihdest;
-        g_static_rw_lock_reader_lock(&hihlock);
-        lihdest = g_strdup(
-                (char *) g_hash_table_lookup(high_redirection_table, testkey));
-        g_static_rw_lock_reader_unlock(&hihlock);
-
-        if (!lihdest)
-            return NULL;
-
-        g_printerr("%s Found %s!\n", H(5), lihdest);
-
-        return lihdest;
-    }
-    return NULL;
-}
-
 /*! store_pkt function
  \brief Store the current packet as part of the connection to replay it later. If this is the first packet of a communication, init its structure in the main B-Tree.
  *
@@ -1183,18 +1041,11 @@ int setup_redirection(struct conn_struct *conn, uint32_t hih_use)
         g_printerr("%s [** HIH address: %s, port: %s **]\n", H(conn->id),
                 addr_ntoa(hihaddr), tmp[3]);
 
-        /*! we check for concurrent connections using the same EXT_IP:PORT <-> HIH_IP:PORT */
+        /*! we check for concurrent connections using the same HIH_IP:PORT:MARK <-> EXT_IP:MARK */
+        /* Once an external IP is redirected, all ports on that IP will pinned to the same HIH */
         GString *key_hih_ext = g_string_new("");
-        g_string_printf(key_hih_ext, "%s:%s:%s", addr_ntoa(hihaddr), tmp[3],
-                conn->key_ext);
-
-        if (high_redirection_table == NULL)
-        {
-            high_redirection_table = g_hash_table_new_full(g_str_hash,
-                    g_str_equal, g_free, g_free);
-            g_printerr("%s [** high_redirection_table created **]\n",
-                    H(conn->id));
-        }
+        g_string_printf(key_hih_ext, "%s:%s:%i:%s:%i", addr_ntoa(hihaddr),
+                tmp[3], hihiface->mark, conn->key_ext, conn->mark);
 
         g_static_rw_lock_writer_lock(&hihlock);
         if (g_hash_table_lookup(high_redirection_table,
@@ -1205,8 +1056,8 @@ int setup_redirection(struct conn_struct *conn, uint32_t hih_use)
             GString *value = g_string_new("");
             g_string_printf(value, "%s:%u", conn->key_lih, conn->mark);
 
-            g_hash_table_insert(high_redirection_table, g_strdup(key_hih_ext->str),
-                    g_strdup(value->str));
+            g_hash_table_insert(high_redirection_table,
+                    g_strdup(key_hih_ext->str), g_strdup(value->str));
             g_printerr(
                     "%s [** high_redirection_table updated: key %s value %s **]\n",
                     H(conn->id), key_hih_ext->str, value->str);
@@ -1236,7 +1087,7 @@ int setup_redirection(struct conn_struct *conn, uint32_t hih_use)
         conn->hih.iface = hihiface;
         conn->hih.addr = htonl(addr2int(addr_ntoa(hihaddr)));
         conn->hih.lih_addr = htonl(addr2int(conn->key_lih));
-        conn->hih.port = htons((short)atoi(tmp[3]));
+        conn->hih.port = htons((short) atoi(tmp[3]));
         conn->hih.redirect_key = g_strdup(key_hih_ext->str);
         /*! We then update the status of the connection structure */
         conn->stat_time[DECISION] = microtime;
@@ -1245,7 +1096,6 @@ int setup_redirection(struct conn_struct *conn, uint32_t hih_use)
 
         g_strfreev(tmp);
         g_string_free(key_hih_ext, TRUE);
-
 
         /*! We reset the LIH */
         reset_lih(conn);
@@ -1294,8 +1144,7 @@ int setup_redirection(struct conn_struct *conn, uint32_t hih_use)
  /brief lookup values from the config hash table. Make sure the required value is present
  */
 
-gpointer
-config_lookup(char * parameter)
+gpointer config_lookup(char * parameter)
 {
     if (NULL == g_hash_table_lookup(config, parameter))
     {

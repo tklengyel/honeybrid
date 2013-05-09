@@ -364,7 +364,7 @@ struct mod_args {
  \brief node of an execution tree, composed of a module and a argument, called by processing the tree
  */
 struct node {
-    void (*module)(struct mod_args);
+    void (*module)(struct mod_args *);
     GHashTable *arg;
     GString *module_name;
     GString *function;

@@ -251,9 +251,9 @@ void decide(struct decision_holder *decision)
             g_printerr("%s >> Calling module %s at address %p\n",
                     H(decision->pkt->conn->id),
                     decision->node->module_name->str, decision->node->module);
-            //tree.node->module(args);
-            //Test of new function "run_module" to prevent segmentation fault occurring at the previous line
-            run_module(decision->node->function->str, &args);
+
+            run_module(decision->node->module, &args);
+
             g_printerr("%s >> Done, result is %d\n", H(decision->pkt->conn->id),
                     decision->node->result);
         }
@@ -538,45 +538,3 @@ int DE_process_packet(struct pkt_struct *pkt)
 
     return statement;
 }
-
-/*! DE_submit_packet DEPRECATED, \todo to remove
- \brief handle connections being decided and submits packets for decision
- */
-void DE_submit_packet()
-{
-    struct pkt_struct* pkt;
-
-    while (threading == OK)
-    {
-        if (DE_queue == NULL)
-        {
-            g_usleep(1);
-        }
-        else
-        {
-            pkt = (struct pkt_struct*) g_slist_nth_data(DE_queue, 0);
-            DE_process_packet(pkt);
-
-            /*! Now that this entry was processed, we can remove it from the DE queue */
-            g_static_rw_lock_writer_lock(&DE_queue_lock);
-            DE_queue = g_slist_delete_link(DE_queue, DE_queue);
-            g_static_rw_lock_writer_unlock(&DE_queue_lock);
-        }
-    }
-}
-
-/*! DE_push_pkt DEPRECATED, \todo to remove
- \brief push packet to the DE_submit_pkt queue (equivalent of DE_submit_packet() but without using a thread)
- \param[in] pkt: packet to push
- \return OK */
-void DE_push_pkt(struct pkt_struct *pkt)
-{
-    g_printerr("%s Pushing packet to DE (locking DE_queue_lock)\n",
-            H(pkt->conn->id));
-    g_static_rw_lock_writer_lock(&DE_queue_lock);
-    DE_queue = g_slist_append(DE_queue, (gpointer*) pkt);
-    g_static_rw_lock_writer_unlock(&DE_queue_lock);
-    g_printerr("%s Packet pushed to DE (unlocked DE_queue_lock)\n",
-            H(pkt->conn->id));
-}
-

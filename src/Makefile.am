@@ -22,13 +22,12 @@ honeybrid_SOURCES = config_rules.y config_syntax.l \
  decision_engine.h honeybrid.h log.h modules.h netcode.h pcap_tool.h tables.h types.h
 
 # Compiler flags:
-AM_CFLAGS = -Wall -D RST_EXT -O0
-AM_CFLAGS += -g -ggdb -pg -std=gnu99
+AM_CFLAGS = -std=gnu99
 AM_CFLAGS += $(CRYPTO_CFLAGS)
 AM_CFLAGS += $(GLIB_CFLAGS)
 AM_CFLAGS += $(XML2_CFLAGS)
 AM_CFLAGS += $(MYSQL_CFLAGS)
-#AM_CFLAGS += -g -ggdb -D DEBUG -pg -std=gnu99
+#AM_CFLAGS += -Wall -O0 -g -ggdb -D DEBUG -pg
 
 AM_LDFLAGS = $(CRYPTO_LIBS)
 AM_LDFLAGS += $(GLIB_LIBS)

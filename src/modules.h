@@ -27,7 +27,7 @@
 #include <openssl/evp.h>
 //#endif
 
-#include<ctype.h>
+#include <ctype.h>
 
 #include "log.h"
 #include "tables.h"
@@ -35,7 +35,7 @@
 
 void init_modules();
 
-void run_module(char *module_name, struct mod_args *args);
+void run_module(void (*module)(struct mod_args *), struct mod_args *args);
 
 void (*get_module(char *modname))(struct mod_args *);
 

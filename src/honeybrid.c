@@ -226,7 +226,8 @@ int close_hash()
         g_hash_table_destroy(uplink);
     }
 
-    if(module_to_save != NULL) {
+    if (module_to_save != NULL)
+    {
         g_hash_table_destroy(module_to_save);
         module_to_save = NULL;
     }
@@ -427,7 +428,7 @@ void init_variables()
     /*! create the hash table to store module information */
     if (NULL
             == (module = g_hash_table_new_full(g_str_hash, g_str_equal, g_free,
-                    (GDestroyNotify)g_hash_table_destroy)))
+                    (GDestroyNotify) g_hash_table_destroy)))
         errx(1, "%s: Fatal error while creating module hash table.\n",
                 __func__);
 
@@ -495,6 +496,13 @@ void init_variables()
         errx(1, "%s: Fatal error while creating module_to_save hash table.\n",
                 __func__);
 
+    /*! create the redirection table */
+    if (NULL
+            == (high_redirection_table = g_hash_table_new_full(g_str_hash,
+                    g_str_equal, g_free, g_free)))
+        errx(1, "%s: Fatal error while creating high_redirection_table hash table.\n",
+                __func__);
+
 }
 
 /*! process_packet
@@ -508,17 +516,15 @@ process_packet(struct nfq_data *tb)
 {
 
     /*! We create the verdict structure to return */
-    struct verdict *to_return = malloc(sizeof(struct verdict));
-    to_return->statement = 0; // by defult we reject the packet
+    struct verdict *to_return = g_malloc0(sizeof(struct verdict));
 
     /*! We create a new temporary connection structure */
     struct conn_struct conn_init;
     bzero(&conn_init, sizeof(struct conn_struct));
     conn_init.state = INVALID; /* by default the connection is invalid */
-    conn_init.id = 0;
     struct conn_struct * conn = &conn_init;
 
-    struct pkt_struct * pkt = (struct pkt_struct *) malloc(
+    struct pkt_struct * pkt = (struct pkt_struct *) g_malloc0(
             sizeof(struct pkt_struct)); /* \todo TODO: check that it's correctly freed */
     unsigned char *nf_packet;
     struct in_addr in;
@@ -589,10 +595,9 @@ process_packet(struct nfq_data *tb)
         ///INIT == 1, INVALID == 0 and NOK == -1
         g_printerr("%s Packet not from a valid connection %s\n", H(conn->id),
                 inet_ntoa(in));
-#ifdef RST_EXT
-        if (pkt->packet.ip->protocol == 0x06)
+        if (pkt->packet.ip->protocol == 0x06 && ICONFIG("reset_ext"))
             reply_reset(&(pkt->packet));
-#endif
+
         free_pkt(pkt);
         return to_return;
     }
@@ -601,10 +606,10 @@ process_packet(struct nfq_data *tb)
     {
         g_printerr("%s This connection is marked as DROPPED %s\n", H(conn->id),
                 inet_ntoa(in));
-#ifdef RST_EXT
-        if (pkt->packet.ip->protocol == 0x06)
+
+        if (pkt->packet.ip->protocol == 0x06 && ICONFIG("reset_ext"))
             reply_reset(&(pkt->packet));
-#endif
+
         free_pkt(pkt);
         return to_return;
     }
@@ -685,6 +690,7 @@ process_packet(struct nfq_data *tb)
             break;
         case CONTROL:
             to_return->statement = DE_process_packet(pkt);
+            free_pkt(pkt);
             break;
         default:
             /*! We are surely in the INIT state, so the HIH is initiating a connection to outside. We reset or control it */
@@ -710,6 +716,7 @@ process_packet(struct nfq_data *tb)
                 //conn->state = CONTROL;
                 switch_state(conn, CONTROL);
                 to_return->statement = DE_process_packet(pkt);
+                free_pkt(pkt);
             }
             break;
         }
@@ -724,7 +731,6 @@ process_packet(struct nfq_data *tb)
             //conn->state = DECISION;
             g_string_assign(conn->decision_rule, ";");
             to_return->statement = DE_process_packet(pkt);
-
             break;
         case DECISION:
             store_pkt(conn, pkt);
@@ -748,16 +754,12 @@ process_packet(struct nfq_data *tb)
                     "%s Packet from EXT proxied directly to its destination (CONTROL)\n",
                     H(conn->id));
             //#endif
-            //if(pkt->mark == 0) {
-            // route packet normally
             to_return->statement = 1;
-            //} else {
-            // packet has a mark set, it needs to be forced to an interface
-            //	forward(pkt);
-            //}
+            free_pkt(pkt);
             break;
         case DROP:
             to_return->statement = 0;
+            free_pkt(pkt);
             break;
         default:
             store_pkt(conn, pkt);
@@ -1257,9 +1259,7 @@ int main(int argc, char *argv[])
     g_printerr("%s: Decision engine thread started\n", __func__);
 #endif
 
-    /*! initiate outgoing connection control => no longer needed
-     init_control(); */
-    /*! initiate decision engine modules => done automatically in rules.y, except for init_mod_hash: */
+    /*! initiate modules that can have only one instance */
     init_modules();
 
     /*! create the raw sockets for UDP/IP and TCP/IP */
@@ -1296,7 +1296,7 @@ int main(int argc, char *argv[])
     }
     /*! Starting the nfqueue loop to start processing packets */
     g_printerr("%s Starting netlink_loop\n", H(0));
-    netlink_loop(queuenum);
+    //netlink_loop(queuenum);
 
 #endif
 

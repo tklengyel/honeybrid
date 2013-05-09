@@ -51,6 +51,8 @@
 /*! init_modules
  \brief setup modules that need to be initialized
  */
+
+// TODO: Only init modules here that are actually used by a target
 void init_modules()
 {
     g_printerr("%s Initiate modules\n", H(6));
@@ -72,57 +74,11 @@ void init_modules()
 /*! run_module
  * \brief test of a new function to run module based on module name (without calling get_module)
  */
-void run_module(char *module_name, struct mod_args *args)
+void run_module(void (*module)(struct mod_args *), struct mod_args *args)
 {
-    g_printerr("%s %s called\n", H(args->pkt->conn->id), module_name);
-
-    if (g_strcmp0(module_name, "hash") == 0)
+    if (module && args)
     {
-        mod_hash(args);
-    }
-    else if (g_strcmp0(module_name, "source") == 0)
-    {
-        mod_source(args);
-    }
-    else if (g_strcmp0(module_name, "counter") == 0)
-    {
-        mod_counter(args);
-    }
-    else if (g_strcmp0(module_name, "control") == 0)
-    {
-        mod_control(args);
-    }
-    else if (g_strcmp0(module_name, "yesno") == 0)
-    {
-        mod_yesno(args);
-    }
-    else if (g_strcmp0(module_name, "random") == 0)
-    {
-        mod_random(args);
-#ifdef HAVE_XMPP
-    }
-    else if (g_strcmp0(module_name, "dionaea") ==0)
-    {
-        mod_dionaea(args);
-#endif
-    }
-    else if (g_strcmp0(module_name, "source_time") == 0)
-    {
-        mod_source_time(args);
-    }
-    else if (g_strcmp0(module_name, "backpick_random") == 0)
-    {
-        mod_backpick_random(args);
-    }
-    else if (g_strcmp0(module_name, "vmi") == 0)
-    {
-        mod_vmi(args);
-    }
-    else
-    {
-        g_printerr("%s module name invalid (%s)\n", H(args->pkt->conn->id),
-                module_name);
-        args->node->result = -1;
+        module(args);
     }
 }
 
@@ -163,11 +119,12 @@ void save_backup_handler()
     {
         /*! saving module every 60 seconds */
         g_usleep(60000000);
-        if(threading == OK && module_to_save != NULL) {
+        if (threading == OK && module_to_save != NULL)
+        {
             removed = g_hash_table_foreach_steal(module_to_save,
-                (GHRFunc) write_backup, NULL);
+                    (GHRFunc) write_backup, NULL);
             g_printerr("%s %d entries saved and removed from module_to_save\n",
-                H(0), removed);
+                    H(0), removed);
         }
     }
 
@@ -229,4 +186,4 @@ void (*get_module(char *modname))(struct mod_args *)
 
             errx(1, "%s No module could be found with the name: %s", H(6),
                     modname);
-}
+        }

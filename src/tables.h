@@ -60,18 +60,8 @@ GHashTable *module;
 /*! \brief global hash table to hold module paramaters */
 GHashTable *uplink;
 
-//////////////// DEPRECATED ///////////// \todo to remove and clean
-/*! \brief global hash table that contain the static correspondance between LIH services et HIH services  */
-GHashTable *low_redirection_table;
-
 /*! \brief global hash table that contain the dynamic correspondance between HIH services et LIH services  */
 GHashTable *high_redirection_table;
-
-/*! \brief global integer table that contains the addresses of the low_interaction honeypots (integer version)  */
-GHashTable *low_honeypot_addr;
-
-/*! \brief global integer table that contains the addresses of the high_interaction honeypots (integer version)  */
-GHashTable *high_honeypot_addr;
 
 /*! \brief Balanced Binary Tree that keep meta informations about active connections
  *
