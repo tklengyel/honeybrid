@@ -1296,20 +1296,8 @@ int main(int argc, char *argv[])
     }
     /*! Starting the nfqueue loop to start processing packets */
     g_printerr("%s Starting netlink_loop\n", H(0));
-    //netlink_loop(queuenum);
-    /*! sometimes netlink_loop exits by itself... so we have to restart it
-     int i = 0;
-     while (running == OK) {
-     netlink_loop(queuenum);
-     g_printerr("%s Netlink loop exited (%d times so far)\n", H(0), i);
-     g_usleep(1000000);
-     i++;
-     if (i>100) {
-     g_printerr("%s Reached maximum of 100 restarts... giving up\n", H(0));
-     running = NOK;
-     }
-     }
-     */
+    netlink_loop(queuenum);
+
 #endif
 
     close_all();

@@ -50,7 +50,7 @@ char* int_append(char * root, int num);
 %token <string> EXPR
 
 %type <hash>    module_settings
-%type <hash>    uplink_settings
+%type <uplink>    uplink_settings
 %type <target>  rule
 %type <gstring>  equation 
 %type <addr>    honeynet
@@ -60,6 +60,7 @@ char* int_append(char * root, int num);
 	char * string;
 	GString * gstring;
 	struct GHashTable * hash;
+	struct interface * uplink;
 	struct target * target;
 	struct addr * addr;
 }
