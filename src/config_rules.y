@@ -132,12 +132,12 @@ parameter: WORD EQ WORD {
 uplink: UPLINK QUOTE WORD QUOTE OPEN uplink_settings END { 
 
         struct interface *iface=(struct interface *)$6;
-        if(iface && iface->ip_str) {
+        if(iface && iface->name && iface->ip_str && iface->mark) {
             iface->tag=$3;
-            g_hash_table_insert(uplink, iface->ip_str, iface);
+            g_hash_table_insert(uplink, &iface->mark, iface);
             g_printerr("\t'tag' => '%s'\n", iface->tag);
         } else {
-            errx(1, "Uplink deson't have IP defined!\n");
+            errx(1, "Uplink configuration is incomplete!\n");
         }
     }
     ;
