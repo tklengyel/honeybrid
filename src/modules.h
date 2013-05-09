@@ -1,8 +1,11 @@
 /*
  * This file is part of the honeybrid project.
  *
- * Copyright (C) 2007-2009 University of Maryland (http://www.umd.edu)
+ * 2007-2009 University of Maryland (http://www.umd.edu)
  * (Written by Robin Berthier <robinb@umd.edu>, Thomas Coquelin <coquelin@umd.edu> and Julien Vehent <julien@linuxwall.info> for the University of Maryland)
+ *
+ * 2012-2013 University of Connecticut (http://www.uconn.edu)
+ * (Extended by Tamas K Lengyel <tamas.k.lengyel@gmail.com>
  *
  * Honeybrid is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -37,7 +40,7 @@ void init_modules();
 
 void run_module(void (*module)(struct mod_args *), struct mod_args *args);
 
-void (*get_module(char *modname))(struct mod_args *);
+void (*get_module(const char *modname))(struct mod_args *);
 
 void save_backup_handler();
 

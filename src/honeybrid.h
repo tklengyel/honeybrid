@@ -1,8 +1,11 @@
 /*
  * This file is part of the honeybrid project.
  *
- * Copyright (C) 2007-2009 University of Maryland (http://www.umd.edu)
+ * 2007-2009 University of Maryland (http://www.umd.edu)
  * (Written by Robin Berthier <robinb@umd.edu>, Thomas Coquelin <coquelin@umd.edu> and Julien Vehent <julien@linuxwall.info> for the University of Maryland)
+ *
+ * 2012-2013 University of Connecticut (http://www.uconn.edu)
+ * (Extended by Tamas K Lengyel <tamas.k.lengyel@gmail.com>
  *
  * Honeybrid is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,6 +22,7 @@
  */
 
 #include <pcap.h>
+#include <limits.h>
 
 int daemon(int, int);
 
@@ -52,13 +56,7 @@ extern FILE *yyin;
  \def CONF_MAX_LINE
  *
  * max size of a line in the configuration file */
-#define CONF_MAX_LINE 1024
-
-/*! 
- \def RESET_HIH
- * use to reset (1) or accept (0) connections initiated by HIH
- */
-#define RESET_HIH 0
+#define CONF_MAX_LINE LINE_MAX
 
 /*!
  \def BUFSIZE
@@ -78,10 +76,16 @@ extern FILE *yyin;
  * Init value: OK
  * Set to NOK when honeybrid stops
  * It is used to stop processing new data wht NF_QUEUE when honeybrid stops */
-int running;
+status_t running;
 
 /*!
  \def thread_clean
  \def thread_log */
 GThread *thread_clean;
 GThread *thread_de;
+
+#ifdef HAVE_LIBEV
+#include <ev.h>
+struct nfq_handle *h;
+struct ev_loop *loop;
+#endif

@@ -1,8 +1,11 @@
 /*
  * This file is part of the honeybrid project.
  *
- * Copyright (C) 2007-2009 University of Maryland (http://www.umd.edu)
+ * 2007-2009 University of Maryland (http://www.umd.edu)
  * (Written by Robin Berthier <robinb@umd.edu>, Thomas Coquelin <coquelin@umd.edu> and Julien Vehent <julien@linuxwall.info> for the University of Maryland)
+ *
+ * 2012-2013 University of Connecticut (http://www.uconn.edu)
+ * (Extended by Tamas K Lengyel <tamas.k.lengyel@gmail.com>
  *
  * Honeybrid is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -171,7 +174,7 @@ void handleDionaeaEvent(struct dionaeaEvent *dionaeaEvent) {
 		struct dionaeaSession *session;
 
 		gboolean connection_exists = g_tree_lookup_extended(dionaea_connection, keys->connectionKey, NULL, (gpointer *) &session);
-		g_static_rw_lock_writer_lock (&dionaea_connection_lock);
+		g_rw_lock_writer_lock (&dionaea_connection_lock);
 		if(connection_exists == FALSE) {
 			g_printerr("%s Inserting new connection to dionaea conn tree!\n",H(0));
 			session=(struct dionaeaSession *)malloc(sizeof(struct dionaeaSession));
@@ -223,10 +226,10 @@ void handleDionaeaEvent(struct dionaeaEvent *dionaeaEvent) {
 
 				if (TRUE == g_tree_lookup_extended(conn_tree, key0, NULL,(gpointer *) &conn)) {
 					// update stats
-					g_static_rw_lock_writer_lock (&(conn->lock));
+					g_rw_lock_writer_lock (&(conn->lock));
 					conn->dionaeaDownload=1;
 					conn->dionaeaDownloadTime=session->dlTime;
-					g_static_rw_lock_writer_unlock (&(conn->lock));
+					g_rw_lock_writer_unlock (&(conn->lock));
 				} else {
 
 				}
@@ -243,7 +246,7 @@ void handleDionaeaEvent(struct dionaeaEvent *dionaeaEvent) {
 
 			g_printerr("%s Updating dionaea conn tree entry! i:%u a:%u e:%u\n",H(0),session->incidentCount,session->sessionCount,session->sessionEndCount);
 		}
-		g_static_rw_lock_writer_unlock (&dionaea_connection_lock);
+		g_rw_lock_writer_unlock (&dionaea_connection_lock);
 
 		if(dionaeaEvent->end) {
 			g_printerr("%s Removing reference key %u!\n", H(0),dionaeaEvent->reference);
@@ -362,7 +365,7 @@ void xmpp_backup() {
 	while(1) {
 		//g_printerr("XMPP Backup running\n");
 		cleanup=NULL;
-		g_static_rw_lock_writer_lock (&dionaea_connection_lock);
+		g_rw_lock_writer_lock (&dionaea_connection_lock);
 		g_tree_foreach(dionaea_connection, xmpp_loop_tree, NULL);
 		int counter=0;
 
@@ -376,7 +379,7 @@ void xmpp_backup() {
 
 		g_printerr("%s Removed %i elements from dionaea conn tree!\n", H(0),counter);
 		g_list_free(cleanup);
-		g_static_rw_lock_writer_unlock (&dionaea_connection_lock);
+		g_rw_lock_writer_unlock (&dionaea_connection_lock);
 		g_usleep(60000000);
 	}
 }
@@ -461,8 +464,8 @@ int init_mod_dionaea()
 		errx(1,"Failed to fork!\n");
 	}
 
-	g_static_rw_lock_init( &dionaea_reference_lock );
-	g_static_rw_lock_init( &dionaea_connection_lock );
+	g_rw_lock_init( &dionaea_reference_lock );
+	g_rw_lock_init( &dionaea_connection_lock );
 
 	if(NULL != (xmpp_db=(gchar *)g_hash_table_lookup(config,"xmpp_db"))) {
 		xmpp_backup_file=g_key_file_new();
@@ -486,13 +489,13 @@ int init_mod_dionaea()
 	}
 
 	// create xmpp xml reader thread
-	if( ( xmpp_listener_thread = g_thread_create_full (((void *)xmpp_listener), NULL, 0, TRUE, TRUE, 0, NULL)) == NULL)
+	if( ( xmpp_listener_thread = g_thread_new ("xmpp_listener", ((void *)xmpp_listener), NULL)) == NULL)
 	errx(1, "%s: Unable to start the XMPP listener thread", __func__);
 	else
 	g_printerr("%s: Dionaea XMPP listener thread started\n", H(0));
 
 	// create xmpp backup thread
-	if( ( xmpp_backup_thread = g_thread_create_full (((void *)xmpp_backup), NULL, 0, TRUE, TRUE, 0, NULL)) == NULL)
+	if( ( xmpp_backup_thread = g_thread_new ("xmpp_backup", ((void *)xmpp_backup), NULL)) == NULL)
 	errx(1, "%s: Unable to start the XMPP backup thread", __func__);
 	else
 	g_printerr("%s: Dionaea XMPP backup thread started\n", H(0));

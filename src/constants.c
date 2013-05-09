@@ -21,50 +21,44 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _PCAP_TOOL_H_
-#define _PCAP_TOOL_H_
+#include "types.h"
 
-#include <pcap.h>
-#include <linux/netfilter.h>
-#include <libnetfilter_queue/libnetfilter_queue.h>
+const char* protocol_string[__MAX_PROTOCOL] = {
+	[0 ... __MAX_PROTOCOL-1] = "INVALID",
+	[ICMP] = "ICMP",
+	[IGMP] = "IGMP",
+	[TCP] = "TCP",
+	[UDP] = "UDP",
+	[GRE] = "GRE"
+};
 
-/*!
- \def pcap_record
- *
- * Pcap recording mode, set to 1 if pcap recording is activated
- */
-int pcap_record;
+const char *lookup_proto(protocol_t proto) {
+	return protocol_string[proto];
+}
 
-/*!
- \def PCAPSIZE
- *
- * max size of a packet in PCAP
- */
-#define PCAPSIZE 2048
+const char *packet_origin_string[__MAX_ORIGIN] = {
+	[0 ... __MAX_ORIGIN-1] = "UNKNOWN",
+	[EXT] = "[EXT] External",
+	[LIH] = "[LIH] Low-interaction honeypot",
+	[HIH] = "[HIH] High-interaction honeypot"
+};
 
-/*!
- \def pcap_main_desc
- *
- * Main descriptor for the pcap context
- */
-pcap_t *pcap_main_desc;
+const char *lookup_origin(origin_t origin) {
+	return packet_origin_string[origin];
+}
 
-/*!
- \def pcap_output_current
- *
- * Current pcap file descriptor to write the packets
- */
-pcap_dumper_t *pcap_output_current;
+const char *conn_status_string[__MAX_CONN_STATUS] = {
 
-/*!
- \def pcap_output_redirected
- *
- * Pcap file descriptor for recording redirected connections
- */
-pcap_dumper_t *pcap_output_redirected;
+	[0 ... __MAX_CONN_STATUS-1] = "UNKNOWN",
+	[INIT] 		= "INIT",
+	[DECISION] 	= "DECISION",
+	[REPLAY] 	= "REPLAY",
+	[FORWARD] 	= "FORWARD",
+	[PROXY] 	= "PROXY",
+	[DROP] 		= "DROP",
+	[CONTROL] 	= "CONTROL"
+};
 
-int record_pkt(struct nfq_data *tb, char *p, int mode);
-
-int close_pcap_context();
-
-#endif //_PCAP_TOOL_H_
+const char *lookup_state(conn_status_t state) {
+	return conn_status_string[state];
+}

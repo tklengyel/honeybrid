@@ -1,8 +1,11 @@
 /*
  * This file is part of the honeybrid project.
  *
- * Copyright (C) 2007-2009 University of Maryland (http://www.umd.edu)
+ * 2007-2009 University of Maryland (http://www.umd.edu)
  * (Written by Robin Berthier <robinb@umd.edu>, Thomas Coquelin <coquelin@umd.edu> and Julien Vehent <julien@linuxwall.info> for the University of Maryland)
+ *
+ * 2012-2013 University of Connecticut (http://www.uconn.edu)
+ * (Extended by Tamas K Lengyel <tamas.k.lengyel@gmail.com>
  *
  * Honeybrid is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -36,6 +39,16 @@
  */
 #define BUFSIZE 2048
 
+#define ip_checksum(hdr) \
+	((struct iphdr*)hdr)->check = \
+		in_cksum(hdr, \
+		sizeof(struct iphdr))
+
+#define udp_checksum(hdr) \
+	((struct udp_packet *)hdr)->udp.check = \
+		in_cksum( hdr, \
+        sizeof(struct udphdr))
+
 /*!
  \def udp_rsd
  *
@@ -52,47 +65,43 @@
 int udp_rsd, tcp_rsd; // generic socket
 
 struct pseudotcphdr {
-	int saddr;
-	int daddr;
-	short res1 :8;
-	short proto :8;
-	short tcp_len;
-};
+	uint32_t saddr;
+	uint32_t daddr;
+	uint8_t res1;
+	uint8_t proto;
+	uint16_t tcp_len;
+} __attribute__ ((packed));
 
 struct tcp_chk_packet {
 	struct pseudotcphdr pseudohdr;
 	struct tcphdr tcp;
 	char payload[BUFSIZE];
-};
+} __attribute__ ((packed));
 
 struct interface *uplinks;
 
-int send_raw(struct iphdr *p, uint32_t mark, struct interface *iface);
+status_t send_raw(struct iphdr *p, struct interface *iface);
 
-int forward(struct pkt_struct* pkt);
+status_t forward(struct pkt_struct* pkt);
 
-int reply_reset(struct packet *p);
+status_t reply_reset(const struct packet *p);
 
-int reset_lih(struct conn_struct* connection_data);
+status_t reset_lih(struct conn_struct* connection_data);
 
-int replay(struct conn_struct* connection_data, struct pkt_struct* pkt);
+status_t replay(struct conn_struct* connection_data, struct pkt_struct* pkt);
 
-int hb_ip_checksum(struct iphdr* hdr);
+status_t tcp_checksum(struct tcp_packet* pkt);
 
-int tcp_checksum(struct tcp_packet* pkt);
+status_t define_expected_data(struct pkt_struct* pkt);
 
-int udp_checksum(struct udp_packet* hdr);
+status_t test_expected(struct conn_struct* connection_data, struct pkt_struct* pkt);
 
-int define_expected_data(struct pkt_struct* pkt);
-
-int test_expected(struct conn_struct* connection_data, struct pkt_struct* pkt);
-
-int init_raw_sockets();
+status_t init_raw_sockets();
 
 void init_raw_sockets_backends(gpointer target, gpointer extra);
 
 gboolean init_raw_sockets_backends2(gpointer key, gpointer value, gpointer extra);
 
-int addr2int(char *address);
+int addr2int(const char *address);
 
 #endif // _NETCODE_H_

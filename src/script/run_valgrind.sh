@@ -1,8 +1,9 @@
 #!/bin/sh
 # This script runs the valgrind program on honeybrid, to check any lost or leaked memory
-workdir=/home/robin/robin/work/gsoc/honeybrid/source
+honeybrid=$1
+config=$2
 
-valgrind --tool=memcheck --leak-check=full --time-stamp=yes --trace-children=yes $workdir/honeybrid -c rules.test
+G_DEBUG=gc-friendly G_SLICE=always-malloc valgrind --tool=memcheck --leak-check=full --leak-resolution=high --num-callers=20 --time-stamp=yes --trace-children=yes --track-origins=yes $honeybrid -c $config
 
 exit
 

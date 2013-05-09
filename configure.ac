@@ -1,18 +1,28 @@
-# Copyright (C) 2009 Robin Berthier <robinb@umd.edu>
-#  
-# This file is free software; as a special exception the author gives
-# unlimited permission to copy and/or distribute it, with or without 
-# modifications, as long as this notice is preserved.
-# 
-# This program is distributed in the hope that it will be useful, but
-# WITHOUT ANY WARRANTY, to the extent permitted by law; without even the
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# This file is part of the honeybrid project.
+#
+# 2007-2009 University of Maryland (http://www.umd.edu)
+# (Written by Robin Berthier <robinb@umd.edu>, Thomas Coquelin <coquelin@umd.edu> and Julien Vehent <julien@linuxwall.info> for the University of Maryland)
+#
+# 2012-2013 University of Connecticut (http://www.uconn.edu)
+# (Extended by Tamas K Lengyel <tamas.k.lengyel@gmail.com>
+#
+# Honeybrid is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 AC_PREREQ(2.61)
-#AC_INIT(FULL-PACKAGE-NAME, VERSION, BUG-REPORT-ADDRESS)
 AC_INIT([honeybrid],
-        [0.1.4],
-        [Tamas K Lengyel, tamas.lengyel@engr.uconn.edu],
+        [0.1.5],
+        [Tamas K Lengyel, tamas.k.lengyel@gmail.com],
         [honeybrid])
 AM_INIT_AUTOMAKE
 AC_CONFIG_SRCDIR([config.h.in])
@@ -47,7 +57,7 @@ CORE_LIBS=""
 AC_ARG_ENABLE(libev,
  [  --enable-libev=yes    specify if you want to compile Honeybrid with libev (EXPERIMENTAL)],
  [ if   test "x$enableval" = "xyes" ; then
-	AC_CHECK_LIB(ev, ev_loop, [
+	AC_CHECK_LIB(ev, ev_default_loop, [
 		AC_DEFINE([HAVE_LIBEV], [1], [libev enabled])
 		AC_MSG_NOTICE([Using libev for event handling])
 		CORE_LIBS="$CORE_LIBS -lev"
@@ -64,7 +74,7 @@ AC_CHECK_LIB(dumbnet, addr_ntoa, [CORE_LIBS="$CORE_LIBS -ldumbnet"], [AC_ERROR(D
 AC_SUBST(CORE_LIBS)
 
 PKG_CHECK_MODULES([CRYPTO], [libcrypto], [], [AC_ERROR(Crypto library missing)])
-PKG_CHECK_MODULES([GLIB], [glib-2.0 gthread-2.0])
+PKG_CHECK_MODULES([GLIB], [glib-2.0 >= 2.32 gthread-2.0])
 PKG_CHECK_MODULES([XMPP], [gloox libxml++-2.6], [
 	PKG_CHECK_MODULES([XML2], [libxml-2.0], [
 		AC_MSG_NOTICE([Enabling XMPP listener and Dionaea module])

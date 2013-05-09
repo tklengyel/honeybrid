@@ -21,50 +21,29 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _PCAP_TOOL_H_
-#define _PCAP_TOOL_H_
+#ifndef CONNECTIONS_H_
+#define CONNECTIONS_H_
 
-#include <pcap.h>
-#include <linux/netfilter.h>
-#include <libnetfilter_queue/libnetfilter_queue.h>
+status_t switch_state(struct conn_struct *conn, int new_state);
 
-/*!
- \def pcap_record
- *
- * Pcap recording mode, set to 1 if pcap recording is activated
- */
-int pcap_record;
+status_t init_pkt(unsigned char *nf_packet, struct pkt_struct **pk,
+		u_int32_t mark);
 
-/*!
- \def PCAPSIZE
- *
- * max size of a packet in PCAP
- */
-#define PCAPSIZE 2048
+void free_pkt(struct pkt_struct *pkt);
 
-/*!
- \def pcap_main_desc
- *
- * Main descriptor for the pcap context
- */
-pcap_t *pcap_main_desc;
+status_t store_pkt(struct conn_struct *conn, struct pkt_struct *pkt);
 
-/*!
- \def pcap_output_current
- *
- * Current pcap file descriptor to write the packets
- */
-pcap_dumper_t *pcap_output_current;
+status_t init_conn(struct pkt_struct *pkt, struct conn_struct **conn);
 
-/*!
- \def pcap_output_redirected
- *
- * Pcap file descriptor for recording redirected connections
- */
-pcap_dumper_t *pcap_output_redirected;
+status_t expire_conn(gpointer key, struct conn_struct *cur_conn,
+		gint *expiration_delay);
 
-int record_pkt(struct nfq_data *tb, char *p, int mode);
+void free_conn(gpointer key, gpointer trash);
 
-int close_pcap_context();
+status_t init_mark(struct pkt_struct *pkt, const struct conn_struct *conn);
 
-#endif //_PCAP_TOOL_H_
+void clean();
+
+status_t setup_redirection(struct conn_struct *conn, uint32_t hih_id);
+
+#endif /* CONNECTIONS_H_ */

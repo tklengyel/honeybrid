@@ -114,7 +114,7 @@ parameter: WORD EQ WORD {
 		int *d =g_malloc(sizeof(int));
 		*d = $3;
 		g_hash_table_insert(config, $1, d);
-		g_printerr("\t'%s' => '%i'\n", $1, *d);
+		g_printerr("\t'%s' => %i\n", $1, *d);
 		g_free($2);
     }
 	|  WORD EQ QUOTE honeynet QUOTE {
@@ -174,7 +174,7 @@ uplink_settings: {
         }
         struct interface *iface=(struct interface *)$$;
         iface->mark=$4;
-        g_printerr("\t'%s' => '%d'\n", $2, iface->mark);
+        g_printerr("\t'%s' => %i\n", $2, iface->mark);
         g_free($3);
         g_free($2);
     }
@@ -189,15 +189,10 @@ module: MODULE QUOTE WORD QUOTE OPEN module_settings END {
 		g_printerr("\tmodule '%s' defined with %d parameters\n", $3, g_hash_table_size((GHashTable *)$6));
 		if (NULL == g_hash_table_lookup((GHashTable *)$6, "function")) {
 			errx(1, "%s: Fatal error: missing parameter 'function' in module '%s'\n", __func__, $3);
-		} else {
-			//g_printerr("\tModule function defined as '%s'\n", (char *)g_hash_table_lookup((GHashTable *)$6, "function"));
-			////g_hash_table_replace((GHashTable *)$6, "function", get_module((char *)g_hash_table_lookup((GHashTable *)$6, "function")));
-			g_hash_table_insert((GHashTable *)$6, "function_pointer", get_module((char *)g_hash_table_lookup((GHashTable *)$6, "function")));
-			g_printerr("\tModule function defined at address %p\n", g_hash_table_lookup((GHashTable *)$6, "function_pointer"));
 		}
 		
-		gchar *backup_file;
-		if (NULL != (backup_file = (char *)g_hash_table_lookup((GHashTable *)$6, "backup_file"))) {
+		gchar *backup_file = NULL;
+		if (NULL != (backup_file = (gchar *)g_hash_table_lookup((GHashTable *)$6, "backup"))) {
 			int backup_fd;
 			GError *error = NULL;
 			GKeyFile *backup = NULL;
@@ -231,8 +226,8 @@ module: MODULE QUOTE WORD QUOTE OPEN module_settings END {
 	;
 
 module_settings: { 
-		if (NULL == ($$ = (struct GHashTable *)g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free)))
-	                errx(1, "%s: Fatal error while creating module hash table.\n", __func__);
+		if (NULL == ($$ = (struct GHashTable *)g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free)))		
+	    	errx(1, "%s: Fatal error while creating module hash table.\n", __func__);
 	}
 	| module_settings WORD EQ WORD SEMICOLON {
 	    g_hash_table_insert((GHashTable *)$$, $2, $4);
@@ -248,7 +243,7 @@ module_settings: {
 		int *d = g_malloc0(sizeof(int));
         *d = $4;
         g_hash_table_insert((GHashTable *)$$, $2, d);
-        g_printerr("\t'%s' => '%i'\n", $2, *d);
+        g_printerr("\t'%s' => %i\n", $2, *d);
         g_free($3);
 	}
 	;
@@ -284,9 +279,9 @@ rule: 	{
 		// This tree holds the main backend structures
 		$$->back_handlers = g_tree_new_full((GCompareDataFunc)intcmp, NULL, g_free, free_backend);
 		
-		// This tree just contains the unique backend IP's
-		// The key (char *ip) lives in the struct allocated for back_handlers so don't free it on this tree
-		$$->unique_backend_ips = g_tree_new((GCompareFunc)g_strcmp0);
+		// This table just contains the unique backend IP's
+		// The key (char *ip) lives in the struct allocated for back_handlers so don't free it here
+		$$->unique_backend_ips = g_hash_table_new(g_str_hash, g_str_equal);
 	}
 	| rule FILTER QUOTE equation QUOTE SEMICOLON {
 		//g_printerr("Read pcap filter: '%s'\n", $4);
@@ -337,7 +332,7 @@ rule: 	{
             sprintf(back_handler->iface->ip_str, "%s", addr_ntoa($3));
     
     		g_tree_insert($$->back_handlers, key, back_handler);
-    		g_tree_insert($$->unique_backend_ips, back_handler->iface->ip_str, NULL);
+    		g_hash_table_insert($$->unique_backend_ips, back_handler->iface->ip_str, NULL);
     		
     		g_printerr("\tBackend %u with IP %s copied to handler without rule\n",
     		    *key, back_handler->iface->ip_str);
@@ -359,7 +354,7 @@ rule: 	{
             back_handler->rule=DE_create_tree($5->str);
     
     		g_tree_insert($$->back_handlers, key, back_handler);
-    		g_tree_insert($$->unique_backend_ips, back_handler->iface->ip_str, NULL);
+    		g_hash_table_insert($$->unique_backend_ips, back_handler->iface->ip_str, NULL);
     	
             g_printerr("\tBackend %u with IP %s copied to handler with rule: %s\n",
                 *key, back_handler->iface->ip_str, $5->str);
@@ -384,7 +379,7 @@ rule: 	{
 		    sprintf(back_handler->iface->ip_str, "%s", addr_ntoa($6));
 
             g_tree_insert($$->back_handlers, key, back_handler);
-            g_tree_insert($$->unique_backend_ips, back_handler->iface->ip_str, NULL);
+            g_hash_table_insert($$->unique_backend_ips, back_handler->iface->ip_str, NULL);
 
             g_printerr("\tBackend %u with IP %s on interface %s and tag %s copied to handler without a rule\n",
                 *key, back_handler->iface->ip_str, back_handler->iface->name, back_handler->iface->tag);
@@ -411,7 +406,7 @@ rule: 	{
             back_handler->rule=DE_create_tree($11->str);
             
             g_tree_insert($$->back_handlers, key, back_handler);
-            g_tree_insert($$->unique_backend_ips, back_handler->iface->ip_str, NULL);
+            g_hash_table_insert($$->unique_backend_ips, back_handler->iface->ip_str, NULL);
 
             g_printerr("\tBackend %u with IP %s on interface %s and tag %s copied to handler with rule: %s\n", 
                 *key, back_handler->iface->ip_str, back_handler->iface->name, back_handler->iface->tag, $11->str);

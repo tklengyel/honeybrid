@@ -1,5 +1,6 @@
+#line 2 "config_syntax.c"
 
-#line 3 "config_syntax.c"
+#line 4 "config_syntax.c"
 
 #define  YY_INT_ALIGNED short int
 
@@ -397,14 +398,14 @@ static yyconst flex_int32_t yy_ec[256] =
         1,    2,    4,    5,    6,    1,    1,    4,    1,    4,
         4,    1,    1,    1,    7,    4,    8,    9,    9,    9,
         9,    9,    9,    9,    9,    9,    9,   10,   11,    4,
-       12,    4,    1,    1,   13,   14,   15,   16,   17,   18,
-       19,    7,   20,    7,   21,   22,   23,   24,   25,   26,
-        7,   27,    7,   28,   29,    7,    7,    7,    7,    7,
-        1,    1,    1,    4,    7,    1,   30,   31,   32,   33,
+       12,    4,    1,    1,    7,    7,    7,    7,    7,    7,
+        7,    7,    7,    7,    7,    7,    7,    7,    7,    7,
+        7,    7,    7,    7,    7,    7,    7,    7,    7,    7,
+        1,    1,    1,    4,    7,    1,   13,   14,   15,   16,
 
-       34,   35,   36,    7,   37,    7,   38,   39,   40,   41,
-       42,   43,    7,   44,    7,   45,   46,    7,    7,    7,
-        7,    7,   47,    4,   48,    1,    1,    1,    1,    1,
+       17,   18,   19,    7,   20,    7,   21,   22,   23,   24,
+       25,   26,    7,   27,    7,   28,   29,    7,    7,    7,
+        7,    7,   30,    4,   31,    1,    1,    1,    1,    1,
         1,    1,    1,    1,    1,    1,    1,    1,    1,    1,
         1,    1,    1,    1,    1,    1,    1,    1,    1,    1,
         1,    1,    1,    1,    1,    1,    1,    1,    1,    1,
@@ -421,26 +422,25 @@ static yyconst flex_int32_t yy_ec[256] =
         1,    1,    1,    1,    1
     } ;
 
-static yyconst flex_int32_t yy_meta[49] =
+static yyconst flex_int32_t yy_meta[32] =
     {   0,
         1,    1,    2,    3,    1,    1,    3,    3,    3,    1,
         1,    1,    3,    3,    3,    3,    3,    3,    3,    3,
-        3,    3,    3,    3,    3,    3,    3,    3,    3,    3,
-        3,    3,    3,    3,    3,    3,    3,    3,    3,    3,
-        3,    3,    3,    3,    3,    3,    1,    1
+        3,    3,    3,    3,    3,    3,    3,    3,    3,    1,
+        1
     } ;
 
 static yyconst flex_int16_t yy_base[84] =
     {   0,
-        0,    0,   89,  338,   79,  338,    0,  338,    0,   45,
-       66,   46,  338,  338,   48,   54,   55,   56,   61,   64,
-       62,  338,  338,   71,    0,    0,   63,  105,   76,   87,
-       96,   79,  104,  105,  117,  122,  119,    0,  166,  127,
-      139,  128,  151,  175,  134,  180,  178,  177,  185,  183,
-      193,  198,  215,  223,  200,  221,  224,  231,  226,  238,
-      136,  243,  248,  260,  255,  265,  156,  270,  271,  278,
-      279,  281,  286,  288,  295,  296,  297,  338,   54,  328,
-       48,  331,  334
+        0,    0,   80,  249,   77,  249,    0,  249,    0,   28,
+       56,   29,  249,  249,   31,   37,   38,   39,   44,   47,
+       45,  249,  249,   54,    0,    0,   46,   71,   59,   70,
+       62,   53,   80,   83,   88,   85,   86,    0,  112,   95,
+      103,  111,  121,  124,  122,  127,  129,  130,  132,  146,
+      149,  151,  154,  156,  157,  162,  163,  170,  164,  176,
+      184,  186,  191,  192,  193,  200,  194,  202,  203,  208,
+      210,  213,  216,  218,  221,  224,  226,  249,   37,  239,
+       31,  242,  245
     } ;
 
 static yyconst flex_int16_t yy_def[84] =
@@ -456,96 +456,72 @@ static yyconst flex_int16_t yy_def[84] =
        78,   78,   78
     } ;
 
-static yyconst flex_int16_t yy_nxt[387] =
+static yyconst flex_int16_t yy_nxt[281] =
     {   0,
         4,    5,    6,    7,    8,    9,   10,   11,   12,   13,
        14,   13,   10,   15,   16,   10,   10,   17,   10,   10,
-       10,   18,   19,   10,   10,   10,   10,   20,   21,   10,
-       15,   16,   10,   10,   17,   10,   10,   10,   18,   19,
-       10,   10,   10,   10,   20,   21,   22,   23,   25,   25,
-       27,   25,   25,   25,   29,   25,   25,   25,   25,   25,
-       30,   25,   25,   25,   25,   25,   25,   25,   25,   25,
-       25,   25,   24,   28,   32,   34,   36,   30,   31,   25,
-       24,   33,   25,   25,   29,   35,   25,   37,   78,   78,
-       25,   32,   34,   36,   25,   31,   78,   78,   33,   25,
+       10,   18,   19,   10,   10,   10,   10,   20,   21,   22,
+       23,   25,   25,   27,   25,   25,   25,   29,   25,   25,
+       25,   25,   25,   30,   25,   25,   25,   25,   25,   25,
+       25,   25,   25,   25,   25,   24,   25,   32,   34,   36,
+       25,   31,   25,   28,   33,   25,   25,   29,   35,   25,
+       37,   38,   38,   25,   42,   38,   38,   25,   24,   78,
+       38,   38,   38,   25,   40,   41,   25,   25,   25,   25,
+       25,   25,   25,   25,   78,   25,   78,   78,   25,   78,
 
-       42,   40,   35,   25,   37,   38,   38,   25,   25,   38,
-       38,   25,   25,   78,   38,   38,   38,   42,   40,   41,
-       25,   78,   25,   78,   25,   25,   25,   44,   43,   25,
-       25,   25,   45,   78,   25,   25,   41,   25,   78,   25,
-       47,   25,   25,   25,   44,   43,   25,   48,   46,   45,
-       78,   38,   38,   78,   25,   50,   49,   47,   25,   25,
-       78,   78,   53,   25,   48,   46,   38,   38,   78,   78,
-       38,   38,   50,   49,   51,   38,   38,   38,   25,   53,
-       25,   25,   25,   25,   25,   25,   25,   25,   25,   78,
-       25,   51,   25,   56,   52,   78,   25,   55,   54,   59,
+       38,   38,   25,   45,   43,   44,   25,   47,   78,   78,
+       25,   46,   38,   38,   25,   48,   38,   38,   25,   78,
+       49,   38,   38,   38,   25,   25,   78,   25,   25,   25,
+       25,   25,   25,   25,   25,   25,   25,   25,   50,   25,
+       78,   38,   38,   52,   51,   54,   56,   78,   55,   25,
+       53,   58,   25,   25,   25,   57,   25,   25,   25,   25,
+       25,   25,   59,   25,   25,   25,   25,   25,   78,   25,
+       25,   25,   63,   25,   78,   62,   60,   25,   61,   25,
+       64,   78,   66,   25,   78,   65,   78,   25,   67,   25,
+       68,   25,   69,   25,   25,   25,   25,   25,   25,   25,
 
-       25,   25,   57,   25,   58,   25,   78,   25,   78,   78,
-       56,   52,   38,   38,   55,   54,   59,   78,   25,   57,
-       60,   58,   25,   64,   25,   61,   25,   25,   25,   25,
-       25,   25,   78,   25,   25,   78,   62,   60,   25,   63,
-       64,   25,   61,   66,   65,   25,   25,   78,   78,   67,
-       25,   25,   68,   62,   69,   25,   63,   78,   25,   70,
-       66,   65,   25,   25,   78,   78,   67,   25,   25,   68,
-       73,   69,   25,   25,   25,   71,   70,   25,   25,   74,
-       72,   25,   25,   78,   25,   25,   25,   73,   25,   25,
-       78,   25,   71,   25,   75,   25,   74,   72,   25,   25,
-
-       25,   78,   25,   25,   25,   78,   78,   78,   76,   78,
-       77,   75,   78,   78,   78,   78,   78,   78,   78,   78,
-       78,   78,   78,   78,   78,   76,   78,   77,   26,   78,
-       26,   39,   78,   39,   38,   78,   38,    3,   78,   78,
+       25,   25,   70,   25,   78,   25,   25,   25,   73,   25,
+       25,   25,   72,   25,   74,   25,   25,   25,   71,   25,
+       25,   25,   78,   25,   25,   25,   75,   25,   25,   25,
+       78,   25,   78,   25,   78,   78,   77,   78,   76,   26,
+       78,   26,   39,   78,   39,   38,   78,   38,    3,   78,
        78,   78,   78,   78,   78,   78,   78,   78,   78,   78,
        78,   78,   78,   78,   78,   78,   78,   78,   78,   78,
-       78,   78,   78,   78,   78,   78,   78,   78,   78,   78,
-       78,   78,   78,   78,   78,   78,   78,   78,   78,   78,
-       78,   78,   78,   78,   78,   78
+       78,   78,   78,   78,   78,   78,   78,   78,   78,   78
     } ;
 
-static yyconst flex_int16_t yy_chk[387] =
+static yyconst flex_int16_t yy_chk[281] =
     {   0,
         1,    1,    1,    1,    1,    1,    1,    1,    1,    1,
         1,    1,    1,    1,    1,    1,    1,    1,    1,    1,
         1,    1,    1,    1,    1,    1,    1,    1,    1,    1,
-        1,    1,    1,    1,    1,    1,    1,    1,    1,    1,
-        1,    1,    1,    1,    1,    1,    1,    1,   10,   12,
-       81,   15,   10,   12,   12,   15,   79,   16,   17,   18,
-       15,   16,   17,   18,   19,   21,   27,   20,   19,   21,
-       27,   20,   24,   11,   17,   18,   20,   15,   16,   29,
-        5,   17,   32,   29,   29,   19,   32,   21,    3,    0,
-       30,   17,   18,   20,   30,   16,    0,    0,   17,   31,
+        1,   10,   12,   81,   15,   10,   12,   12,   15,   79,
+       16,   17,   18,   15,   16,   17,   18,   19,   21,   27,
+       20,   19,   21,   27,   20,   24,   32,   17,   18,   20,
+       32,   16,   29,   11,   17,   31,   29,   29,   19,   31,
+       21,   28,   28,   30,   32,   28,   28,   30,    5,    3,
+       28,   28,   28,   33,   30,   31,   34,   33,   36,   37,
+       34,   35,   36,   37,    0,   35,    0,    0,   40,    0,
 
-       32,   30,   19,   31,   21,   28,   28,   33,   34,   28,
-       28,   33,   34,    0,   28,   28,   28,   32,   30,   31,
-       35,    0,   37,    0,   35,   36,   37,   34,   33,   36,
-       40,   42,   35,    0,   40,   42,   31,   45,    0,   61,
-       37,   45,   41,   61,   34,   33,   41,   40,   36,   35,
-        0,   28,   28,    0,   43,   42,   41,   37,   43,   67,
-        0,    0,   45,   67,   40,   36,   39,   39,    0,    0,
-       39,   39,   42,   41,   43,   39,   39,   39,   44,   45,
-       48,   47,   44,   46,   48,   47,   50,   46,   49,    0,
-       50,   43,   49,   48,   44,    0,   51,   47,   46,   50,
+       28,   28,   40,   35,   33,   34,   41,   37,    0,    0,
+       41,   36,   39,   39,   42,   40,   39,   39,   42,    0,
+       41,   39,   39,   39,   43,   45,    0,   44,   43,   45,
+       46,   44,   47,   48,   46,   49,   47,   48,   42,   49,
+        0,   39,   39,   44,   43,   46,   48,    0,   47,   50,
+       45,   49,   51,   50,   52,   48,   51,   53,   52,   54,
+       55,   53,   50,   54,   55,   56,   57,   59,    0,   56,
+       57,   59,   54,   58,    0,   53,   51,   58,   52,   60,
+       55,    0,   57,   60,    0,   56,    0,   61,   58,   62,
+       59,   61,   60,   62,   63,   64,   65,   67,   63,   64,
 
-       51,   52,   48,   55,   49,   52,    0,   55,    0,    0,
-       48,   44,   39,   39,   47,   46,   50,    0,   53,   48,
-       51,   49,   53,   55,   56,   52,   54,   57,   56,   59,
-       54,   57,    0,   59,   58,    0,   53,   51,   58,   54,
-       55,   60,   52,   57,   56,   60,   62,    0,    0,   58,
-       62,   63,   59,   53,   60,   63,   54,    0,   65,   62,
-       57,   56,   65,   64,    0,    0,   58,   64,   66,   59,
-       65,   60,   66,   68,   69,   63,   62,   68,   69,   66,
-       64,   70,   71,    0,   72,   70,   71,   65,   72,   73,
-        0,   74,   63,   73,   69,   74,   66,   64,   75,   76,
-
-       77,    0,   75,   76,   77,    0,    0,    0,   74,    0,
-       75,   69,    0,    0,    0,    0,    0,    0,    0,    0,
-        0,    0,    0,    0,    0,   74,    0,   75,   80,    0,
-       80,   82,    0,   82,   83,    0,   83,   78,   78,   78,
+       65,   67,   62,   66,    0,   68,   69,   66,   65,   68,
+       69,   70,   64,   71,   66,   70,   72,   71,   63,   73,
+       72,   74,    0,   73,   75,   74,   69,   76,   75,   77,
+        0,   76,    0,   77,    0,    0,   75,    0,   74,   80,
+        0,   80,   82,    0,   82,   83,    0,   83,   78,   78,
        78,   78,   78,   78,   78,   78,   78,   78,   78,   78,
        78,   78,   78,   78,   78,   78,   78,   78,   78,   78,
-       78,   78,   78,   78,   78,   78,   78,   78,   78,   78,
-       78,   78,   78,   78,   78,   78,   78,   78,   78,   78,
-       78,   78,   78,   78,   78,   78
+       78,   78,   78,   78,   78,   78,   78,   78,   78,   78
     } ;
 
 static yy_state_type yy_last_accepting_state;
@@ -567,20 +543,7 @@ char *yytext;
 * Compile with:
 * flex -o config_syntax.c config_syntax.l
 */
-/*
-config {
-parameter = value;
-}
-module "<identifier>" {
-parameter = value;
-}
-target "net 10.0.0.0/16 and port 22" {	# pcap filter string
-frontend 192.168.0.16/30:80 "accept rule defined by an equation of module identifiers"   # will potentially use a NAT engine to proxy
-backend 192.168.0.200:80 "accept rule defined by an equation of module identifiers" # will use a REDIRECTION engine
-control "control rule defined by an equation of module identifiers"
-}
-*/
-#line 25 "config_syntax.l"
+#line 7 "config_syntax.l"
 #include <stdio.h>
 #include <pcap.h>
 #include <dumbnet.h>
@@ -588,7 +551,7 @@ control "control rule defined by an equation of module identifiers"
 #include "config_rules.h"
 
 #define YY_NO_INPUT
-#line 592 "config_syntax.c"
+#line 555 "config_syntax.c"
 
 #define INITIAL 0
 
@@ -773,11 +736,11 @@ YY_DECL
 	register char *yy_cp, *yy_bp;
 	register int yy_act;
     
-#line 36 "config_syntax.l"
+#line 18 "config_syntax.l"
 
 
 	/* Honeybrid configuration keywords */
-#line 781 "config_syntax.c"
+#line 744 "config_syntax.c"
 
 	if ( !(yy_init) )
 		{
@@ -836,7 +799,7 @@ yy_match:
 			yy_current_state = yy_nxt[yy_base[yy_current_state] + (unsigned int) yy_c];
 			++yy_cp;
 			}
-		while ( yy_base[yy_current_state] != 338 );
+		while ( yy_base[yy_current_state] != 249 );
 
 yy_find_action:
 		yy_act = yy_accept[yy_current_state];
@@ -862,166 +825,119 @@ do_action:	/* This label is used only to access EOF actions. */
 
 case 1:
 YY_RULE_SETUP
-#line 39 "config_syntax.l"
+#line 21 "config_syntax.l"
 { return CONFIGURATION; }
 	YY_BREAK
 case 2:
 YY_RULE_SETUP
-#line 40 "config_syntax.l"
+#line 22 "config_syntax.l"
 { return TARGET; }
 	YY_BREAK
 case 3:
 YY_RULE_SETUP
-#line 41 "config_syntax.l"
+#line 23 "config_syntax.l"
 { return MODULE; }
 	YY_BREAK
 case 4:
 YY_RULE_SETUP
-#line 42 "config_syntax.l"
+#line 24 "config_syntax.l"
 { return FILTER; }
 	YY_BREAK
 case 5:
 YY_RULE_SETUP
-#line 43 "config_syntax.l"
+#line 25 "config_syntax.l"
 { return FRONTEND; }
 	YY_BREAK
 case 6:
 YY_RULE_SETUP
-#line 44 "config_syntax.l"
+#line 26 "config_syntax.l"
 { return BACKEND; }
 	YY_BREAK
 case 7:
 YY_RULE_SETUP
-#line 45 "config_syntax.l"
+#line 27 "config_syntax.l"
 { return LIMIT; }
 	YY_BREAK
 case 8:
 YY_RULE_SETUP
-#line 46 "config_syntax.l"
+#line 28 "config_syntax.l"
 { return BACKPICK; }
 	YY_BREAK
 case 9:
 YY_RULE_SETUP
-#line 47 "config_syntax.l"
+#line 29 "config_syntax.l"
 { return UPLINK; }
 	YY_BREAK
 /* Delimiters */
 case 10:
 YY_RULE_SETUP
-#line 50 "config_syntax.l"
+#line 32 "config_syntax.l"
 { return OPEN; }
 	YY_BREAK
 case 11:
 YY_RULE_SETUP
-#line 51 "config_syntax.l"
+#line 33 "config_syntax.l"
 { return END; }
 	YY_BREAK
 case 12:
 YY_RULE_SETUP
-#line 52 "config_syntax.l"
+#line 34 "config_syntax.l"
 { return SEMICOLON; }
 	YY_BREAK
 case 13:
 YY_RULE_SETUP
-#line 53 "config_syntax.l"
+#line 35 "config_syntax.l"
 { return QUOTE; }
 	YY_BREAK
 case 14:
 YY_RULE_SETUP
-#line 54 "config_syntax.l"
+#line 36 "config_syntax.l"
 { yylval.string = strdup(yytext); return EQ; }
 	YY_BREAK
 /* Content Variables */
 case 15:
 YY_RULE_SETUP
-#line 57 "config_syntax.l"
+#line 39 "config_syntax.l"
 { yylval.number = atoi(yytext); return NUMBER; }
 	YY_BREAK
 case 16:
 YY_RULE_SETUP
-#line 58 "config_syntax.l"
+#line 40 "config_syntax.l"
 { yylval.string = strdup(yytext); return WORD; }
 	YY_BREAK
 case 17:
 YY_RULE_SETUP
-#line 59 "config_syntax.l"
+#line 41 "config_syntax.l"
 { yylval.string = strdup(yytext); return EXPR; }
 	YY_BREAK
 /* Ignored */
 case 18:
 YY_RULE_SETUP
-#line 62 "config_syntax.l"
+#line 44 "config_syntax.l"
 /* ignored */	
 	YY_BREAK
 case 19:
 YY_RULE_SETUP
-#line 63 "config_syntax.l"
+#line 45 "config_syntax.l"
 /* ignored */
 	YY_BREAK
 case 20:
 /* rule 20 can match eol */
 YY_RULE_SETUP
-#line 64 "config_syntax.l"
+#line 46 "config_syntax.l"
 { yylineno++; }  
 	YY_BREAK
 case 21:
 YY_RULE_SETUP
-#line 65 "config_syntax.l"
+#line 47 "config_syntax.l"
 /* ignore white space */ 
 	YY_BREAK
-/* Reduced PCAP filter */
-/* No longer useful because we're using pcap_compile to interpret the filter
-	any                     { return ANY; }
-	ip|host                 { return IP; }
-	hostname                { return HOSTNAME; }
-	proto                   { return PROTO; }
-	net                     { return NET; }
-	port                    { return PORT; }
-	and|"&&"                { return AND; }
-	or|"||"                 { return OR; }
-	not|"!"                 { return NOT; }
-	src                     { return SRC; }
-	dst                     { return DST; }
-	in                      { return IN; }
-	*/
-/*
- if                      { return IF; }
- ident                   { return IDENT; }
- out                     { return OUT; }
- flags                   { return FLAGS; }
- tos                     { return TOS; }
- as                      { return AS; }
- packets                 { return PACKETS; }
- bytes                   { return BYTES; }
- bpp                     { return BPP; }
- bps                     { return BPS; }
- pps                     { return PPS; }
- duration                { return DURATION; }
- ipv4|inet               { return IPV4; }
- ipv6|inet6              { return IPV6; }
- icmp-type               { return ICMP_TYPE; }
- icmp-code               { return ICMP_CODE; }
-	*/
-/* Delimiters */
-/* "\."		{ return DOT; } */
-/* ":"|"="|"=="|eq             { return EQ; } */
-/* ">"|gt                  { return GT; }
-	   "<"|lt                  { return LT; }
-	*/
-/*
-	and|"&&"                { return AND; }
-	or|"||"                 { return OR; }
-	not|"!"                 { return NOT; }
-	*/
-/* Content Variables */
-/* [a-zA-Z0-9\/._-]+	{ yylval.string = strdup(yytext); return WORD; } */
-/* [a-zA-Z0-9()<>|&^!\/._-]+	{ yylval.string = strdup(yytext); return WORD; } */
 case 22:
 YY_RULE_SETUP
-#line 124 "config_syntax.l"
+#line 49 "config_syntax.l"
 ECHO;
 	YY_BREAK
-#line 1025 "config_syntax.c"
+#line 941 "config_syntax.c"
 case YY_STATE_EOF(INITIAL):
 	yyterminate();
 
@@ -1982,7 +1898,7 @@ void yyfree (void * ptr )
 
 #define YYTABLES_NAME "yytables"
 
-#line 124 "config_syntax.l"
+#line 49 "config_syntax.l"
 
 
 

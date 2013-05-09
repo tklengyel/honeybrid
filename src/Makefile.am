@@ -1,39 +1,56 @@
-# Copyright (C) 2009 Robin Berthier <robinb@umd.edu>
-#  
-# This file is free software; as a special exception the author gives
-# unlimited permission to copy and/or distribute it, with or without 
-# modifications, as long as this notice is preserved.
-# 
-# This program is distributed in the hope that it will be useful, but
-# WITHOUT ANY WARRANTY, to the extent permitted by law; without even the
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-
-# Reminder:
-# $@ is the name of the file to be made.
-# $? is the names of the changed dependents. 
-# $< the name of the related file that caused the action.
-# $* the prefix shared by target and dependent files. 
+# This file is part of the honeybrid project.
+#
+# 2007-2009 University of Maryland (http://www.umd.edu)
+# (Written by Robin Berthier <robinb@umd.edu>, Thomas Coquelin <coquelin@umd.edu> and Julien Vehent <julien@linuxwall.info> for the University of Maryland)
+#
+# 2012-2013 University of Connecticut (http://www.uconn.edu)
+# (Extended by Tamas K Lengyel <tamas.k.lengyel@gmail.com>
+#
+# Honeybrid is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 sbin_PROGRAMS = honeybrid
-honeybrid_SOURCES = config_rules.y config_syntax.l \
- daemon.c decision_engine.c err.c honeybrid.c log.c mod_control.c mod_counter.c \
- mod_hash.c mod_random.c mod_source.c modules.c mod_yesno.c netcode.c tables.c \
- mod_source_time.c mod_dionaea.c mod_dionaea.h mod_backpick_random.c mod_vmi.c \
- decision_engine.h honeybrid.h log.h modules.h netcode.h pcap_tool.h tables.h types.h
+
+honeybrid_SOURCES =  honeybrid.c 
+honeybrid_SOURCES += types.h constants.c
+honeybrid_SOURCES += connections.c decision_engine.c modules.c netcode.c tables.c log.c
+honeybrid_SOURCES += err.c daemon.c
+honeybrid_SOURCES += config_rules.y config_syntax.l
+
+honeybrid_SOURCES += mod_control.c
+honeybrid_SOURCES += mod_counter.c
+honeybrid_SOURCES += mod_hash.c
+honeybrid_SOURCES += mod_random.c
+honeybrid_SOURCES += mod_source.c
+honeybrid_SOURCES += mod_source_time.c
+honeybrid_SOURCES += mod_yesno.c
+honeybrid_SOURCES += mod_dionaea.c
+honeybrid_SOURCES += mod_backpick_random.c
+honeybrid_SOURCES += mod_vmi.c
 
 # Compiler flags:
-AM_CFLAGS = -std=gnu99
+AM_CFLAGS =  -std=gnu99
 AM_CFLAGS += $(CRYPTO_CFLAGS)
 AM_CFLAGS += $(GLIB_CFLAGS)
 AM_CFLAGS += $(XML2_CFLAGS)
 AM_CFLAGS += $(MYSQL_CFLAGS)
-#AM_CFLAGS += -Wall -O0 -g -ggdb -D DEBUG -pg
+AM_CFLAGS += -Wall -O0 -g -ggdb -D DEBUG -pg
 
-AM_LDFLAGS = $(CRYPTO_LIBS)
+AM_LDFLAGS =  $(CRYPTO_LIBS)
 AM_LDFLAGS += $(GLIB_LIBS)
 AM_LDFLAGS += $(XML2_LIBS)
 AM_LDFLAGS += $(MYSQL_LIBS)
 AM_LDFLAGS += $(CORE_LIBS)
 
 AM_YFLAGS= -tvy -d -v
-AM_LFLAGS=-i
+AM_LFLAGS=-o$(LEX_OUTPUT_ROOT).c

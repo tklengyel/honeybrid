@@ -1,8 +1,11 @@
 /*
  * This file is part of the honeybrid project.
  *
- * Copyright (C) 2007-2009 University of Maryland (http://www.umd.edu)
+ * 2007-2009 University of Maryland (http://www.umd.edu)
  * (Written by Robin Berthier <robinb@umd.edu>, Thomas Coquelin <coquelin@umd.edu> and Julien Vehent <julien@linuxwall.info> for the University of Maryland)
+ *
+ * 2012-2013 University of Connecticut (http://www.uconn.edu)
+ * (Extended by Tamas K Lengyel <tamas.k.lengyel@gmail.com>
  *
  * Honeybrid is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -44,46 +47,49 @@
 /*! mod_random
  \param[in] args, struct that contain the node and the data to process
  */
-void mod_random(struct mod_args *args) {
-	g_printerr("%s Module called\n", H(args->pkt->conn->id));
+void mod_random(struct mod_args *args)
+{
+    g_printerr("%s Module called\n", H(args->pkt->conn->id));
 
-	unsigned int value = 0;
-	unsigned int proba;
-	int selector = 1;
-	gchar *param;
+    unsigned int proba;
+    int selector = 1;
+    const uint32_t *value;
 
-	/*! getting the value provided as parameter */
-	if ((param = (char *) g_hash_table_lookup(args->node->arg, "value")) == NULL) {
-		/*! We can't decide */
-		args->node->result = -1;
-		g_printerr("%s Incorrect value parameter: %d\n", H(args->pkt->conn->id),
-				value);
-		return;
-	} else {
-		value = atoi(param);
-	}
+    /*! getting the value provided as parameter */
+    if ((value = (const uint32_t *)g_hash_table_lookup(args->node->arg, "value")) == NULL)
+    {
+        /*! We can't decide */
+        args->node->result = -1;
+        g_printerr("%s Incorrect value parameter: %d\n", H(args->pkt->conn->id),
+                *value);
+        return;
+    }
 
-	if (value < selector) {
-		/*! We can't decide */
-		args->node->result = -1;
-		g_printerr("%s Incorrect value parameter: %d\n", H(args->pkt->conn->id),
-				value);
-		return;
-	}
+    if (*value < selector)
+    {
+        /*! We can't decide */
+        args->node->result = -1;
+        g_printerr("%s Incorrect value parameter: %d\n", H(args->pkt->conn->id),
+                *value);
+        return;
+    }
 
-	/*! deciding based on a probability of 1 out of "value": */
-	proba = (int) (((double) value) * (rand() / (RAND_MAX + 1.0)));
+    /*! deciding based on a probability of 1 out of "value": */
+    proba = (int) (((double) *value) * (rand() / (RAND_MAX + 1.0)));
 
-	if (proba == selector) {
-		/*! We accept this packet */
-		args->node->result = 1;
-		g_printerr("%s PACKET MATCH RULE for random(%d)\n",
-				H(args->pkt->conn->id), value);
-	} else {
-		/*! We reject this packet */
-		args->node->result = 0;
-		g_printerr("%s PACKET DOES NOT MATCH RULE for random(%d)\n",
-				H(args->pkt->conn->id), value);
-	}
+    if (proba == selector)
+    {
+        /*! We accept this packet */
+        args->node->result = 1;
+        g_printerr("%s PACKET MATCH RULE for random(%d)\n",
+                H(args->pkt->conn->id), *value);
+    }
+    else
+    {
+        /*! We reject this packet */
+        args->node->result = 0;
+        g_printerr("%s PACKET DOES NOT MATCH RULE for random(%d)\n",
+                H(args->pkt->conn->id), *value);
+    }
 }
 

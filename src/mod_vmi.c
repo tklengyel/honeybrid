@@ -1,8 +1,11 @@
 /*
  * This file is part of the honeybrid project.
  *
- * Copyright (C) 2007-2009 University of Maryland (http://www.umd.edu)
+ * 2007-2009 University of Maryland (http://www.umd.edu)
  * (Written by Robin Berthier <robinb@umd.edu>, Thomas Coquelin <coquelin@umd.edu> and Julien Vehent <julien@linuxwall.info> for the University of Maryland)
+ *
+ * 2012-2013 University of Connecticut (http://www.uconn.edu)
+ * (Extended by Tamas K Lengyel <tamas.k.lengyel@gmail.com>
  *
  * Honeybrid is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -59,7 +62,7 @@ struct vmi_vm {
 	gint last_seen;
 	gint event;
 
-	GStaticRWLock lock;
+	GRWLock lock;
 
 	// To manipulate connections associated
 	// we need to keys
@@ -147,7 +150,7 @@ gboolean build_vmi_vms2(gpointer key, gpointer value, gpointer data) {
 				vm->attacker = NULL;
 				vm->paused = 1;
 				vm->event = 0;
-				g_static_rw_lock_init(&(vm->lock));
+				g_rw_lock_init(&(vm->lock));
 
 				g_tree_insert(vmi_vms, (gpointer) vm->name, (gpointer) vm);
 
@@ -162,7 +165,7 @@ gboolean build_vmi_vms2(gpointer key, gpointer value, gpointer data) {
 				vm->paused = 1;
 				vm->logID = 0;
 				vm->event = 0;
-				g_static_rw_lock_init(&(vm->lock));
+				g_rw_lock_init(&(vm->lock));
 
 				g_tree_insert(vmi_vms, (gpointer) vm->name, (gpointer) vm);
 			} else
@@ -190,7 +193,7 @@ gboolean find_free_vm(gpointer key, gpointer value, gpointer data) {
 
 	//printf("Searching for free VM: %s\n", vm->name);
 
-	g_static_rw_lock_writer_lock(&(vm->lock));
+	g_rw_lock_writer_lock(&(vm->lock));
 	if (vm->paused) {
 
 		char buf[100];
@@ -223,7 +226,7 @@ gboolean find_free_vm(gpointer key, gpointer value, gpointer data) {
 
 		g_printerr("%s Found free VM and activated it: %u!\n", H(22), vm->vmID);
 	}
-	g_static_rw_lock_writer_unlock(&(vm->lock));
+	g_rw_lock_writer_unlock(&(vm->lock));
 
 	if (found)
 		return TRUE;
@@ -269,7 +272,7 @@ void get_random_vm(struct vm_search *search) {
 			char delim[] = ",";
 			strtok_r(buf, delim, &p);
 
-			g_static_rw_lock_writer_lock(&(vm->lock));
+			g_rw_lock_writer_lock(&(vm->lock));
 			vm->logID = atoi(strtok_r(NULL, delim, &p));
 			vm->paused = 0;
 			vm->attacker = g_strdup(search->srcIP);
@@ -277,7 +280,7 @@ void get_random_vm(struct vm_search *search) {
 			g_get_current_time(&t);
 			vm->start = (t.tv_sec);
 			vm->event = 0;
-			g_static_rw_lock_writer_unlock(&(vm->lock));
+			g_rw_lock_writer_unlock(&(vm->lock));
 
 			search->vm = vm;
 		} else {
@@ -293,17 +296,17 @@ gboolean find_used_vm(gpointer key, gpointer value, gpointer data) {
 	struct vm_search *search = (struct vm_search *) data;
 
 	//printf("Searching for used VM: %s (%u)\n", vm->name, vm->vmID);
-	g_static_rw_lock_reader_lock(&(vm->lock));
+	g_rw_lock_reader_lock(&(vm->lock));
 	if (!vm->paused) {
 		if (!strcmp(search->srcIP, vm->attacker)) {
 			printf("%s This attacker is already using a VM: %u\n", H(65),
 					vm->vmID);
 			search->vm = vm;
-			g_static_rw_lock_reader_unlock(&(vm->lock));
+			g_rw_lock_reader_unlock(&(vm->lock));
 			return TRUE;
 		}
 	}
-	g_static_rw_lock_reader_unlock(&(vm->lock));
+	g_rw_lock_reader_unlock(&(vm->lock));
 
 	return FALSE;
 }
@@ -337,13 +340,13 @@ void mod_vmi_front(struct mod_args *args) {
 
 	g_tree_foreach(vmi_vms, (GTraverseFunc) find_used_vm, &vm);
 	if (vm.vm != NULL) {
-		g_static_rw_lock_writer_lock(&(vm.vm->lock));
+		g_rw_lock_writer_lock(&(vm.vm->lock));
 		if (!vm.vm->paused) {
 			GTimeVal t;
 			g_get_current_time(&t);
 			vm.vm->last_seen = (t.tv_sec);
 		}
-		g_static_rw_lock_writer_unlock(&(vm.vm->lock));
+		g_rw_lock_writer_unlock(&(vm.vm->lock));
 	}
 
 	args->node->result = 1;
@@ -396,10 +399,10 @@ void mod_vmi_pick(struct mod_args *args) {
 		args->pkt->conn->honeymon_IDX = search.vm->logID;
 
 		// save the connection keys
-		g_static_rw_lock_writer_lock(&(search.vm->lock));
+		g_rw_lock_writer_lock(&(search.vm->lock));
 		search.vm->conn_keys = g_slist_append(search.vm->conn_keys,
 				strdup(args->pkt->conn->key));
-		g_static_rw_lock_writer_unlock(&(search.vm->lock));
+		g_rw_lock_writer_unlock(&(search.vm->lock));
 
 	} else {
 		g_printerr("%s No available backend found, rejecting!\n",
@@ -469,7 +472,7 @@ gboolean control_check_attacker(gpointer key, gpointer value, gpointer data) {
 	gint now = (t.tv_sec);
 	int found = 0;
 
-	g_static_rw_lock_writer_lock(&(vm->lock));
+	g_rw_lock_writer_lock(&(vm->lock));
 	if (!vm->paused
 			&& vm->vmID == search->mark&& now-(vm->start)<=ATTACK_TIMEOUT) {
 
@@ -491,7 +494,7 @@ printf			("%s Attack session found on clone %s!\n", H(67), vm->name);
 
 			found=1;
 		}
-	g_static_rw_lock_writer_unlock(&(vm->lock));
+	g_rw_lock_writer_unlock(&(vm->lock));
 
 	if (found)
 		return TRUE;
@@ -627,7 +630,7 @@ void vm_status_updater_thread() {
 				struct vmi_vm *vm = g_tree_lookup(vmi_vms, (gpointer) second);
 
 				if (vm != NULL) {
-					g_static_rw_lock_writer_lock(&(vm->lock));
+					g_rw_lock_writer_lock(&(vm->lock));
 
 					if (vm->attacker != NULL) {
 
@@ -638,7 +641,7 @@ void vm_status_updater_thread() {
 						GSList *r = vm->conn_keys;
 						struct conn_struct *conn;
 						if (r != NULL) {
-							g_static_rw_lock_writer_lock(&rwlock);
+							g_rw_lock_writer_lock(&conntreelock);
 							while (r != NULL) {
 								conn = (struct conn_struct *) g_tree_lookup(
 										conn_tree, r->data);
@@ -647,7 +650,7 @@ void vm_status_updater_thread() {
 								free((char *) r->data);
 								r = r->next;
 							}
-							g_static_rw_lock_writer_unlock(&rwlock);
+							g_rw_lock_writer_unlock(&conntreelock);
 						}
 						g_slist_free(vm->conn_keys);
 
@@ -663,7 +666,7 @@ void vm_status_updater_thread() {
 					vm->paused = 1;
 					vm->event = 0;
 
-					g_static_rw_lock_writer_unlock(&(vm->lock));
+					g_rw_lock_writer_unlock(&(vm->lock));
 
 				}
 			}
@@ -726,8 +729,7 @@ int init_mod_vmi() {
 	bannedIPs = g_tree_new_full((GCompareDataFunc) strcmp, NULL,
 			(GDestroyNotify) free, (GDestroyNotify) noop);
 
-	g_thread_create_full((void *) vm_status_updater_thread, NULL, 0, TRUE, TRUE,
-			0, NULL);
+	g_thread_new("vm_status_updater", (void *) vm_status_updater_thread, NULL);
 
 	return 0;
 }

@@ -1,8 +1,11 @@
 /*
  * This file is part of the honeybrid project.
  *
- * Copyright (C) 2007-2009 University of Maryland (http://www.umd.edu)
+ * 2007-2009 University of Maryland (http://www.umd.edu)
  * (Written by Robin Berthier <robinb@umd.edu>, Thomas Coquelin <coquelin@umd.edu> and Julien Vehent <julien@linuxwall.info> for the University of Maryland)
+ *
+ * 2012-2013 University of Connecticut (http://www.uconn.edu)
+ * (Extended by Tamas K Lengyel <tamas.k.lengyel@gmail.com>
  *
  * Honeybrid is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,17 +29,38 @@
 #include <netinet/ip.h>
 #include <pcap.h>
 #include <dumbnet.h>
+#include <glib.h>
 
 #define ETHER_ADDR_LEN	6
 #define ETHER_HDR_LEN	14
+
+typedef enum {
+    ICMP    = 0x01,
+    IGMP    = 0x02,
+    TCP     = 0x06,
+    UDP     = 0x11,
+    GRE     = 0x2F,
+
+    __MAX_PROTOCOL
+} protocol_t;
+
+extern const char* protocol_string[__MAX_PROTOCOL];
+
+const char *lookup_proto(protocol_t proto);
 
 /*! \brief constants to define the origin of a packet
  */
 typedef enum {
     EXT,
     LIH,
-    HIH
-} packet_origin_t;
+    HIH,
+
+    __MAX_ORIGIN
+} origin_t;
+
+extern const char* packet_origin_string[__MAX_ORIGIN];
+
+const char *lookup_origin(origin_t origin);
 
 /*! \brief constants to define the status of a connection
  */
@@ -48,8 +72,14 @@ typedef enum {
     FORWARD,
     PROXY,
     DROP,
-    CONTROL
+    CONTROL,
+
+    __MAX_CONN_STATUS
 } conn_status_t;
+
+extern const char* conn_status_string[__MAX_CONN_STATUS];
+
+const char *lookup_state(conn_status_t state);
 
 /*! \brief output modes
  */
@@ -61,26 +91,18 @@ typedef enum {
     OUTPUT_MYSQL    = 4
 } output_t;
 
-/*!
- \def OK
- *
- * Return code when everything's fine
- */
-#define OK      0
+typedef enum {
+	OK 		=  1,
+	NOK 	= -1,
+	TIMEOUT = -2
+} status_t;
 
-/*!
- *   \def NOK
- *
- * Return code when something when wrong
- */
-#define NOK     -1
-
-/*!
- \def TIMEOUT
- *
- * Return code when something took too much time
- */
-#define TIMEOUT     -2
+typedef enum {
+	REPLAY_UNEXPECTED_PAYLOAD	= (1 << 0),
+	REPLAY_UNEXPECTED_TCP_ACK	= (1 << 1),
+	REPLAY_UNEXPECTED_TCP_SEQ 	= (1 << 2),
+	REPLAY_UNEXPECTED_PROTOCOL 	= (1 << 3)
+} replay_problem_t;
 
 /* ------------------------------------------------ */
 
@@ -125,7 +147,7 @@ struct target
     struct addr *front_handler; /* Honeypot IP address(es) handling the first response (front end) */
     struct node *front_rule; /* Rules of decision modules to accept packet to be handled by the frontend */
     GTree *back_handlers; /* Honeypot backends handling the second response with key: hihID, value: struct backend */
-    GTree *unique_backend_ips; /* Unique backend IPs of back_handlers */
+    GHashTable *unique_backend_ips; /* Unique backend IPs of back_handlers */
     struct node *back_picker; /* Rule(s) to pick which backend to use (such as VM name, etc.) */
     struct node *control_rule; /* Rules of decision modules to limit outbound packets from honeypots */
     uint32_t backends; /* Number of backends specified */
@@ -154,11 +176,13 @@ struct ethernet_hdr
 struct packet
 {
     struct iphdr *ip;
-    struct tcphdr *tcp;
-    struct udphdr *udp;
-    char *payload;
+    union {
+    	const struct tcphdr *tcp;
+    	const struct udphdr *udp;
+    };
+    const char *payload;
     char *FRAME;
-};
+} __attribute__ ((packed));
 
 /*!
  \def tcp_packet
@@ -238,7 +262,7 @@ struct expected_data_struct
     unsigned short ip_proto;
     unsigned tcp_seq;
     unsigned tcp_ack_seq;
-    char* payload;
+    const char* payload;
 };
 
 /*! conn_struct
@@ -273,9 +297,9 @@ struct conn_struct
     int count_data_pkt_from_intruder;
     GSList *BUFFER;
     struct expected_data_struct expected_data;
-    GStaticRWLock lock;
+    GRWLock lock;
     struct hih_struct hih;
-    int initiator; // who initiated the conn? EXT/LIH/HIH
+    origin_t initiator; // who initiated the conn? EXT/LIH/HIH
 
     struct target *target;
 
@@ -286,12 +310,12 @@ struct conn_struct
     int total_packet;
     int total_byte;
     int decision_packet_id;
-    ///char* decision_rule;
     GString *decision_rule;
-    int replay_problem;
+    uint8_t replay_problem;
     int invalid_problem; //unused
 
-    u_int32_t mark; // adding support for multiple uplinks
+    u_int32_t uplink_mark; // adding support for multiple uplinks
+    u_int32_t downlink_mark; // adding support for multiple backends on separate bridges
 
     uint32_t honeymon_IDX;
 
@@ -299,7 +323,7 @@ struct conn_struct
 uint8_t dionaeaDownload;
 unsigned int dionaeaDownloadTime;
 #endif
-};
+} __attribute__ ((packed));
 
 /*! pkt_struct
  \brief The meta information of a packet stored in the conn_struct connection structure
@@ -312,7 +336,7 @@ unsigned int dionaeaDownloadTime;
 struct pkt_struct
 {
     struct packet packet;
-    int origin;
+    origin_t origin;
     int data;
     int size;
     int DE;
@@ -323,7 +347,7 @@ struct pkt_struct
     int position;
 
     u_int32_t mark; // adding support for multiple uplinks
-};
+} __attribute__ ((packed));;
 
 /*! \brief Structure to pass arguments to the Decision Engine
  \param conn, pointer to the refered conn_struct

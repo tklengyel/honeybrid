@@ -1,8 +1,11 @@
 /*
  * This file is part of the honeybrid project.
  *
- * Copyright (C) 2007-2009 University of Maryland (http://www.umd.edu)
+ * 2007-2009 University of Maryland (http://www.umd.edu)
  * (Written by Robin Berthier <robinb@umd.edu>, Thomas Coquelin <coquelin@umd.edu> and Julien Vehent <julien@linuxwall.info> for the University of Maryland)
+ *
+ * 2012-2013 University of Connecticut (http://www.uconn.edu)
+ * (Extended by Tamas K Lengyel <tamas.k.lengyel@gmail.com>
  *
  * Honeybrid is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -52,7 +55,7 @@
  \brief setup modules that need to be initialized
  */
 
-// TODO: Only init modules here that are actually used by a target
+// TODO: Only init modules/threads here that are actually used by a target
 void init_modules()
 {
     g_printerr("%s Initiate modules\n", H(6));
@@ -65,7 +68,7 @@ void init_modules()
     init_mod_vmi();
 
     /*! create a thread that will save module memory every minute */
-    if (g_thread_create((void *) save_backup_handler, NULL, FALSE, NULL) == NULL)
+    if (g_thread_new("module_backup_saver", (void *) save_backup_handler, NULL) == NULL)
     {
         errx(1, "%s Cannot create a thread to save module memory", H(6));
     }
@@ -115,18 +118,24 @@ int write_backup(char *filename, GKeyFile *data, void *userdata)
 void save_backup_handler()
 {
     int removed;
-    while (threading == OK)
-    {
-        /*! saving module every 60 seconds */
-        g_usleep(60000000);
-        if (threading == OK && module_to_save != NULL)
-        {
-            removed = g_hash_table_foreach_steal(module_to_save,
-                    (GHRFunc) write_backup, NULL);
-            g_printerr("%s %d entries saved and removed from module_to_save\n",
-                    H(0), removed);
-        }
-    }
+
+	gint64 sleep_cycle;
+
+	while (threading == OK) {
+		g_mutex_lock(&threading_cond_lock);
+		sleep_cycle = g_get_monotonic_time() + 60 * G_TIME_SPAN_SECOND;
+
+		if (!g_cond_wait_until(&threading_cond, &threading_cond_lock,
+				sleep_cycle) && module_to_save != NULL) {
+
+			removed = g_hash_table_foreach_steal(module_to_save,
+					(GHRFunc) write_backup, NULL);
+			g_printerr("%s %d entries saved and removed from module_to_save\n",
+					H(0), removed);
+		}
+
+		g_mutex_unlock(&threading_cond_lock);
+	}
 
     g_thread_exit(0);
 }
@@ -158,32 +167,34 @@ int save_backup(GKeyFile *data, char *filename)
  \param[in] modname: module name
  \return function pointer to the module
  */
-void (*get_module(char *modname))(struct mod_args *)
-        {
+void (*get_module(const char *modname))(struct mod_args *)
+		{
 
-            if (!strncmp(modname, "hash", 6))
-                return mod_hash;
-            else if (!strncmp(modname, "counter", 7))
-                return mod_counter;
-            else if (!strncmp(modname, "yesno", 5))
-                return mod_yesno;
-            else if (!strncmp(modname, "source", 6))
-                return mod_source;
-            else if (!strncmp(modname, "random", 6))
-                return mod_random;
-            else if (!strncmp(modname, "control", 6))
-                return mod_control;
+			if (!strncmp(modname, "hash", 6))
+				return mod_hash;
+			else if (!strncmp(modname, "counter", 7))
+				return mod_counter;
+			else if (!strncmp(modname, "yesno", 5))
+				return mod_yesno;
+			else if (!strncmp(modname, "source", 6))
+				return mod_source;
+			else if (!strncmp(modname, "random", 6))
+				return mod_random;
+			else if (!strncmp(modname, "control", 6))
+				return mod_control;
+			else if (!strncmp(modname, "source_time", 11))
+				return mod_source_time;
+			else if (!strncmp(modname, "backpick_random", 16))
+				return mod_backpick_random;
+			else if (!strncmp(modname, "vmi", 3))
+				return mod_vmi;
 #ifdef HAVE_XMPP
-            else if(!strncmp(modname,"dionaea",7))
-            return mod_dionaea;
+			else if(!strncmp(modname,"dionaea",7))
+			return mod_dionaea;
 #endif
-            else if (!strncmp(modname, "source_time", 11))
-                return mod_source_time;
-            else if (!strncmp(modname, "backpick_random", 16))
-                return mod_backpick_random;
-            else if (!strncmp(modname, "vmi", 3))
-                return mod_vmi;
 
-            errx(1, "%s No module could be found with the name: %s", H(6),
-                    modname);
-        }
+			errx(1, "%s No module could be found with the name: %s", H(6),
+					modname);
+
+			return NULL;
+}

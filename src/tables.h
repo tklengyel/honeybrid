@@ -1,8 +1,11 @@
 /*
  * This file is part of the honeybrid project.
  *
- * Copyright (C) 2007-2009 University of Maryland (http://www.umd.edu)
+ * 2007-2009 University of Maryland (http://www.umd.edu)
  * (Written by Robin Berthier <robinb@umd.edu>, Thomas Coquelin <coquelin@umd.edu> and Julien Vehent <julien@linuxwall.info> for the University of Maryland)
+ *
+ * 2012-2013 University of Connecticut (http://www.uconn.edu)
+ * (Extended by Tamas K Lengyel <tamas.k.lengyel@gmail.com>
  *
  * Honeybrid is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,41 +21,41 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __TABLE_H__
-#define __TABLE_H__
+#ifndef __TABLES_H__
+#define __TABLES_H__
 
 #include <glib.h>
 #include <err.h>
 
-//#include "netcode.h"
 #include "types.h"
 
 /*! \brief the pid of the main program
  */
 long int mainpid;
 
+const char *pidfile;
+
 /*!
  \def threading
  * Init value: OK
  * Set to NOK when honeybrid stops, used to terminate threads
  */
-int threading;
+status_t threading;
+
+GMutex threading_cond_lock;
+GCond  threading_cond;
+
+/*! \brief connection id */
+uint64_t c_id;
+
+/*! \brief max number of packets to save for replay in an EXT<->LIH connection (negative value = save all) */
+int max_packet_buffer;
 
 /*! \brief global array of pointers to hold target structures */
 GPtrArray* targets;
 
-/*! \brief security writing lock for the Binary Tree
- */
-GStaticRWLock rwlock;
-
-/*! \brief security writing lock for the dynamic high interaction redirection table
- */
-GStaticRWLock hihlock;
-
 /*! \brief global hash table that contain the values of the configuration file  */
 GHashTable *config;
-#define CONFIG(parameter)		(const char *)(config_lookup(parameter))
-#define ICONFIG(parameter)      *(const int *)(config_lookup(parameter))
 
 /*! \brief global hash table to hold module paramaters */
 GHashTable *module;
@@ -63,67 +66,32 @@ GHashTable *uplink;
 /*! \brief global hash table that contain the dynamic correspondance between HIH services et LIH services  */
 GHashTable *high_redirection_table;
 
+/*! \brief security writing lock for the dynamic high interaction redirection table
+ */
+GRWLock hihredirlock;
+
 /*! \brief Balanced Binary Tree that keep meta informations about active connections
  *
  \param key, each entry is represented by the tuple of the connection (sourceIP+sourcePort+destIP+destPort)
  \param value, the associated value of an entry is a conn_struct structure  */
 GTree * conn_tree;
 
+/*! \brief security writing lock for the Binary Tree
+ */
+GRWLock conntreelock;
+
 /*! \def list of module to save
  */
 GHashTable *module_to_save;
 
-/*!
- \def DE_rules
- *
- \brief hash table to select a rule for a connection, key is the rule, value is the boolean decision tree root
- */
-GHashTable *DE_rules;
-
 /*! \brief pointer table for btree cleaning */
 GPtrArray *entrytoclean;
 
-
 /* -------------------------------------------------- */
 
-/*! \brief connection id */
-uint64_t c_id;
+gpointer config_lookup(char * parameter, gboolean required);
 
-const char *pidfile;
-
-int test_honeypot_addr(char *testkey, int list);
-
-char * lookup_honeypot_addr(gchar *testkey, int list);
-
-char *lookup_proto(int proto);
-char *lookup_origin(int origin);
-char *lookup_state(int state);
-int switch_state(struct conn_struct *conn, int new_state);
-
-int init_pkt(unsigned char *nf_packet, struct pkt_struct *pk, u_int32_t mark);
-
-int free_pkt(struct pkt_struct *pkt);
-
-int init_conn(struct pkt_struct *pkt, struct conn_struct **conn);
-
-int check_pre_dnat_routing(struct pkt_struct *pkt, struct conn_struct **conn,
-		char *uplink_ip, int *create, int *update);
-
-int store_pkt(struct conn_struct *conn, struct pkt_struct *pkt);
-
-void clean();
-
-int setup_redirection(struct conn_struct *conn, uint32_t hih_id);
-
-int expire_conn(gpointer key, struct conn_struct *cur_conn,
-		gint *expiration_delay);
-
-void free_conn(gpointer key, gpointer trash);
-
-gpointer config_lookup(char * parameter);
-
-gint IntComp(gconstpointer a, gconstpointer b, gconstpointer c);
-void IntDest(void* a);
+gint intcmp(gconstpointer a, gconstpointer b, gconstpointer c);
 
 void free_interface(gpointer data);
 
@@ -133,4 +101,16 @@ void free_backend(gpointer data);
         g_hash_table_iter_init(i, table); \
         while(g_hash_table_iter_next(i,(void**)key,(void**)val))
 
-#endif //__TABLE_H__
+#define CONFIG(parameter) \
+	(const char *)(config_lookup(parameter, FALSE))
+
+#define CONFIG_REQUIRED(parameter) \
+	(const char *)(config_lookup(parameter, TRUE))
+
+#define ICONFIG(parameter) \
+	(config_lookup(parameter, FALSE) ? *(const int *)config_lookup(parameter, FALSE) : NOK)
+
+#define ICONFIG_REQUIRED(parameter) \
+	(config_lookup(parameter, TRUE) ? *(const int *)config_lookup(parameter, TRUE) : NOK)
+
+#endif //__TABLES_H__
