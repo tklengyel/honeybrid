@@ -21,10 +21,14 @@
 
 sbin_PROGRAMS = honeybrid
 
-honeybrid_SOURCES =  honeybrid.c 
-honeybrid_SOURCES += types.h constants.c
-honeybrid_SOURCES += connections.c decision_engine.c modules.c netcode.c tables.c log.c
-honeybrid_SOURCES += err.c daemon.c
+honeybrid_SOURCES =  honeybrid.c honeybrid.h types.h
+honeybrid_SOURCES += connections.c connections.h
+honeybrid_SOURCES += decision_engine.c decision_engine.h
+honeybrid_SOURCES += modules.c modules.h
+honeybrid_SOURCES += netcode.c netcode.h
+honeybrid_SOURCES += tables.c tables.h
+honeybrid_SOURCES += log.c log.h
+honeybrid_SOURCES += constants.c err.c daemon.c
 honeybrid_SOURCES += config_rules.y config_syntax.l
 
 honeybrid_SOURCES += mod_control.c
@@ -34,7 +38,7 @@ honeybrid_SOURCES += mod_random.c
 honeybrid_SOURCES += mod_source.c
 honeybrid_SOURCES += mod_source_time.c
 honeybrid_SOURCES += mod_yesno.c
-honeybrid_SOURCES += mod_dionaea.c
+honeybrid_SOURCES += mod_dionaea.c mod_dionaea.h
 honeybrid_SOURCES += mod_backpick_random.c
 honeybrid_SOURCES += mod_vmi.c
 
@@ -44,7 +48,7 @@ AM_CFLAGS += $(CRYPTO_CFLAGS)
 AM_CFLAGS += $(GLIB_CFLAGS)
 AM_CFLAGS += $(XML2_CFLAGS)
 AM_CFLAGS += $(MYSQL_CFLAGS)
-AM_CFLAGS += -Wall -O0 -g -ggdb -D DEBUG -pg
+#AM_CFLAGS += -Wall -O0 -g -ggdb -D DEBUG -pg
 
 AM_LDFLAGS =  $(CRYPTO_LIBS)
 AM_LDFLAGS += $(GLIB_LIBS)

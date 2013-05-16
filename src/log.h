@@ -38,11 +38,19 @@
  4 internal processing events
  5 permanent internal processing events
  */
-#define LOG_MIN    1
-#define LOG_LOW    2
-#define LOG_MED    3
-#define LOG_HIGH   4
-#define LOG_ALL    5
+typedef enum {
+	LOG_MIN = 1,
+	LOG_LOW = 2,
+	LOG_MED = 3,
+	LOG_HIGH = 4,
+	LOG_ALL = 5
+} log_verbosity_t;
+
+/*!
+ \def log level
+ */
+
+log_verbosity_t LOG_LEVEL;
 
 /*!
  \def log identifiers
@@ -57,22 +65,23 @@
  8 -> clean engine
  9 -> honeypot queries
  */
-#define LOG_OTHER    0
-#define LOG_MAIN     1
-#define LOG_SIGNAL   2
-#define LOG_CONFIG   3
-#define LOG_UNKNOWN  4
-#define LOG_PCAP     5
-#define LOG_MODULES  6
-#define LOG_LOG      7
-#define LOG_CLEAN    8
-#define LOG_HONEYPOT 9
+typedef enum {
+	LOG_MISC,
+	LOG_MAIN,
+	LOG_SIGNAL,
+	LOG_CONFIG,
+	LOG_UNKNOWN,
+	LOG_PCAP,
+	LOG_MODULES,
+	LOG_LOG,
+	LOG_CLEAN,
+	LOG_HONEYPOT
+} log_id_t;
 
 /*!
- \def log level
+ \Def file descriptor to log debug output
  */
-
-int LOG_LEVEL;
+int fdebug;
 
 /*!
  \def log_list

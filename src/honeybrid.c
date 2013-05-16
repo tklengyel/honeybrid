@@ -287,8 +287,8 @@ void close_all(void) {
 	if (close_target() < 0)
 		g_printerr("%s: Error when closing targets\n", __func__);
 
-	g_rw_lock_clear(&hihredirlock);
-	g_rw_lock_clear(&conntreelock);
+	//g_rw_lock_clear(&hihredirlock);
+	//g_rw_lock_clear(&conntreelock);
 
 }
 
@@ -439,8 +439,8 @@ void init_variables() {
 	g_rw_lock_init( &DE_queue_lock );
 #endif
 
-	g_rw_lock_init(&conntreelock);
-	g_rw_lock_init(&hihredirlock);
+	//g_rw_lock_init(&conntreelock);
+	//g_rw_lock_init(&hihredirlock);
 
 	/* create the main B-Tree to store meta informations of active connections */
 	if (NULL == (conn_tree = g_tree_new((GCompareFunc) g_strcmp0))) {

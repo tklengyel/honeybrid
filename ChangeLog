@@ -1,3 +1,7 @@
+2013-05-16  Tamas Lengyel   <tamas.k.lengyel@gmail.com>
+ * Bugfixes, refactoring and cleanup.
+ * Switch to upstream GLib. Now requiring GLib 2.32 or higher.
+
 2012-01-28	Tamas Lengyel	<tamas.k.lengyel@gmail.com>
 
  * src/honeybrid.c

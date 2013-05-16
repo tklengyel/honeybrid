@@ -8,7 +8,7 @@
 # WITHOUT ANY WARRANTY, to the extent permitted by law; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
-EXTRA_DIST = reconf configure honeybrid.conf honeybrid.sh
+EXTRA_DIST =  honeybrid.conf honeybrid.sh build.sh reconf 
 SUBDIRS = m4 src @doc@ @xmpp_listener@
 
 install-data-am:
