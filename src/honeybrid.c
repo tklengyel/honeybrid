@@ -171,11 +171,6 @@ int close_thread() {
 int close_hash() {
 	/*! Destroy hash tables
 	 */
-	if (log_table != NULL) {
-		g_printerr("%s: Destroying table log_table\n", __func__);
-		g_hash_table_destroy(log_table);
-		log_table = NULL;
-	}
 
 	if (high_redirection_table != NULL) {
 		g_printerr("%s: Destroying table high_redirection_table\n", __func__);
@@ -392,13 +387,6 @@ void init_variables() {
 			== (module = g_hash_table_new_full(g_str_hash, g_str_equal, g_free,
 					(GDestroyNotify) g_hash_table_destroy)))
 		errx(1, "%s: Fatal error while creating module hash table.\n",
-				__func__);
-
-	/*! create the hash table for the log engine */
-	if (NULL
-			== (log_table = g_hash_table_new_full(g_str_hash, g_str_equal,
-					g_free, g_free)))
-		errx(1, "%s: Fatal error while creating log_table hash table.\n",
 				__func__);
 
 	/*! create the hash table for the log engine */

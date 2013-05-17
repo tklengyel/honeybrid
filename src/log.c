@@ -104,7 +104,7 @@ now(void)
  *
  \return OK when done, NOK on failure
  */
-int honeylog(char *sdata, char *ddata, int level, unsigned id)
+status_t honeylog(char *sdata, char *ddata, int level, unsigned id)
 {
     /*!filter events upon their log level*/
     if (level > LOG_LEVEL)

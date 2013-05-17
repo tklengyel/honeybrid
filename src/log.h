@@ -30,6 +30,8 @@
 #include <mysql.h>
 #endif
 
+#include "types.h"
+
 /*! 
  \def verbosity channel
  1 errors only
@@ -102,20 +104,16 @@ struct log_event {
 	unsigned id;
 	char *curtime;
 };
-/*!
- \def error_table
- *
- \brief global hash table that contain the error values and their descriptions
- */
-GHashTable *log_table;
 
-#define L(sdata,ddata,level,id) 	if (0 != honeylog(sdata,ddata,level,id)){g_print("******LOG ENGINE ERROR******\n");}
+#define L(sdata,ddata,level,id) \
+	if (0 != honeylog(sdata,ddata,level,id)) \
+	{g_print("******LOG ENGINE ERROR******\n");}
 #define H(id) 				log_header(__func__, id)
 
 char* log_header(const char* function_name, int id);
 char* now(void);
 
-int honeylog(char *sdata, char *ddata, int level, unsigned id);
+status_t honeylog(char *sdata, char *ddata, int level, unsigned id);
 
 int open_debug_log(void);
 
