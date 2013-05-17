@@ -10,8 +10,9 @@
 #include <glib/gstdio.h>
 #include <arpa/inet.h>
 #include <unistd.h>
-#include "tables.h"
-#include "types.h"
+#include "globals.h"
+#include "structs.h"
+#include "convenience.h"
 #include "decision_engine.h"
 #include "modules.h"
 #include <sys/stat.h>
@@ -277,7 +278,7 @@ rule: 	{
 		$$ = (struct target *)g_malloc0(sizeof(struct target));
 		
 		// This tree holds the main backend structures
-		$$->back_handlers = g_tree_new_full((GCompareDataFunc)intcmp, NULL, g_free, free_backend);
+		$$->back_handlers = g_tree_new_full((GCompareDataFunc)intcmp, NULL, g_free, (GDestroyNotify)free_backend);
 		
 		// This table just contains the unique backend IP's
 		// The key (char *ip) lives in the struct allocated for back_handlers so don't free it here

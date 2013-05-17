@@ -21,20 +21,21 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __DECISION_ENGINE_H__
-#define __DECISION_ENGINE_H__
+#ifndef __CONSTANTS_H_
+#define __CONSTANTS_H_
 
 #include "types.h"
-#include "structs.h"
 
-struct node *DE_create_tree(const gchar *equation);
+extern const char* protocol_string[__MAX_PROTOCOL];
 
-void DE_submit_packet();
+extern const char* packet_origin_string[__MAX_ORIGIN];
 
-void DE_push_pkt(struct pkt_struct *pkt);
+extern const char* conn_status_string[__MAX_CONN_STATUS];
 
-status_t DE_process_packet(struct pkt_struct *pkt);
+const char *lookup_proto(protocol_t proto);
 
-void DE_destroy_tree(struct node *clean);
+const char *lookup_origin(origin_t origin);
 
-#endif
+const char *lookup_state(conn_status_t state);
+
+#endif /* __CONSTANTS_H_ */

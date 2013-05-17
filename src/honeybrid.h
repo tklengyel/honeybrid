@@ -21,19 +21,12 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <pcap.h>
-#include <limits.h>
+#include "types.h"
 
 int daemon(int, int);
 
 int yyparse(void);
 extern FILE *yyin;
-
-/*! writing lock initialization */
-#define G_STATIC_RW_LOCK_INIT { G_STATIC_MUTEX_INIT, NULL, NULL, 0, FALSE, 0, 0 }
-
-/*! Multi-thread safe mode */
-#define G_THREADS_ENABLED
 
 /*! Decision Engine thread enabled */
 //#define DE_THREAD
@@ -46,46 +39,3 @@ extern FILE *yyin;
  *	- connection structures are cleaned by a thread
  */
 //#define HAVE_LIBEV
-/*!
- \def DESTSIZE
- *
- * max size of an IP address (4*3 = 12 + 3 dots = 15) */
-#define DESTSIZE 15
-
-/*!
- \def CONF_MAX_LINE
- *
- * max size of a line in the configuration file */
-#define CONF_MAX_LINE LINE_MAX
-
-/*!
- \def BUFSIZE
- * use by NF_QUEUE to set the data size of received packets
- */
-#define BUFSIZE         2048
-
-/*!
- \def PAYLOADSIZE
- * use by NF_QUEUE to set the data size of received packets
- */
-#define PAYLOADSIZE     0xffff
-
-/*!
- \def running
- *
- * Init value: OK
- * Set to NOK when honeybrid stops
- * It is used to stop processing new data wht NF_QUEUE when honeybrid stops */
-status_t running;
-
-/*!
- \def thread_clean
- \def thread_log */
-GThread *thread_clean;
-GThread *thread_de;
-
-#ifdef HAVE_LIBEV
-#include <ev.h>
-struct nfq_handle *h;
-struct ev_loop *loop;
-#endif

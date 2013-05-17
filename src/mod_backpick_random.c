@@ -27,15 +27,7 @@
  \author Tamas K Lengyel 2012
  */
 
-#include <string.h>
-#include <unistd.h>
-#include <ctype.h>
-#include <time.h>
-#include <sys/time.h>
-
-#include "tables.h"
 #include "modules.h"
-#include "netcode.h"
 
 /*! mod_backpick_random
  \param[in] args, struct that contain the node and the data to process

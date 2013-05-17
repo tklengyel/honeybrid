@@ -24,29 +24,26 @@
 #ifndef _MODULES_H_
 #define _MODULES_H_
 
-#include <glib.h>
-
-//#ifndef _NO_SSL_
-#include <openssl/evp.h>
-//#endif
-
-#include <ctype.h>
+#include "types.h"
 
 #include "log.h"
-#include "tables.h"
-#include "types.h"
+#include "globals.h"
+#include "structs.h"
 
 void init_modules();
 
-void run_module(void (*module)(struct mod_args *), struct mod_args *args);
+#define run_module(module, args) \
+	(module) ? \
+			((module_function)module)((struct mod_args *)args) : \
+			errx(1, "Error encountered while running module.\n")
 
-void (*get_module(const char *modname))(struct mod_args *);
+module_function get_module(const char *mod_name);
 
 void save_backup_handler();
 
 int save_backup(GKeyFile *data, char *filename);
 
-int write_backup(char *filename, GKeyFile *data, void *userdata);
+int write_backup(const char *filename, GKeyFile *data, void *userdata);
 
 /*!************ [Basic Modules] **************/
 
@@ -62,16 +59,16 @@ void mod_random(struct mod_args *args);
 /*!*********** [Advanced Modules] ************/
 
 /*!** MODULE HASH **/
-const EVP_MD *md;
+#ifdef HAVE_CRYPTO
 int init_mod_hash();
 void mod_hash(struct mod_args *args);
+#endif
 
 /*!** MODULE SOURCE **/
 void mod_source(struct mod_args *args);
 
 /*!** MODULE CONTROL **/
 void mod_control(struct mod_args *args);
-//int control(struct pkt_struct *pkt);
 
 #ifdef HAVE_XMPP
 /*!** MODULE DIONAEA **/

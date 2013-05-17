@@ -32,16 +32,17 @@
  *
  */
 
-#include <malloc.h>
-#include <string.h>
-#include <glib.h>
-
 #include "decision_engine.h"
-#include "netcode.h"
 #include "modules.h"
-#include "tables.h"
 #include "connections.h"
 #include "log.h"
+#include "globals.h"
+#include "structs.h"
+#include "constants.h"
+
+GRWLock DE_queue_lock;
+
+GSList *DE_queue;
 
 /*! build_subtree
  \param[in] expr, a part of the boolean equation
@@ -53,7 +54,7 @@ struct node *DE_build_subtree(const gchar *expr) {
 	node->module = NULL;
 	char *modname;
 	const char *function;
-	void* function_pointer;
+	module_function function_pointer;
 
 	/*! test presence of AND operator */
 	GRegex *and_regex = g_regex_new("\\sAND\\s", G_REGEX_CASELESS, 0, NULL);
@@ -201,6 +202,7 @@ void DE_destroy_tree(struct node *clean) {
 void decide(struct decision_holder *decision) {
 
 	struct mod_args args;
+	bzero(&args, sizeof(struct mod_args));
 	args.pkt = decision->pkt;
 	args.backend_test = decision->backend_test;
 	args.backend_use = decision->backend_use;
@@ -294,8 +296,8 @@ void decide(struct decision_holder *decision) {
 void get_decision(struct decision_holder *decision) {
 
 	if (decision->node == NULL) {
-		g_printerr("%s rule is NULL for state %d on target %p\n",
-				H(decision->pkt->conn->id), decision->pkt->conn->state,
+		g_printerr("%s rule is NULL for state %s on target %p\n",
+				H(decision->pkt->conn->id), lookup_state(decision->pkt->conn->state),
 				decision->pkt->conn->target);
 		decision->result = DE_NO_RULE;
 	} else {
@@ -324,8 +326,9 @@ int get_decision_backend(gpointer key, gpointer value, gpointer data) {
 }
 
 /*! DE_process_packet
- \brief submit packets for decision using decision rules and decision modules */
-int DE_process_packet(struct pkt_struct *pkt) {
+ \brief submit packets for decision using decision rules and decision modules
+ returns OK if the packet should be accepted, NOK in the case the packet should be dropped */
+status_t DE_process_packet(struct pkt_struct *pkt) {
 
 	/* This structure holds the result of LIH/HIH/CONTROL equations */
 	/* The flow is get_decision->decide->run_module */
@@ -338,7 +341,7 @@ int DE_process_packet(struct pkt_struct *pkt) {
 	decision.backend_test = 0;
 	decision.backend_use = 0;
 
-	int statement = 0; /*! default is to return "drop" to the QUEUE */
+	status_t result = NOK;
 
 	g_printerr("%s Packet pushed to DE: %s\n", H(pkt->conn->id),
 			pkt->conn->key);
@@ -369,16 +372,12 @@ int DE_process_packet(struct pkt_struct *pkt) {
 
 				if (back_handler->rule) {
 					decision.node = back_handler->rule;
-				}
-
-				if (decision.node != NULL) {
 					get_decision(&decision);
 				}
 			} else {
 				g_printerr(
 						"%s Backend picking rule didn't specify HIH, rejecting!\n",
 						H(pkt->conn->id));
-				decision.result = DE_REJECT;
 			}
 		} else {
 			/* Check each backend, first to accept will take it */
@@ -390,7 +389,6 @@ int DE_process_packet(struct pkt_struct *pkt) {
 
 		break;
 	case CONTROL:
-		/* If we're in CONTROL, we need to get the "limit" rule from the target */
 		decision.node = (struct node *) pkt->conn->target->control_rule;
 		get_decision(&decision);
 		break;
@@ -398,19 +396,16 @@ int DE_process_packet(struct pkt_struct *pkt) {
 		/* should never happen */
 		g_printerr("%s Packet sent to DE with invalid state: %d\n",
 				H(pkt->conn->id), pkt->conn->state);
-		return statement;
 		break;
 	}
 
 	switch (decision.result) {
-	/* NULL rule (-2) */
 	case DE_NO_RULE:
 		switch (pkt->conn->state) {
 		case CONTROL:
 			/*! we update the state */
 			switch_state(pkt->conn, PROXY);
 			/*! we release the packet */
-			statement = 1;
 			break;
 		case INIT:
 			if (g_tree_nnodes(pkt->conn->target->back_handlers) == 0) {
@@ -420,29 +415,28 @@ int DE_process_packet(struct pkt_struct *pkt) {
 				/*! backend defined, so we'll use the backend_rule for the next packet */
 				switch_state(pkt->conn, DECISION);
 			}
-			statement = 1;
 			break;
 		}
+
+		result = OK;
 		break;
 		/* Rule can't decide (yet) (-1) */
-	case DE_UNKNOWN:
+	case DE_DEFER:
 		g_printerr("%s Rule can't decide (yet)\n", H(pkt->conn->id));
 		/*! we leave the state unmodified (the rule probably needs more material to decide), and we release the packet */
-		statement = 1;
+		result = OK;
 		break;
-		/* Rule rejects (0) */
 	case DE_REJECT:
 		g_printerr("%s Rule decides to reject\n", H(pkt->conn->id));
 		switch (pkt->conn->state) {
 		case DECISION:
-			statement = 1;
+			result = OK;
 			break;
 		default:
 			switch_state(pkt->conn, DROP);
 			break;
 		}
 		break;
-		/* Rule accepts (1) */
 	case DE_ACCEPT:
 		g_printerr("%s Rule decides to accept\n", H(pkt->conn->id));
 		switch (pkt->conn->state) {
@@ -454,19 +448,9 @@ int DE_process_packet(struct pkt_struct *pkt) {
 			} else {
 				switch_state(pkt->conn, DECISION);
 			}
-			statement = 1;
+			result = OK;
 			break;
 		case DECISION:
-			/*
-			 #ifdef DEBUG
-			 g_printerr("%s [** HIH address: %s (%d) **]\n", H(pkt->conn->id),
-			 addr_ntoa(pkt->conn->target->back_handler),
-			 pkt->conn->target->back_handler->addr_ip);
-			 g_printerr("%s [** LIH address: %s (%d) **]\n", H(pkt->conn->id),
-			 addr_ntoa(pkt->conn->target->front_handler),
-			 pkt->conn->target->front_handler->addr_ip);
-			 #endif
-			 */
 			g_printerr("%s Redirecting to HIH: %u\n", H(pkt->conn->id),
 					decision.backend_use);
 			if (NOK == setup_redirection(pkt->conn, decision.backend_use)) {
@@ -474,11 +458,11 @@ int DE_process_packet(struct pkt_struct *pkt) {
 			}
 			break;
 		case CONTROL:
-			statement = 1;
+			result = OK;
 			break;
 		}
 		break;
 	}
 
-	return statement;
+	return result;
 }

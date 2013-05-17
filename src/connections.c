@@ -21,29 +21,23 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <netinet/tcp.h>
-#include <netinet/ip.h>
-#include <netinet/udp.h>
-#include <arpa/inet.h>
-#include <pcap.h>
-
-#include <time.h>
-#include <sys/time.h>
-
-#include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
-#include <dumbnet.h>
-#include <ctype.h>
-
-#include <glib.h>
-
-#include "tables.h"
-#include "log.h"
-#include "netcode.h"
 #include "connections.h"
+
+#include <ctype.h>
+#include "constants.h"
+#include "netcode.h"
+#include "log.h"
+#include "globals.h"
+#include "convenience.h"
+
+/*!	\file connections.c
+ \brief
+
+ All network connection related functions are placed here.
+ These functions are responsible for flow-tracking,
+ redirection and expiration/cleanup.
+
+ */
 
 /*! init_pkt
  \brief init the current packet structure with meta-information such as the origin and the number of bytes of data
@@ -540,7 +534,7 @@ status_t create_conn(struct pkt_struct *pkt, struct conn_struct **conn,
 
 	/*! Try to match a target with this packet */
 	int found = -1;
-	int i = 0;
+	uint32_t i = 0;
 	for (i = 0; i < targets->len; i++) {
 		/*
 		 #ifdef DEBUG
@@ -781,7 +775,7 @@ status_t expire_conn(gpointer key, struct conn_struct *conn,
 	int delay = *expiration_delay;
 
 #ifdef DEBUG
-	g_printerr("%s called with expiration delay on %p: %d\n", H(8), conn, delay);
+	g_printerr("%s called with expiration delay on %u: %d\n", H(8), conn->id, delay);
 #endif
 
 	if (((curtime - conn->access_time) > delay) || (conn->state < INIT)) {
@@ -856,6 +850,20 @@ void free_conn(gpointer key, gpointer trash) {
 
 			g_slist_free(conn->BUFFER);
 		}
+
+		current = conn->custom_data;
+		while(current != NULL) {
+			struct custom_conn_data *custom = (struct custom_conn_data *)g_slist_nth_data(current, 0);
+			if(custom) {
+				if(custom->data && custom->data_free)
+					custom->data_free(custom->data);
+
+				free(custom);
+			}
+
+			current = g_slist_next(current);
+		}
+		g_slist_free(conn->custom_data);
 
 		g_free(conn->key);
 		g_free(conn->key_ext);

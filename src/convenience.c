@@ -21,57 +21,30 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-/*!	\file constants.c
+#include "config.h"
+#include "globals.h"
+
+/*!	\file convenience.c
  \brief
 
- This file is intended to provide a place for the constants declared
- in Honeybrid to be placed at.
+ This file is intended to provide a place for the convenience functions
+ to be placed at.
 
  */
 
-#include "constants.h"
+/*! config_lookup
+ /brief lookup values from the config hash table. Make sure the required value is present
+ */
 
-const char* protocol_string[__MAX_PROTOCOL] = {
-
-	[0 ... __MAX_PROTOCOL-1] = "INVALID",
-
-	[ICMP] 	= "ICMP",
-	[IGMP] 	= "IGMP",
-	[TCP] 	= "TCP",
-	[UDP] 	= "UDP",
-	[GRE] 	= "GRE"
-};
-
-const char *packet_origin_string[__MAX_ORIGIN] = {
-
-	[0 ... __MAX_ORIGIN-1] = "UNKNOWN",
-
-	[EXT] = "[EXT] External",
-	[LIH] = "[LIH] Low-interaction honeypot",
-	[HIH] = "[HIH] High-interaction honeypot"
-};
-
-const char *conn_status_string[__MAX_CONN_STATUS] = {
-
-	[0 ... __MAX_CONN_STATUS-1] = "UNKNOWN",
-
-	[INIT] 		= "INIT",
-	[DECISION] 	= "DECISION",
-	[REPLAY] 	= "REPLAY",
-	[FORWARD] 	= "FORWARD",
-	[PROXY] 	= "PROXY",
-	[DROP] 		= "DROP",
-	[CONTROL] 	= "CONTROL"
-};
-
-const char *lookup_proto(protocol_t proto) {
-	return protocol_string[proto];
+gpointer config_lookup(const char * parameter, gboolean required) {
+	gpointer ret = g_hash_table_lookup(config, parameter);
+	if (!ret && required) {
+		errx(1, "Missing configuration parameter '%s'", parameter);
+	}
+	return ret;
 }
 
-const char *lookup_origin(origin_t origin) {
-	return packet_origin_string[origin];
-}
-
-const char *lookup_state(conn_status_t state) {
-	return conn_status_string[state];
+gint intcmp(gconstpointer v1, gconstpointer v2, gconstpointer v3) {
+	return (*(uint32_t *) v1 < (*(uint32_t *) v2) ? 1 :
+			(*(uint32_t *) v1 == (*(uint32_t *) v2)) ? 0 : -1);
 }

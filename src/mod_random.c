@@ -30,15 +30,8 @@
  \author Robin Berthier 2009
  */
 
-#include <string.h>
-#include <unistd.h>
-#include <ctype.h>
-#include <time.h>
-#include <sys/time.h>
 
-#include "tables.h"
 #include "modules.h"
-#include "netcode.h"
 
 /*! mod_random requires the configuration of the following mandatory parameter:
  - "value", to define a basis for the probability to accept the packet, which is 1 out of value
@@ -52,7 +45,7 @@ void mod_random(struct mod_args *args)
     g_printerr("%s Module called\n", H(args->pkt->conn->id));
 
     unsigned int proba;
-    int selector = 1;
+    uint32_t selector = 1;
     const uint32_t *value;
 
     /*! getting the value provided as parameter */

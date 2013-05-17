@@ -31,15 +31,12 @@
  \author Thomas Coquelin, 2008
  */
 
-#include <string.h>
-#include <unistd.h>
-#include <ctype.h>
-#include <time.h>
-#include <sys/time.h>
-
-#include "tables.h"
 #include "modules.h"
-#include "netcode.h"
+
+#ifdef HAVE_CRYPTO
+
+#include <ctype.h>
+#include <openssl/evp.h>
 
 /*! New process:
  == Initialization ==
@@ -61,6 +58,7 @@
 
 /*! \def OpenSSL structure */
 const EVP_MD *md;
+
 
 /*! \brief array indexes of variables to store for each hash 
  port number will be used as separator (group)
@@ -127,7 +125,7 @@ void mod_hash(struct mod_args *args) {
 		return;
 	}
 
-	int ascii_len = 64;
+	uint32_t ascii_len = 64;
 	gchar *port;
 	gchar **info;
 
@@ -320,4 +318,4 @@ void mod_hash(struct mod_args *args) {
 
 	return;
 }
-
+#endif

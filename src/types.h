@@ -24,15 +24,43 @@
 #ifndef _TYPES_H_
 #define _TYPES_H_
 
+#include <config.h>
+
+// Include standard headers
+#include <stdint.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <err.h>
+
+// Include network headers
+#include <netinet/in.h>
+#include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
-#include <netinet/ip.h>
 #include <pcap.h>
 #include <dumbnet.h>
+
+// Include GLib
 #include <glib.h>
 
 #define ETHER_ADDR_LEN	6
 #define ETHER_HDR_LEN	14
+
+/*!
+ \def PAYLOADSIZE
+ * use by NF_QUEUE to set the data size of received packets
+ */
+#define PAYLOADSIZE     0xffff
+
+/*!
+ \def BUFSIZE
+ *
+ * number of bytes in the payload we want to copy to userspace
+ * a regular ethernet connection limit payload size to 1500 bytes
+ */
+#define BUFSIZE 2048
 
 typedef enum {
     ICMP    = 0x01,
@@ -44,10 +72,6 @@ typedef enum {
     __MAX_PROTOCOL
 } protocol_t;
 
-extern const char* protocol_string[__MAX_PROTOCOL];
-
-const char *lookup_proto(protocol_t proto);
-
 /*! \brief constants to define the origin of a packet
  */
 typedef enum {
@@ -57,10 +81,6 @@ typedef enum {
 
     __MAX_ORIGIN
 } origin_t;
-
-extern const char* packet_origin_string[__MAX_ORIGIN];
-
-const char *lookup_origin(origin_t origin);
 
 /*! \brief constants to define the status of a connection
  */
@@ -77,10 +97,6 @@ typedef enum {
     __MAX_CONN_STATUS
 } conn_status_t;
 
-extern const char* conn_status_string[__MAX_CONN_STATUS];
-
-const char *lookup_state(conn_status_t state);
-
 /*! \brief output modes
  */
 typedef enum {
@@ -92,9 +108,9 @@ typedef enum {
 } output_t;
 
 typedef enum {
-	OK 		=  1,
+	TIMEOUT = -2,
 	NOK 	= -1,
-	TIMEOUT = -2
+	OK 		=  1
 } status_t;
 
 typedef enum {
@@ -104,312 +120,59 @@ typedef enum {
 	REPLAY_UNEXPECTED_PROTOCOL 	= (1 << 3)
 } replay_problem_t;
 
-/* ------------------------------------------------ */
+/*!
+ \def decision types
+ */
+typedef enum {
+	DE_NO_RULE = -2,
+	DE_DEFER = -1,
+	DE_REJECT = 0,
+	DE_ACCEPT =	1
+} decision_t;
 
-/* Forward-declaration of structures */
-struct target;
-struct backend;
-struct ethernet_hdr;
-struct packet;
-struct tcp_packet;
-struct udp_packet;
-struct interface;
-struct hih_struct;
-struct expected_data_struct;
-struct conn_struct;
-struct pkt_struct;
-struct DE_submit_args;
-struct verdict;
+/*!
+ \def verbosity channel
+ 1 errors only
+ 2 minimal redirection information
+ 3 full redirection information
+ 4 internal processing events
+ 5 permanent internal processing events
+ */
+typedef enum {
+	LOG_MIN = 1,
+	LOG_LOW = 2,
+	LOG_MED = 3,
+	LOG_HIGH = 4,
+	LOG_ALL = 5
+} log_verbosity_t;
+
+/*!
+ \def log identifiers
+ * log id values:
+ 1 -> main
+ 2 -> signal handlers
+ 3 -> config parse
+ 4 -> unkown connection
+ 5 -> pcap tools
+ 6 -> modules
+ 7 -> log
+ 8 -> clean engine
+ 9 -> honeypot queries
+ */
+typedef enum {
+	LOG_MISC,
+	LOG_MAIN,
+	LOG_SIGNAL,
+	LOG_CONFIG,
+	LOG_UNKNOWN,
+	LOG_PCAP,
+	LOG_MODULES,
+	LOG_LOG,
+	LOG_CLEAN,
+	LOG_HONEYPOT
+} log_id_t;
+
 struct mod_args;
-struct node;
-struct decision_holder;
-
-/* ------------------------------------------------ */
-
-/*!
- \def backend
- \brief structure to hold backend information (id, decision rule and interface information)
- */
-struct backend
-{
-    uint32_t id;
-    struct node *rule;
-    struct interface *iface;
-};
-
-/*!
- \def target
- \brief structure to hold target information: PCAP filter and rules to accept/forward/redirect/control packets
- */
-struct target
-{
-    struct bpf_program *filter; /* PCAP compiled filter to select packets for this target */
-    struct addr *front_handler; /* Honeypot IP address(es) handling the first response (front end) */
-    struct node *front_rule; /* Rules of decision modules to accept packet to be handled by the frontend */
-    GTree *back_handlers; /* Honeypot backends handling the second response with key: hihID, value: struct backend */
-    GHashTable *unique_backend_ips; /* Unique backend IPs of back_handlers */
-    struct node *back_picker; /* Rule(s) to pick which backend to use (such as VM name, etc.) */
-    struct node *control_rule; /* Rules of decision modules to limit outbound packets from honeypots */
-    uint32_t backends; /* Number of backends specified */
-};
-
-/*!
- \def ethernet_hdr
- \brief memory structure to hold ethernet header (14 bytes)
- */
-struct ethernet_hdr
-{
-    u_char ether_dhost[ETHER_ADDR_LEN]; /* Destination host address */
-    u_char ether_shost[ETHER_ADDR_LEN]; /* Source host address */
-    u_short ether_type; /* IP? ARP? RARP? etc */
-};
-
-/*!
- \def packet
- *
- \brief The IP packet structure
- *
- \param ip, ip header
- \param payload[BUFSIZE], payload buffer
- *
- */
-struct packet
-{
-    struct iphdr *ip;
-    union {
-    	const struct tcphdr *tcp;
-    	const struct udphdr *udp;
-    };
-    const char *payload;
-    char *FRAME;
-} __attribute__ ((packed));
-
-/*!
- \def tcp_packet
- *
- \brief The TCP/IP packet structure
- *
- \param ip, ip header
- \param tcp, tcp header
- \param payload[BUFSIZE], payload buffer
- *
- */
-struct tcp_packet
-{
-    struct iphdr ip;
-    struct tcphdr tcp;
-    char *payload;
-};
-
-/*!
- \def udp_packet
- *
- \brief The UDP/IP packet structure
- *
- \param ip, ip header
- \param udp, udp header
- \param payload[BUFSIZE], payload buffer
- *
- */
-struct udp_packet
-{
-    struct iphdr ip;
-    struct udphdr udp;
-    char *payload;
-};
-
-/*! \brief Structure to hold network interface information
- */
-struct interface
-{
-    char *name; // like "eth0"
-    struct addr *ip;
-    char *ip_str;
-    char *tag; // like "main"
-    int tcp_socket;
-    int udp_socket;
-    int mark;
-};
-
-/*! hih_struct
- \brief hih info
-
- \param addr, IP address
- \param port, port
- */
-struct hih_struct
-{
-    int hihID;
-    int addr;
-    struct interface *iface;
-    short port;
-    unsigned lih_syn_seq;
-    unsigned delta;
-    int lih_addr;
-    char *redirect_key;
-};
-
-/*! expected_data_struct
- \brief expected_data_struct info
-
- \param ip_proto, expected IP following protocol
- \param tcp_seq, expected TCP sequence number
- \param tcp_seq_ack, expected TCP ack number
- \param payload, expected payload
- */
-struct expected_data_struct
-{
-    unsigned short ip_proto;
-    unsigned tcp_seq;
-    unsigned tcp_ack_seq;
-    const char* payload;
-};
-
-/*! conn_struct
- \brief The meta informations of a connection stored in the main Binary Tree
-
- \param key, the tuple (also the b-tree key)
- \param key_ext, the IP and Port of the external attacker
- \param key_lih, the IP and Port of the Low Interaction Honeypot
- \param key_hih, the IP and Port of the High Interaction Honeypot
- \param protocol, the l4 protocol number (6 for TCP, 17 for UDP, ...)
- \param access_time, the last access time
- \param status, the status of the connection: (1) for INIT, (2) for DECISION, (3) for REPLAY and (4) for FORWARD. (0) can mean INVALID
- \param count_data_pkt_from_lih, nb of packet replied from the lih to the intruder
- \param count_data_pkt_from_intruder, nb of packet sent from the intruder to the LIH
- \param BUFFER, pointer to the beginning of the list of the recorded packets (stored through pkt_struct)
- \param lock, set to 1 when a packet is currently processed for this connection
- \param hih, hih info
- */
-struct conn_struct
-{
-    char *key;
-    char *key_ext;
-    char *key_lih;
-    int protocol;
-    GString *start_timestamp;
-    gdouble start_microtime;
-    gint access_time;
-    int state;
-    unsigned id;
-    int replay_id;
-    int count_data_pkt_from_lih;
-    int count_data_pkt_from_intruder;
-    GSList *BUFFER;
-    struct expected_data_struct expected_data;
-    GRWLock lock;
-    struct hih_struct hih;
-    origin_t initiator; // who initiated the conn? EXT/LIH/HIH
-
-    struct target *target;
-
-    /* statistics */
-    gdouble stat_time[8]; // = {0,0,0,0,0,0,0};
-    int stat_packet[8]; // = {0,0,0,0,0,0,0};
-    int stat_byte[8]; // = {0,0,0,0,0,0,0};
-    int total_packet;
-    int total_byte;
-    int decision_packet_id;
-    GString *decision_rule;
-    uint8_t replay_problem;
-    int invalid_problem; //unused
-
-    u_int32_t uplink_mark; // adding support for multiple uplinks
-    u_int32_t downlink_mark; // adding support for multiple backends on separate bridges
-
-    uint32_t honeymon_IDX;
-
-#ifdef HAVE_XMPP
-uint8_t dionaeaDownload;
-unsigned int dionaeaDownloadTime;
-#endif
-} __attribute__ ((packed));
-
-/*! pkt_struct
- \brief The meta information of a packet stored in the conn_struct connection structure
-
- \param packet, pointer to the packet
- \param origin, to define from where the packet is coming (EXT, LIH or HIH)
- \param data, to provide the number of bytes in the packet
- \param DE, (0) if the packet was received before the decision to redirect, (1) otherwise
- */
-struct pkt_struct
-{
-    struct packet packet;
-    origin_t origin;
-    int data;
-    int size;
-    int DE;
-    struct conn_struct * conn;
-    char *key_src;
-    char *key_dst;
-    char *key;
-    int position;
-
-    u_int32_t mark; // adding support for multiple uplinks
-} __attribute__ ((packed));;
-
-/*! \brief Structure to pass arguments to the Decision Engine
- \param conn, pointer to the refered conn_struct
- \param packetposition, position of the packet to process in the Singly Linked List
- */
-struct DE_submit_args
-{
-    struct conn_struct *conn;
-    int packetposition;
-};
-
-/*! \brief Structure to receive verdict from process_packet in nfq_cb
- \param statement, 0 for reject, 1 for accept
- \param mark, the netfilter mark to set on the packet (if any)
- */
-
-struct verdict
-{
-    u_int32_t statement;
-    u_int32_t mark;
-};
-
-
-/*!
- \def mod_args
- *
- \brief arguments sent to a module while processing the tree
- */
-struct mod_args {
-    struct node *node;
-    struct pkt_struct *pkt;
-    uint32_t backend_test, backend_use;
-};
-
-/*!
- \def node
- *
- \brief node of an execution tree, composed of a module and a argument, called by processing the tree
- */
-struct node {
-    void (*module)(struct mod_args *);
-    GHashTable *arg;
-    GString *module_name;
-    GString *function;
-    struct node *true;
-    struct node *false;
-    int result;
-    int info_result;
-};
-
-/*!
- \def decision_holder
- *
- \brief structure to hold decision input/output of the DE engine
- */
-struct decision_holder {
-    struct pkt_struct *pkt;
-    struct node *node;
-    struct mod_args args;
-    int result;
-
-    uint32_t backend_test, backend_use;
-};
+typedef void (*module_function)(struct mod_args *);
 
 #endif

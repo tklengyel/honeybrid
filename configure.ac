@@ -24,16 +24,89 @@ AC_INIT([honeybrid],
         [0.1.5],
         [Tamas K Lengyel, tamas.k.lengyel@gmail.com],
         [honeybrid])
-AM_INIT_AUTOMAKE
+AM_INIT_AUTOMAKE([1.10 foreign])
 AC_CONFIG_SRCDIR([config.h.in])
 AC_CONFIG_HEADER([config.h])
+AC_CONFIG_MACRO_DIR([m4])
 
 # Checks for programs.
 AC_PROG_CC
+AC_PROG_CC_STDC
 AC_PROG_CXX
 AC_PROG_LEX
 AC_PROG_YACC
 AM_PROG_LEX
+
+###### AUTOHARDEN START
+# We want to check for compiler flag support, but there is no way to make
+# clang's "argument unused" warning fatal.  So we invoke the compiler through a
+# wrapper script that greps for this message.
+saved_CC="$CC"
+saved_CXX="$CXX"
+saved_LD="$LD"
+flag_wrap="$srcdir/scripts/wrap-compiler-for-flag-check"
+CC="$flag_wrap $CC"
+CXX="$flag_wrap $CXX"
+LD="$flag_wrap $LD"
+
+# We use the same hardening flags for C and C++.  We must check that each flag
+# is supported by both compilers.
+AC_DEFUN([check_cc_cxx_flag],
+ [AC_LANG_PUSH(C)
+  AX_CHECK_COMPILE_FLAG([$1],
+   [AC_LANG_PUSH(C++)
+    AX_CHECK_COMPILE_FLAG([$1], [$2], [$3], [-Werror $4])
+    AC_LANG_POP(C++)],
+   [$3], [-Werror $4])
+  AC_LANG_POP(C)])
+AC_DEFUN([check_link_flag],
+ [AX_CHECK_LINK_FLAG([$1], [$2], [$3], [-Werror $4])])
+
+AC_ARG_ENABLE([hardening],
+  [AS_HELP_STRING([--enable-hardening],
+    [Enable compiler and linker options to frustrate memory corruption exploits @<:@yes@:>@])],
+  [hardening="$enableval"],
+  [hardening="yes"])
+
+HARDEN_CFLAGS=""
+HARDEN_LDFLAGS=""
+AS_IF([test x"$hardening" != x"no"], [
+  check_cc_cxx_flag([-fno-strict-overflow], [HARDEN_CFLAGS="$HARDEN_CFLAGS -fno-strict-overflow"])
+
+#  This one will likely succeed, even on platforms where it does nothing.
+  check_cc_cxx_flag([-D_FORTIFY_SOURCE=2], [HARDEN_CFLAGS="$HARDEN_CFLAGS -D_FORTIFY_SOURCE=2"])
+
+  check_cc_cxx_flag([-fstack-protector-all],
+   [check_link_flag([-fstack-protector-all],
+     [HARDEN_CFLAGS="$HARDEN_CFLAGS -fstack-protector-all"
+      check_cc_cxx_flag([-Wstack-protector], [HARDEN_CFLAGS="$HARDEN_CFLAGS -Wstack-protector"],
+        [], [-fstack-protector-all])
+      check_cc_cxx_flag([--param ssp-buffer-size=1], [HARDEN_CFLAGS="$HARDEN_CFLAGS --param ssp-buffer-size=1"],
+        [], [-fstack-protector-all])])])
+
+  # At the link step, we might want -pie (GCC) or -Wl,-pie (Clang on OS X)
+  #
+  # The linker checks also compile code, so we need to include -fPIE as well.
+  check_cc_cxx_flag([-fPIE],
+   [check_link_flag([-fPIE -pie],
+     [HARDEN_CFLAGS="$HARDEN_CFLAGS -fPIE"
+      HARDEN_LDFLAGS="$HARDEN_LDFLAGS -pie"],
+     [check_link_flag([-fPIE -Wl,-pie],
+       [HARDEN_CFLAGS="$HARDEN_CFLAGS -fPIE"
+        HARDEN_LDFLAGS="$HARDEN_LDFLAGS -Wl,-pie"])])])
+
+  check_link_flag([-Wl,-z,relro],
+   [HARDEN_LDFLAGS="$HARDEN_LDFLAGS -Wl,-z,relro"
+    check_link_flag([-Wl,-z,now], [HARDEN_LDFLAGS="$HARDEN_LDFLAGS -Wl,-z,now"])])])
+
+AC_SUBST([HARDEN_CFLAGS])
+AC_SUBST([HARDEN_LDFLAGS])
+
+# End of flag tests.
+CC="$saved_CC"
+CXX="$saved_CXX"
+LD="$saved_LD"
+##### AUTOHARDEN END
 
 # Checks for header files.
 AC_HEADER_STDC
@@ -73,19 +146,36 @@ AC_CHECK_LIB(pcap, pcap_compile_nopcap, [CORE_LIBS="$CORE_LIBS -lpcap"], [AC_ERR
 AC_CHECK_LIB(dumbnet, addr_ntoa, [CORE_LIBS="$CORE_LIBS -ldumbnet"], [AC_ERROR(Dumbnet library missing)])
 AC_SUBST(CORE_LIBS)
 
-PKG_CHECK_MODULES([CRYPTO], [libcrypto], [], [AC_ERROR(Crypto library missing)])
+PKG_CHECK_MODULES([CRYPTO], [libcrypto], [
+	AC_DEFINE([HAVE_CRYPTO], [1], [Crypto library found])
+	], [])
 PKG_CHECK_MODULES([GLIB], [glib-2.0 >= 2.32 gthread-2.0])
-PKG_CHECK_MODULES([XMPP], [gloox libxml++-2.6], [
-	PKG_CHECK_MODULES([XML2], [libxml-2.0], [
-		AC_MSG_NOTICE([Enabling XMPP listener and Dionaea module])
-		AC_DEFINE([HAVE_XMPP], [1], [XMPP listener enabled])
-		])
-	],
-	[AC_MSG_NOTICE([XMPP listener won't be compiled])])
 
-if test "x$XMPP_LIBS" != "x" -a "xXML2_LIBS" == "x"; then
-	AC_ERROR(XML2 libs are missing)
-fi
+AC_ARG_ENABLE(xmpp,
+ [  --enable-xmpp=yes    specify if you want to compile Honeybrid with Dionaea-XMPP module],
+ [ if   test "x$enableval" = "xyes" ; then
+	PKG_CHECK_MODULES([XMPP], [gloox libxml++-2.6], [
+		PKG_CHECK_MODULES([XML2], [libxml-2.0], [
+			AC_MSG_NOTICE([Enabling XMPP listener and Dionaea module])
+			AC_DEFINE([HAVE_XMPP], [1], [XMPP listener enabled])
+			])
+		],
+		[AC_MSG_NOTICE([XMPP listener won't be compiled])])
+		
+		if test "x$XMPP_LIBS" != "x" -a "xXML2_LIBS" == "x"; then
+			AC_ERROR(XML2 libs are missing)
+		fi
+		
+		if test "x$XML2_LIBS" != "x" -a "x$XML2_CFLAGS" != "x"; then
+			xmpp_listener="tools/dionaea_xmpp_listener"
+		else
+			xmpp_listener=""
+		fi
+		
+		AC_SUBST(xmpp_listener)
+		AC_CONFIG_FILES(tools/dionaea_xmpp_listener/Makefile)
+	fi
+ ])
 
 AC_PATH_PROG(MYSQL_CONFIG, mysql_config)
 	
@@ -101,38 +191,17 @@ else
 	AC_MSG_NOTICE([No working MySQL library found, disabling MySQL logging])
 fi
 	
-AC_CONFIG_FILES(Makefile)
-AC_CONFIG_FILES(m4/Makefile)
-AC_CONFIG_FILES(src/Makefile)
-
-if test "x$XML2_LIBS" != "x" -a "x$XML2_CFLAGS" != "x"; then
-	AC_CONFIG_FILES(src/dionaea_xmpp_listener/Makefile)
-	xmpp_listener="src/dionaea_xmpp_listener"
-	AC_SUBST(xmpp_listener)
-fi
-
 AC_ARG_ENABLE(doc,
  [  --enable-doc=yes 	specify if you want to compile the Doxygen documentation of the source code (require doxygen)],
  [ if   test "x$enableval" = "xyes" ; then
-	AC_CONFIG_FILES(doc/Makefile)
 	doc="doc"
-	AC_SUBST(doc)
    else
 	doc=""
-	AC_SUBST(doc)
    fi
+   AC_SUBST(doc)
+   AC_CONFIG_FILES(doc/Makefile)
  ])
-
-#AC_CONFIG_AUX_DIR(config)
-#AM_CONFIG_HEADER(config.h)
-#AM_INIT_AUTOMAKE([dist-bzip2])
-
-#LF_CONFIGURE_CC
-#LF_CONFIGURE_CXX
-#LF_HOST_TYPE
-#LF_SET_WARNINGS
-#AC_PROG_RANLIB
-
-
+	
+AC_CONFIG_FILES(Makefile)
+AC_CONFIG_FILES(src/Makefile)
 AC_OUTPUT
-#AC_OUTPUT(Makefile doc/Makefile m4/Makefile src/Makefile)

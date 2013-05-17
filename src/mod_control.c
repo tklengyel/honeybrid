@@ -24,15 +24,7 @@
  \author Robin Berthier 2009
  */
 
-#include <string.h>
-#include <unistd.h>
-#include <ctype.h>
-#include <time.h>
-#include <sys/time.h>
-
-#include "tables.h"
 #include "modules.h"
-#include "netcode.h"
 
 /*! control
  \brief calculate the number of packets sent by a same source over a given period of time. If too many packets are sent, following packets are rejected

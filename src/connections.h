@@ -21,8 +21,11 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef CONNECTIONS_H_
-#define CONNECTIONS_H_
+#ifndef __CONNECTIONS_H_
+#define __CONNECTIONS_H_
+
+#include "types.h"
+#include "structs.h"
 
 status_t switch_state(struct conn_struct *conn, int new_state);
 
@@ -46,4 +49,4 @@ void clean();
 
 status_t setup_redirection(struct conn_struct *conn, uint32_t hih_id);
 
-#endif /* CONNECTIONS_H_ */
+#endif /* __CONNECTIONS_H_ */

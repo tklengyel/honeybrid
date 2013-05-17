@@ -24,20 +24,8 @@
 #ifndef _NETCODE_H_
 #define _NETCODE_H_
 
-#include <netinet/tcp.h>
-#include <netinet/udp.h>
-#include <netinet/ip.h>
-
-#include "tables.h"
 #include "types.h"
-
-/*!
- \def BUFSIZE
- *
- * number of bytes in the payload we want to copy to userspace
- * a regular ethernet connection limit payload size to 1500 bytes
- */
-#define BUFSIZE 2048
+#include "structs.h"
 
 #define ip_checksum(hdr) \
 	((struct iphdr*)hdr)->check = \
@@ -49,38 +37,9 @@
 		in_cksum( hdr, \
         sizeof(struct udphdr))
 
-/*!
- \def udp_rsd
- *
- \brief Raw socket descriptor for UDP/IP raw socket
- *
- */
-
-/*!
- \def tcp_rsd
- *
- \brief Raw socket descriptor for TCP/IP raw socket
- *
- */
-int udp_rsd, tcp_rsd; // generic socket
-
-struct pseudotcphdr {
-	uint32_t saddr;
-	uint32_t daddr;
-	uint8_t res1;
-	uint8_t proto;
-	uint16_t tcp_len;
-} __attribute__ ((packed));
-
-struct tcp_chk_packet {
-	struct pseudotcphdr pseudohdr;
-	struct tcphdr tcp;
-	char payload[BUFSIZE];
-} __attribute__ ((packed));
-
 struct interface *uplinks;
 
-status_t send_raw(struct iphdr *p, struct interface *iface);
+status_t send_raw(const struct iphdr *p, const struct interface *iface);
 
 status_t forward(struct pkt_struct* pkt);
 
@@ -90,7 +49,7 @@ status_t reset_lih(struct conn_struct* connection_data);
 
 status_t replay(struct conn_struct* connection_data, struct pkt_struct* pkt);
 
-status_t tcp_checksum(struct tcp_packet* pkt);
+void tcp_checksum(struct tcp_packet* pkt);
 
 status_t define_expected_data(struct pkt_struct* pkt);
 

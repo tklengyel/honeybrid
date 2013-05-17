@@ -21,6 +21,10 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
+#ifndef __MOD_DIONAEA_H
+#define __MOD_DIONAEA_H
+
+#ifdef HAVE_XMPP
 struct dionaeaEvent {
 	unsigned int dionaea;
 	unsigned int reference;
@@ -57,3 +61,6 @@ struct dionaeaSession {
 	unsigned int sessionEndCount;
 	char* incident;
 };
+#endif
+
+#endif //// __MOD_DIONAEA_H

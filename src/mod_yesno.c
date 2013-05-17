@@ -32,7 +32,6 @@
 #include <string.h>
 
 #include "modules.h"
-#include "tables.h"
 
 /*! mod_yesno requires the configuration of the following mandatory parameter:
  - "value", if 0 it rejects everything, if 1 it accepts everything

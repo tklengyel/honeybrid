@@ -21,99 +21,21 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _LOG_H_
-#define _LOG_H_
-
-#include <glib.h>
-
-#ifdef HAVE_MYSQL
-#include <mysql.h>
-#endif
+#ifndef __LOG_H_
+#define __LOG_H_
 
 #include "types.h"
-
-/*! 
- \def verbosity channel
- 1 errors only
- 2 minimal redirection information
- 3 full redirection information
- 4 internal processing events
- 5 permanent internal processing events
- */
-typedef enum {
-	LOG_MIN = 1,
-	LOG_LOW = 2,
-	LOG_MED = 3,
-	LOG_HIGH = 4,
-	LOG_ALL = 5
-} log_verbosity_t;
-
-/*!
- \def log level
- */
-
-log_verbosity_t LOG_LEVEL;
-
-/*!
- \def log identifiers
- * log id values:
- 1 -> main
- 2 -> signal handlers
- 3 -> config parse
- 4 -> unkown connection
- 5 -> pcap tools
- 6 -> modules
- 7 -> log
- 8 -> clean engine
- 9 -> honeypot queries
- */
-typedef enum {
-	LOG_MISC,
-	LOG_MAIN,
-	LOG_SIGNAL,
-	LOG_CONFIG,
-	LOG_UNKNOWN,
-	LOG_PCAP,
-	LOG_MODULES,
-	LOG_LOG,
-	LOG_CLEAN,
-	LOG_HONEYPOT
-} log_id_t;
-
-/*!
- \Def file descriptor to log debug output
- */
-int fdebug;
-
-/*!
- \def log_list
- \brief global singly linked list that contain the log entries to write
- */
-GSList *log_list;
-
-/*!
- \def loglock
- \brief security writing lock for the lgo singly linked list
- */
-GStaticRWLock loglock;
-
-struct log_event {
-	char *sdata;
-	char *ddata;
-	int level;
-	unsigned id;
-	char *curtime;
-};
+#include "structs.h"
 
 #define L(sdata,ddata,level,id) \
 	if (0 != honeylog(sdata,ddata,level,id)) \
 	{g_print("******LOG ENGINE ERROR******\n");}
 #define H(id) 				log_header(__func__, id)
 
-char* log_header(const char* function_name, int id);
-char* now(void);
+const char* log_header(const char* function_name, int id);
+const char* now(void);
 
-status_t honeylog(char *sdata, char *ddata, int level, unsigned id);
+status_t honeylog(char *sdata, char *ddata, log_verbosity_t level, unsigned id);
 
 int open_debug_log(void);
 
@@ -127,9 +49,17 @@ void rotate_connection_log(int signal_nb);
 //void connection_stat(struct conn_struct *conn);
 void connection_log();
 
-#ifdef HAVE_MYSQL
-MYSQL *mysqlConn;
-int init_mysql_log();
-#endif
+status_t log_mysql(const struct conn_struct *conn, const GString *proto,
+		const GString *status, GString **status_info, gdouble duration);
 
-#endif ///_LOG_H_
+status_t log_csv(const struct conn_struct *conn, const GString *proto,
+		const GString *status, GString **status_info, gdouble duration,
+		output_t output);
+
+status_t log_std(const struct conn_struct *conn, const GString *proto,
+		const GString *status, GString **status_info, gdouble duration,
+		output_t output);
+
+int init_mysql_log();
+
+#endif ///__LOG_H_

@@ -28,10 +28,7 @@
  \author Thomas Coquelin, 2008
  */
 
-#include <stdlib.h>
-
 #include "modules.h"
-#include "tables.h"
 
 /*! mod_counter requires the configuration of the following mandatory parameter:
  - "counter", number of packet to receive before accepting

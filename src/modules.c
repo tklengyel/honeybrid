@@ -31,20 +31,67 @@
  \author Thomas Coquelin, 2008
  */
 
-#include <stdio.h>
-#include <string.h>
-#include <err.h>
-#include <stdlib.h>
-#include <glib.h>
-#include <glib/gprintf.h>
-#include <glib/gstdio.h>
-#include <unistd.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-
-#include "../config.h"
 #include "modules.h"
-#include "log.h"
+
+// Assign Module ID to each available module
+typedef enum {
+
+	MOD_INVALID,
+
+	MOD_SOURCE,
+
+	MOD_SOURCE_TIME,
+
+	MOD_RANDOM,
+
+	MOD_YESNO,
+
+	MOD_VMI,
+
+	MOD_CONTROL,
+
+	MOD_BACKPICK_RANDOM,
+
+#ifdef HAVE_CRYPTO
+	MOD_HASH,
+#endif
+
+#ifdef HAVE_XMPP
+	MOD_DIONAEA,
+#endif
+
+	__MAX_HONEYBRID_MODULE
+} honeybrid_modules_t;
+
+// Define each module's name and main function
+// The name can be used in the configuration of a module's function
+const struct mod_def module_definitions[__MAX_HONEYBRID_MODULE] = {
+
+	// Initialize all modules to invalid and NULL, to be overwritten by actual definitions
+	[0 ... __MAX_HONEYBRID_MODULE-1] = {.name = "invalid", .function = NULL},
+
+	[MOD_SOURCE] = {.name = "source", .function = mod_source},
+
+	[MOD_SOURCE_TIME] = {.name = "source_time", .function = mod_source_time},
+
+	[MOD_RANDOM] = {.name = "random", .function = mod_random},
+
+	[MOD_YESNO] = {.name = "yesno", .function = mod_yesno},
+
+	[MOD_VMI] = {.name = "vmi", .function = mod_vmi},
+
+	[MOD_CONTROL] = {.name = "control", .function = mod_control},
+
+	[MOD_BACKPICK_RANDOM] = {.name = "backpick_random", .function = mod_backpick_random},
+
+#ifdef HAVE_CRYPTO
+	[MOD_HASH] = {.name = "hash", .function = mod_hash},
+#endif
+
+#ifdef HAVE_XMPP
+	[MOD_DIONAEA] = {.name = "hash", .function = mod_hash},
+#endif
+};
 
 /*! \todo create two functions to handle module backup to file:
  - a function called by modules to add themselves to a backup queue
@@ -56,40 +103,63 @@
  */
 
 // TODO: Only init modules/threads here that are actually used by a target
-void init_modules()
-{
-    g_printerr("%s Initiate modules\n", H(6));
-    init_mod_hash();
+void init_modules() {
+	g_printerr("%s Initiate modules\n", H(6));
 
-#ifdef HAVE_XMPP
-    init_mod_dionaea();
+#ifdef HAVE_CRYPTO
+	init_mod_hash();
 #endif
 
-    init_mod_vmi();
+#ifdef HAVE_XMPP
+	init_mod_dionaea();
+#endif
 
-    /*! create a thread that will save module memory every minute */
-    if (g_thread_new("module_backup_saver", (void *) save_backup_handler, NULL) == NULL)
-    {
-        errx(1, "%s Cannot create a thread to save module memory", H(6));
-    }
+	init_mod_vmi();
+
+	/*! create a thread that will save module memory every minute */
+	if ((mod_backup = g_thread_new("module_backup_saver",
+			(void *) save_backup_handler, NULL)) == NULL) {
+		errx(1, "%s Cannot create a thread to save module memory", H(6));
+	}
 }
 
 /*! run_module
  * \brief test of a new function to run module based on module name (without calling get_module)
  */
-void run_module(void (*module)(struct mod_args *), struct mod_args *args)
+
+/*void run_module(const module_function module, struct mod_args *args)
 {
     if (module && args)
     {
         module(args);
     }
+}*/
+
+
+/*! get_module
+ \brief return the module function pointer from name
+ \param[in] modname: module name
+ \return function pointer to the module
+ */
+module_function get_module(const char *modname) {
+
+	uint32_t i = 0;
+	for (; i < __MAX_HONEYBRID_MODULE; ++i) {
+		if (!strncmp(modname, module_definitions[i].name, strlen(module_definitions[i].name))) {
+			return module_definitions[i].function;
+		}
+	}
+
+	errx(1, "%s No module could be found with the name: %s", H(6), modname);
+
+	return NULL;
 }
 
 /*! write_backup
  *  \brief This function write a module backup memory to a file
  */
 
-int write_backup(char *filename, GKeyFile *data, void *userdata)
+int write_backup(const char *filename, GKeyFile *data, void *userdata)
 {
     g_printerr("%s saving backup module %p to %s\n", H(6), data, filename);
     gchar *buf;
@@ -115,29 +185,26 @@ int write_backup(char *filename, GKeyFile *data, void *userdata)
  * It works by checking an array in which modules to save have been registered
  * This array is updated after each module run
  */
-void save_backup_handler()
-{
-    int removed;
+void save_backup_handler() {
+	int removed;
 
 	gint64 sleep_cycle;
 
 	while (threading == OK) {
 		g_mutex_lock(&threading_cond_lock);
 		sleep_cycle = g_get_monotonic_time() + 60 * G_TIME_SPAN_SECOND;
+		g_cond_wait_until(&threading_cond, &threading_cond_lock, sleep_cycle);
+		g_mutex_unlock(&threading_cond_lock);
 
-		if (!g_cond_wait_until(&threading_cond, &threading_cond_lock,
-				sleep_cycle) && module_to_save != NULL) {
-
+		if (module_to_save != NULL) {
 			removed = g_hash_table_foreach_steal(module_to_save,
 					(GHRFunc) write_backup, NULL);
 			g_printerr("%s %d entries saved and removed from module_to_save\n",
 					H(0), removed);
 		}
-
-		g_mutex_unlock(&threading_cond_lock);
 	}
 
-    g_thread_exit(0);
+	g_thread_exit(0);
 }
 
 /*! save_backup
@@ -160,41 +227,4 @@ int save_backup(GKeyFile *data, char *filename)
         g_printerr("%s module_to_save already had this entry, updated\n", H(0));
         return 0;
     }
-}
-
-/*! get_module
- \brief return the module function pointer from name
- \param[in] modname: module name
- \return function pointer to the module
- */
-void (*get_module(const char *modname))(struct mod_args *)
-		{
-
-			if (!strncmp(modname, "hash", 6))
-				return mod_hash;
-			else if (!strncmp(modname, "counter", 7))
-				return mod_counter;
-			else if (!strncmp(modname, "yesno", 5))
-				return mod_yesno;
-			else if (!strncmp(modname, "source", 6))
-				return mod_source;
-			else if (!strncmp(modname, "random", 6))
-				return mod_random;
-			else if (!strncmp(modname, "control", 6))
-				return mod_control;
-			else if (!strncmp(modname, "source_time", 11))
-				return mod_source_time;
-			else if (!strncmp(modname, "backpick_random", 16))
-				return mod_backpick_random;
-			else if (!strncmp(modname, "vmi", 3))
-				return mod_vmi;
-#ifdef HAVE_XMPP
-			else if(!strncmp(modname,"dionaea",7))
-			return mod_dionaea;
-#endif
-
-			errx(1, "%s No module could be found with the name: %s", H(6),
-					modname);
-
-			return NULL;
 }

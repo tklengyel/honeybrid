@@ -21,20 +21,29 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __DECISION_ENGINE_H__
-#define __DECISION_ENGINE_H__
+#ifndef __CONFIG_H_
+#define __CONFIG_H_
 
 #include "types.h"
-#include "structs.h"
 
-struct node *DE_create_tree(const gchar *equation);
+gpointer config_lookup(const char * parameter, gboolean required);
 
-void DE_submit_packet();
+gint intcmp(gconstpointer a, gconstpointer b, gconstpointer c);
 
-void DE_push_pkt(struct pkt_struct *pkt);
+#define ghashtable_foreach(table, i, key, val) \
+        g_hash_table_iter_init(i, table); \
+        while(g_hash_table_iter_next(i,(void**)key,(void**)val))
 
-status_t DE_process_packet(struct pkt_struct *pkt);
+#define CONFIG(parameter) \
+	(const char *)(config_lookup(parameter, FALSE))
 
-void DE_destroy_tree(struct node *clean);
+#define CONFIG_REQUIRED(parameter) \
+	(const char *)(config_lookup(parameter, TRUE))
 
-#endif
+#define ICONFIG(parameter) \
+	(config_lookup(parameter, FALSE) ? *(const int *)config_lookup(parameter, FALSE) : NOK)
+
+#define ICONFIG_REQUIRED(parameter) \
+	*(const int *)config_lookup(parameter, TRUE)
+
+#endif /* __CONFIG_H_ */

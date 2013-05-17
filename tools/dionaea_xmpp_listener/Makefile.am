@@ -19,28 +19,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-ACLOCAL_AMFLAGS = --install -I m4
-EXTRA_DIST =  honeybrid.conf honeybrid.sh doc scripts tools
-SUBDIRS = src @doc@ @xmpp_listener@
+AUTOMAKE_OPTIONS = subdir-objects
+ACLOCAL_AMFLAGS = ${ACLOCAL_FLAGS}
 
-install-data-am:
-	@echo
-	@echo "========================================="
-	@echo "     Thanks for using Honeybrid!"
-	@echo
-	@echo "To complete the installation on Linux,"
-	@echo "you can type the following commands:"
-	@echo " sudo mkdir /etc/honeybrid"
-	@echo " sudo cp ./honeybrid.conf /etc/honeybrid/"
-	@echo " sudo mkdir /var/log/honeybrid"
-	@echo " sudo cp ./honeybrid.sh /etc/init.d/"
-	@echo
-	@echo "Do not forget to edit honeybrid.conf"
-	@echo "before running:"
-	@echo " sudo /etc/init.d/honeybrid.sh start"
-	@echo 
-	@echo "Please submit bugs and suggestions on"
-	@echo "honeybrid.sf.net or to tamas.k.lengyel@gmail.com"	
-	@echo "========================================="
-	@echo
+sbin_PROGRAMS = xmpp_listener
+xmpp_listener_SOURCES = xmpp_listener.cpp
 
+# Compiler flags:
+AM_CPPFLAGS = -c -Wall $(XMPP_CFLAGS)
+AM_LDFLAGS = $(XMPP_LIBS)

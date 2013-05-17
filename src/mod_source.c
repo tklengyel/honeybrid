@@ -29,15 +29,7 @@
  \author Robin Berthier 2009
  */
 
-#include <string.h>
-#include <unistd.h>
-#include <ctype.h>
-#include <time.h>
-#include <sys/time.h>
-
-#include "tables.h"
 #include "modules.h"
-#include "netcode.h"
 
 /*! mod_source
  \brief check if the source IP has already been seen in a prior connection

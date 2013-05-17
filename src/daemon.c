@@ -40,6 +40,7 @@ static char rcsid[] = "$OpenBSD: daemon.c,v 1.4 1995/02/25 13:41:16 cgd Exp $";
 
 #include <fcntl.h>
 #include <unistd.h>
+#include <glib.h>
 
 int daemon(nochdir, noclose)
 	int nochdir, noclose; {
@@ -52,13 +53,15 @@ int daemon(nochdir, noclose)
 		break;
 	default:
 		_exit(0);
+		break;
 	}
 
 	if (setsid() == -1)
 		return (-1);
 
-	if (!nochdir)
-		(void) chdir("/");
+	if (!nochdir && !chdir("/")) {
+		g_printerr("Error in setting up daemon!\n");
+	}
 
 	if (!noclose && (fd = open("/dev/null", O_RDWR, 0)) != -1) {
 		(void) dup2(fd, STDIN_FILENO);

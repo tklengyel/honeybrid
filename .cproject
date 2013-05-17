@@ -45,12 +45,14 @@
 	<storageModule moduleId="cdtBuildSystem" version="4.0.0">
 		<project id="honeybrid.org.eclipse.linuxtools.cdt.autotools.core.projectType.1258476598" name="GNU Autotools" projectType="org.eclipse.linuxtools.cdt.autotools.core.projectType"/>
 	</storageModule>
+	<storageModule moduleId="refreshScope" versionNumber="1">
+		<resource resourceType="PROJECT" workspacePath="/honeybrid-git"/>
+	</storageModule>
+	<storageModule moduleId="org.eclipse.cdt.internal.ui.text.commentOwnerProjectMappings"/>
 	<storageModule moduleId="scannerConfiguration">
 		<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
 		<scannerConfigBuildInfo instanceId="org.eclipse.linuxtools.cdt.autotools.core.configuration.build.1865105837;org.eclipse.linuxtools.cdt.autotools.core.configuration.build.1865105837.;org.eclipse.linuxtools.cdt.autotools.core.toolchain.tool.gcc.64796669;cdt.managedbuild.tool.gnu.c.compiler.input.1137146657">
 			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId="org.eclipse.cdt.managedbuilder.core.GCCManagedMakePerProjectProfileC"/>
 		</scannerConfigBuildInfo>
 	</storageModule>
-	<storageModule moduleId="refreshScope" versionNumber="1"/>
-	<storageModule moduleId="org.eclipse.cdt.internal.ui.text.commentOwnerProjectMappings"/>
 </cproject>

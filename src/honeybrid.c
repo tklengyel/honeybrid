@@ -74,35 +74,32 @@
  \Author Tamas K Lengyel, 2012-2013
  */
 
-#include <sys/param.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <string.h>
-#include <err.h>
+#include "honeybrid.h"
+
+#include <limits.h>
 #include <errno.h>
 #include <syslog.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <fcntl.h>
-#include <unistd.h>
 #include <signal.h>
-#include <malloc.h>
-#include <netinet/in.h>
 #include <linux/netfilter.h>
 #include <libnetfilter_queue/libnetfilter_queue.h>
-#include <arpa/inet.h>
-#include <glib.h>
-#include <unistd.h>
+#include <sys/stat.h>
 #include <execinfo.h>
-#include <config.h>
 
-#include "tables.h"
-#include "honeybrid.h"
+#include "constants.h"
+#include "structs.h"
+#include "globals.h"
+#include "convenience.h"
 #include "netcode.h"
 #include "log.h"
 #include "decision_engine.h"
 #include "modules.h"
 #include "connections.h"
+
+#ifdef HAVE_LIBEV
+#include <ev.h>
+struct nfq_handle *h;
+struct ev_loop *loop;
+#endif
 
 /*! usage function
  \brief print command line informations */
@@ -115,176 +112,8 @@ void usage(char **argv) {
 					"  -x <pid>: halt the engine using its PID\n"
 					"  -q <queuenum>: select a specific queue number for NF_QUEUE to listen to\n"
 					//"  -s: show status information\n"
-					"  -h: print the help\n\n", VERSION, argv[0]);
+					"  -h: print the help\n\n", PACKAGE_VERSION, argv[0]);
 	exit(1);
-}
-
-/*! print_trace
- * \brief Obtain a backtrace and print it to stdout. 
- */
-void print_trace(void) {
-	void *array[10];
-	size_t size;
-	char **strings;
-	size_t i;
-
-	size = backtrace(array, 10);
-	strings = backtrace_symbols(array, size);
-
-	printf("Obtained %zd stack frames.\n", size);
-
-	for (i = 0; i < size; i++)
-		printf("%s\n", strings[i]);
-
-	free(strings);
-}
-
-/*! close_thread
- \brief Function that waits for thread to close themselves */
-int close_thread() {
-
-	threading = NOK;
-	g_cond_broadcast(&threading_cond);
-
-#ifndef HAVE_LIBEV
-	g_printerr("%s: Waiting for thread_clean to terminate\n", __func__);
-	g_thread_join(thread_clean);
-#endif
-
-#ifdef DE_THREAD
-	g_printerr("%s: Waiting for thread_de to terminate\n", __func__);
-	g_thread_join(thread_de);
-#endif
-	/*
-	 g_printerr("%s:Waiting for thread_log to terminate\n", __func__);
-	 g_thread_join(thread_log);
-	 */
-
-	//g_cond_clear(threading_cond);
-	//g_mutex_free(threading_cond_lock);
-
-	return 0;
-}
-
-/*! close_hash function
- \brief Destroy the different hashes used by honeybrid */
-int close_hash() {
-	/*! Destroy hash tables
-	 */
-
-	if (high_redirection_table != NULL) {
-		g_printerr("%s: Destroying table high_redirection_table\n", __func__);
-		g_rw_lock_writer_lock(&hihredirlock);
-		g_hash_table_destroy(high_redirection_table);
-		high_redirection_table = NULL;
-	}
-
-	if (config != NULL) {
-		g_printerr("%s: Destroying table config\n", __func__);
-		g_hash_table_destroy(config);
-		config = NULL;
-	}
-
-	if (module != NULL) {
-		g_printerr("%s: Destroying table module\n", __func__);
-		g_hash_table_destroy(module);
-	}
-
-	if (uplink != NULL) {
-		g_printerr("%s: Destroying table uplink\n", __func__);
-		g_hash_table_destroy(uplink);
-		uplink = NULL;
-	}
-
-	if (module_to_save != NULL) {
-		g_printerr("%s: Destroying table module_to_save\n", __func__);
-		g_hash_table_destroy(module_to_save);
-		module_to_save = NULL;
-	}
-
-	return 0;
-}
-
-/*! close_conn_tree function
- \brief Function to free memory taken by conn_tree */
-int close_conn_tree() {
-
-	g_printerr("%s: Destroying connection tree\n", __func__);
-
-	/*! clean the memory
-	 * traverse the B-Tree to remove the singly linked lists and then destroy the B-Tree
-	 */
-	int delay = 0;
-	entrytoclean = g_ptr_array_new();
-
-	/*! call the clean function for each value, delete the value if TRUE is returned */
-	g_tree_foreach(conn_tree, (GTraverseFunc) expire_conn, &delay);
-
-	/*! remove each key listed from the btree */
-	g_ptr_array_foreach(entrytoclean, (GFunc) free_conn, NULL);
-
-	/*! free the array */
-	g_ptr_array_free(entrytoclean, TRUE);
-	entrytoclean = NULL;
-
-	g_tree_destroy(conn_tree);
-	conn_tree = NULL;
-
-	return 0;
-}
-
-void free_target(struct target *t, gpointer user_data) {
-	g_free(t->filter);
-	g_free(t->front_handler);
-	g_tree_destroy(t->back_handlers);
-	g_hash_table_destroy(t->unique_backend_ips);
-	DE_destroy_tree(t->front_rule);
-	DE_destroy_tree(t->control_rule);
-	g_free(t);
-}
-
-/*! close_target
- \brief destroy global structure "targets" when the program has to quit */
-int close_target(void) {
-	g_printerr("%s: Destroying targets\n", __func__);
-	g_ptr_array_foreach(targets, (GFunc) free_target, NULL);
-	g_ptr_array_free(targets, TRUE);
-	return OK;
-}
-
-/*! close_all
- \brief destroy structures and free memory when the program has to quit */
-void close_all(void) {
-	/*! wait for thread to close */
-	if (close_thread() < 0)
-		g_printerr("%s: Error when waiting for threads to close\n", __func__);
-
-	/*! delete conn_tree */
-	if (close_conn_tree() < 0)
-		g_printerr("%s: Error when closing conn_tree\n", __func__);
-
-	/*! delete lock file (only if the process ran as a daemon) */
-	output_t output = ICONFIG_REQUIRED("output");
-	if (output != OUTPUT_STDOUT) {
-		if (unlink(pidfile) < 0)
-			g_printerr("%s: Error when removing lock file\n", __func__);
-	}
-
-	/*! close log file */
-	if (output == OUTPUT_LOGFILES) {
-		close_connection_log();
-	}
-
-	/*! delete hashes */
-	if (close_hash() < 0)
-		g_printerr("%s: Error when closing hashes\n", __func__);
-
-	if (close_target() < 0)
-		g_printerr("%s: Error when closing targets\n", __func__);
-
-	//g_rw_lock_clear(&hihredirlock);
-	//g_rw_lock_clear(&conntreelock);
-
 }
 
 /*! term_signal_handler
@@ -305,8 +134,6 @@ int term_signal_handler(int signal_nb, siginfo_t * siginfo, void *context) {
 	g_printerr("* Sending uid:  \t%d\n", siginfo->si_uid);
 	g_printerr("* Fault address:\t%p\n", siginfo->si_addr);
 	g_printerr("* Exit value:   \t%d\n", siginfo->si_status);
-	/*! print backtrace */
-	print_trace();
 #endif
 	running = NOK; /*! this will cause the queue loop to stop */
 
@@ -316,10 +143,80 @@ int term_signal_handler(int signal_nb, siginfo_t * siginfo, void *context) {
 	return 0;
 }
 
-/*! switch_clean
- \brief call the packet cleaner */
-void switch_clean() {
-	clean();
+/*! init_signal
+ \brief installs signal handlers
+ \return 0 if exit with success, anything else if not */
+void init_signal() {
+	/*! Install terminating signal handler: */
+	struct sigaction sa_term;
+	memset(&sa_term, 0, sizeof sa_term);
+
+	sa_term.sa_sigaction = (void *) term_signal_handler;
+	sa_term.sa_flags = SA_SIGINFO | SA_RESETHAND;
+	sigfillset(&sa_term.sa_mask);
+
+	/*! SIGHUP*/
+	if (sigaction(SIGHUP, &sa_term, NULL) != 0)
+		errx(1, "%s: Failed to install sighandler for SIGHUP", __func__);
+
+	/*! SIGINT*/
+	if (sigaction(SIGINT, &sa_term, NULL) != 0)
+		errx(1, "%s: Failed to install sighandler for SIGINT", __func__);
+
+	/*! SIGQUIT*/
+	if (sigaction(SIGQUIT, &sa_term, NULL) != 0)
+		errx(1, "%s: Failed to install sighandler for SIGQUIT", __func__);
+
+	/*! SIGILL*/
+	if (sigaction(SIGILL, &sa_term, NULL) != 0)
+		errx(1, "%s: Failed to install sighandler for SIGILL", __func__);
+
+	/*! SIGSEGV*/
+	if (sigaction(SIGSEGV, &sa_term, NULL) != 0)
+		errx(1, "%s: Failed to install sighandler for SIGSEGV", __func__);
+
+	/*! SIGTERM*/
+	if (sigaction(SIGTERM, &sa_term, NULL) != 0)
+		errx(1, "%s: Failed to install sighandler for SIGTERM", __func__);
+
+	/*! SIGBUS*/
+	if (sigaction(SIGBUS, &sa_term, NULL) != 0)
+		errx(1, "%s: Failed to install sighandler for SIGBUS", __func__);
+
+	/*! ignore signals: */
+	struct sigaction sa_ignore;
+	memset(&sa_ignore, 0, sizeof sa_ignore);
+	sa_ignore.sa_handler = SIG_IGN;
+	sigfillset(&sa_ignore.sa_mask);
+
+	/*! SIGABRT*/
+	if (sigaction(SIGABRT, &sa_ignore, NULL) != 0)
+		errx(1, "%s: Failed to install sighandler for SIGABRT", __func__);
+
+	/*! SIGALRM*/
+	if (sigaction(SIGALRM, &sa_ignore, NULL) != 0)
+		errx(1, "%s: Failed to install sighandler for SIGALRM", __func__);
+
+	/*! SIGUSR2*/
+	if (sigaction(SIGUSR2, &sa_ignore, NULL) != 0)
+		errx(1, "%s: Failed to install sighandler for SIGUSR2", __func__);
+
+	/*! SIGPOLL*/
+	if (sigaction(SIGPOLL, &sa_ignore, NULL) != 0)
+		errx(1, "%s: Failed to install sighandler for SIGPOLL", __func__);
+
+	/*! rotate logs: */
+	struct sigaction sa_rotate_log;
+	memset(&sa_rotate_log, 0, sizeof sa_rotate_log);
+
+	sa_rotate_log.sa_sigaction = (void *) rotate_connection_log;
+	//sa_rotate_log.sa_flags = SA_SIGINFO | SA_RESETHAND;
+	sa_rotate_log.sa_flags = SA_RESTART;
+	sigfillset(&sa_rotate_log.sa_mask);
+
+	/*! SIGUSR1*/
+	if (sigaction(SIGUSR1, &sa_rotate_log, NULL) != 0)
+		errx(1, "%s: Failed to install sighandler for SIGUSR1", __func__);
 }
 
 /*! init_syslog
@@ -392,43 +289,19 @@ void init_variables() {
 	/*! create the hash table for the log engine */
 	if (NULL
 			== (uplink = g_hash_table_new_full(g_int_hash, g_int_equal, NULL,
-					free_interface)))
+					(GDestroyNotify) free_interface)))
 		errx(1, "%s: Fatal error while creating uplink hash table.\n",
 				__func__);
-
-	/*! init the log singly linked list */
-	log_list = NULL;
-
-	/*! init the connection id counter */
-#ifdef HAVE_MYSQL
-	if(ICONFIG_REQUIRED("output")==OUTPUT_MYSQL)
-	{
-		// TODO: Initialize connection ID from the database
-		c_id = 1;
-	}
-	else
-	{
-		c_id = 1;
-	}
-#else
-	c_id = 1;
-#endif
 
 #ifdef DE_THREAD
 	/*! init DE_queue */
 	DE_queue = NULL;
 #endif
 
-	/*! Enable data processing */
-	running = OK;
-
 	/*! init the security locks */
 #ifdef DE_THREAD
 	g_rw_lock_init( &DE_queue_lock );
 #endif
-
-	//g_rw_lock_init(&conntreelock);
-	//g_rw_lock_init(&hihredirlock);
 
 	/* create the main B-Tree to store meta informations of active connections */
 	if (NULL == (conn_tree = g_tree_new((GCompareFunc) g_strcmp0))) {
@@ -448,12 +321,144 @@ void init_variables() {
 				"%s: Fatal error while creating high_redirection_table hash table.\n",
 				__func__);
 
+	/*! init the connection id counter */
+	c_id = 1;
+
+	/*! Enable threads */
+	threading = OK;
+
+	/*! Enable data processing */
+	running = OK;
 }
 
-void init_threading() {
-	threading = OK;
-	//threading_cond_lock = g_mutex_new();
-	//g_cond_init(threading_cond);
+/*! close_thread
+ \brief Function that waits for thread to close themselves */
+int close_thread() {
+
+	threading = NOK;
+	g_cond_broadcast(&threading_cond);
+
+#ifndef HAVE_LIBEV
+	g_printerr("%s: Waiting for thread_clean to terminate\n", __func__);
+	g_thread_join(thread_clean);
+#endif
+
+#ifdef DE_THREAD
+	g_printerr("%s: Waiting for thread_de to terminate\n", __func__);
+	g_thread_join(thread_de);
+#endif
+
+	g_thread_join(mod_backup);
+
+	return 0;
+}
+
+/*! close_hash function
+ \brief Destroy the different hashes used by honeybrid */
+int close_hash() {
+	/*! Destroy hash tables
+	 */
+
+	if (high_redirection_table != NULL) {
+		g_printerr("%s: Destroying table high_redirection_table\n", __func__);
+		g_rw_lock_writer_lock(&hihredirlock);
+		g_hash_table_destroy(high_redirection_table);
+		high_redirection_table = NULL;
+	}
+
+	if (config != NULL) {
+		g_printerr("%s: Destroying table config\n", __func__);
+		g_hash_table_destroy(config);
+		config = NULL;
+	}
+
+	if (module != NULL) {
+		g_printerr("%s: Destroying table module\n", __func__);
+		g_hash_table_destroy(module);
+	}
+
+	if (uplink != NULL) {
+		g_printerr("%s: Destroying table uplink\n", __func__);
+		g_hash_table_destroy(uplink);
+		uplink = NULL;
+	}
+
+	if (module_to_save != NULL) {
+		g_printerr("%s: Destroying table module_to_save\n", __func__);
+		g_hash_table_destroy(module_to_save);
+		module_to_save = NULL;
+	}
+
+	return 0;
+}
+
+/*! close_conn_tree function
+ \brief Function to free memory taken by conn_tree */
+int close_conn_tree() {
+
+	g_printerr("%s: Destroying connection tree\n", __func__);
+
+	/*! clean the memory
+	 * traverse the B-Tree to remove the singly linked lists and then destroy the B-Tree
+	 */
+	int delay = 0;
+	entrytoclean = g_ptr_array_new();
+
+	/*! call the clean function for each value, delete the value if TRUE is returned */
+	g_tree_foreach(conn_tree, (GTraverseFunc) expire_conn, &delay);
+
+	/*! remove each key listed from the btree */
+	g_ptr_array_foreach(entrytoclean, (GFunc) free_conn, NULL);
+
+	/*! free the array */
+	g_ptr_array_free(entrytoclean, TRUE);
+	entrytoclean = NULL;
+
+	g_tree_destroy(conn_tree);
+	conn_tree = NULL;
+
+	return 0;
+}
+
+/*! close_target
+ \brief destroy global structure "targets" when the program has to quit */
+int close_target(void) {
+	g_printerr("%s: Destroying targets\n", __func__);
+	g_ptr_array_foreach(targets, (GFunc) free_target_gfunc, NULL);
+	g_ptr_array_free(targets, TRUE);
+	return OK;
+}
+
+/*! close_all
+ \brief destroy structures and free memory when the program has to quit */
+void close_all(void) {
+	/*! wait for thread to close */
+	if (close_thread() < 0)
+		g_printerr("%s: Error when waiting for threads to close\n", __func__);
+
+	/*! delete conn_tree */
+	if (close_conn_tree() < 0)
+		g_printerr("%s: Error when closing conn_tree\n", __func__);
+
+	/*! delete lock file (only if the process ran as a daemon) */
+	output_t output = ICONFIG_REQUIRED("output");
+	if (output != OUTPUT_STDOUT) {
+		if (unlink(pidfile) < 0)
+			g_printerr("%s: Error when removing lock file\n", __func__);
+	}
+
+	/*! close log file */
+	if (output == OUTPUT_LOGFILES) {
+		close_connection_log();
+	}
+
+	/*! delete hashes */
+	if (close_hash() < 0)
+		g_printerr("%s: Error when closing hashes\n", __func__);
+
+	if (close_target() < 0)
+		g_printerr("%s: Error when closing targets\n", __func__);
+
 }
 
 /*! process_packet
@@ -713,7 +718,7 @@ static int q_cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 
 	//printf("Final result: %u and set mark to %u\n", decision->statement, decision->mark);
 
-	if (decision->statement == 1) {
+	if (decision->statement == OK) {
 		/*! nfq_set_verdict2
 		 \brief set a decision NF_ACCEPT or NF_DROP on the packet and put a mark on it
 		 *
@@ -729,12 +734,10 @@ static int q_cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 		/*! ACCEPT the packet if the statement is 1 */
 		/* Also copy whatever mark has been on the packet initially, required for multi-uplink setups */
 
-		to_return = nfq_set_verdict2(qh, id, NF_ACCEPT, decision->mark, 0,
-				NULL);
+		to_return = nfq_set_verdict2(qh, id, NF_ACCEPT, decision->mark, 0, NULL);
 	} else {
 		/*! DROP the packet if the statement is 0 (or something else than 1) */
-		to_return = nfq_set_verdict2(qh, id, NF_DROP, nfq_get_nfmark(nfa), 0,
-				NULL);
+		to_return = nfq_set_verdict2(qh, id, NF_DROP, decision->mark, 0, NULL);
 	}
 
 	free(decision);
@@ -780,8 +783,8 @@ short int netlink_loop(unsigned short int queuenum) {
 
 	watchdog = 0;
 	while (running == OK) {
-		memset(buf, 0, sizeof(buf));
-		rv = recv(fd, buf, sizeof(buf), 0);
+		memset(buf, 0, BUFSIZE);
+		rv = recv(fd, buf, BUFSIZE, 0);
 		if (rv < 0) {
 			g_printerr("%s Error %d: recv() returned %d '%s'\n", H(0), errno,
 					rv, strerror(errno));
@@ -878,84 +881,7 @@ timeout_clean_cb (EV_P_ ev_timer *w, int revents)
 	clean();
 }
 #endif
-
 //End Test
-
-/*! init_signal
- \brief installs signal handlers
- \return 0 if exit with success, anything else if not */
-void init_signal() {
-	/*! Install terminating signal handler: */
-	struct sigaction sa_term;
-	memset(&sa_term, 0, sizeof sa_term);
-
-	sa_term.sa_sigaction = (void *) term_signal_handler;
-	sa_term.sa_flags = SA_SIGINFO | SA_RESETHAND;
-	sigfillset(&sa_term.sa_mask);
-
-	/*! SIGHUP*/
-	if (sigaction(SIGHUP, &sa_term, NULL) != 0)
-		errx(1, "%s: Failed to install sighandler for SIGHUP", __func__);
-
-	/*! SIGINT*/
-	if (sigaction(SIGINT, &sa_term, NULL) != 0)
-		errx(1, "%s: Failed to install sighandler for SIGINT", __func__);
-
-	/*! SIGQUIT*/
-	if (sigaction(SIGQUIT, &sa_term, NULL) != 0)
-		errx(1, "%s: Failed to install sighandler for SIGQUIT", __func__);
-
-	/*! SIGILL*/
-	if (sigaction(SIGILL, &sa_term, NULL) != 0)
-		errx(1, "%s: Failed to install sighandler for SIGILL", __func__);
-
-	/*! SIGSEGV*/
-	if (sigaction(SIGSEGV, &sa_term, NULL) != 0)
-		errx(1, "%s: Failed to install sighandler for SIGSEGV", __func__);
-
-	/*! SIGTERM*/
-	if (sigaction(SIGTERM, &sa_term, NULL) != 0)
-		errx(1, "%s: Failed to install sighandler for SIGTERM", __func__);
-
-	/*! SIGBUS*/
-	if (sigaction(SIGBUS, &sa_term, NULL) != 0)
-		errx(1, "%s: Failed to install sighandler for SIGBUS", __func__);
-
-	/*! ignore signals: */
-	struct sigaction sa_ignore;
-	memset(&sa_ignore, 0, sizeof sa_ignore);
-	sa_ignore.sa_handler = SIG_IGN;
-	sigfillset(&sa_ignore.sa_mask);
-
-	/*! SIGABRT*/
-	if (sigaction(SIGABRT, &sa_ignore, NULL) != 0)
-		errx(1, "%s: Failed to install sighandler for SIGABRT", __func__);
-
-	/*! SIGALRM*/
-	if (sigaction(SIGALRM, &sa_ignore, NULL) != 0)
-		errx(1, "%s: Failed to install sighandler for SIGALRM", __func__);
-
-	/*! SIGUSR2*/
-	if (sigaction(SIGUSR2, &sa_ignore, NULL) != 0)
-		errx(1, "%s: Failed to install sighandler for SIGUSR2", __func__);
-
-	/*! SIGPOLL*/
-	if (sigaction(SIGPOLL, &sa_ignore, NULL) != 0)
-		errx(1, "%s: Failed to install sighandler for SIGPOLL", __func__);
-
-	/*! rotate logs: */
-	struct sigaction sa_rotate_log;
-	memset(&sa_rotate_log, 0, sizeof sa_rotate_log);
-
-	sa_rotate_log.sa_sigaction = (void *) rotate_connection_log;
-	//sa_rotate_log.sa_flags = SA_SIGINFO | SA_RESETHAND;
-	sa_rotate_log.sa_flags = SA_RESTART;
-	sigfillset(&sa_rotate_log.sa_mask);
-
-	/*! SIGUSR1*/
-	if (sigaction(SIGUSR1, &sa_rotate_log, NULL) != 0)
-		errx(1, "%s: Failed to install sighandler for SIGUSR1", __func__);
-}
 
 /*! main
  \brief process arguments, daemonize, init variables, create QUEUE handler and process each packet
@@ -981,7 +907,7 @@ int main(int argc, char *argv[]) {
 #endif
 	g_printerr(
 			"Honeybrid V%s Copyright (c)\n2007-2009 University of Maryland\n2012 University of Connecticut\n",
-			VERSION);
+			PACKAGE_VERSION);
 
 	/*! parsing arguments */
 	if (argc < 2)
@@ -1010,7 +936,7 @@ int main(int argc, char *argv[]) {
 			}
 			break;
 		case 'V':
-			printf("Honeybrid Version %s\n", VERSION);
+			printf("Honeybrid Version %s\n", PACKAGE_VERSION);
 			exit(0);
 			break;
 		case 'q':
@@ -1070,8 +996,6 @@ int main(int argc, char *argv[]) {
 	init_variables();
 	/*! parse the configuration files and store values in memory */
 	init_parser(config_file_name);
-	/*! setup threading environment */
-	init_threading();
 
 	/*! Create PID file, we might not be able to remove it */
 	pidfile = g_malloc0(
@@ -1148,8 +1072,7 @@ int main(int argc, char *argv[]) {
 	init_modules();
 
 	/*! create the raw sockets for UDP/IP and TCP/IP */
-	init_raw_sockets();
-	if (tcp_rsd == 0 || udp_rsd == 0)
+	if(NOK == init_raw_sockets())
 		errx(1, "%s: failed to create the raw sockets", __func__);
 
 #ifdef HAVE_LIBEV
@@ -1170,7 +1093,7 @@ int main(int argc, char *argv[]) {
 	close_nfqueue(qh, queuenum);
 #else
 	/*! create a thread for the management, cleaning stuffs and so on */
-	if ((thread_clean = g_thread_new("cleaner", (void *) switch_clean, NULL))
+	if ((thread_clean = g_thread_new("cleaner", (void *) clean, NULL))
 			== NULL) {
 		errx(1, "%s: Unable to start the cleaning thread", __func__);
 	} else {

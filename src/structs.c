@@ -21,35 +21,19 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-
-#include <glib.h>
-
-#include "tables.h"
-#include "log.h"
-#include "netcode.h"
+#include "structs.h"
 #include "decision_engine.h"
 
-/*! config_lookup
- /brief lookup values from the config hash table. Make sure the required value is present
+/*!	\file structs.c
+ \brief
+
+ This file is intended to provide a place for the struct free functions
+ to be placed at. It is not a requirement, as sometimes it makes the code
+ easier to read to have the free function next to it's init counterpart.
+
  */
 
-gpointer config_lookup(char * parameter, gboolean required) {
-	gpointer ret = g_hash_table_lookup(config, parameter);
-	if (!ret && required) {
-		errx(1, "Missing configuration parameter '%s'", parameter);
-	}
-	return ret;
-}
-
-gint intcmp(gconstpointer v1, gconstpointer v2, gconstpointer v3) {
-	return (*(uint32_t *) v1 < (*(uint32_t *) v2) ? 1 :
-			(*(uint32_t *) v1 == (*(uint32_t *) v2)) ? 0 : -1);
-}
-
-void free_interface(gpointer data) {
-	struct interface *iface = (struct interface *) data;
+void free_interface(struct interface *iface) {
 	if (iface) {
 		g_free(iface->ip);
 		g_free(iface->ip_str);
@@ -59,12 +43,20 @@ void free_interface(gpointer data) {
 	}
 }
 
-void free_backend(gpointer data) {
-	struct backend *backend = (struct backend *) data;
-
+void free_backend(struct backend *backend) {
 	if (backend) {
 		DE_destroy_tree(backend->rule);
 		free_interface(backend->iface);
 		g_free(backend);
 	}
+}
+
+void free_target_gfunc(struct target *t, gpointer user_data) {
+	g_free(t->filter);
+	g_free(t->front_handler);
+	g_tree_destroy(t->back_handlers);
+	g_hash_table_destroy(t->unique_backend_ips);
+	DE_destroy_tree(t->front_rule);
+	DE_destroy_tree(t->control_rule);
+	g_free(t);
 }

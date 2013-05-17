@@ -21,11 +21,8 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __TABLES_H__
-#define __TABLES_H__
-
-#include <glib.h>
-#include <err.h>
+#ifndef __GLOBALS_H__
+#define __GLOBALS_H__
 
 #include "types.h"
 
@@ -43,7 +40,7 @@ const char *pidfile;
 status_t threading;
 
 GMutex threading_cond_lock;
-GCond  threading_cond;
+GCond threading_cond;
 
 /*! \brief connection id */
 uint64_t c_id;
@@ -52,7 +49,7 @@ uint64_t c_id;
 int max_packet_buffer;
 
 /*! \brief global array of pointers to hold target structures */
-GPtrArray* targets;
+GPtrArray *targets;
 
 /*! \brief global hash table that contain the values of the configuration file  */
 GHashTable *config;
@@ -74,7 +71,7 @@ GRWLock hihredirlock;
  *
  \param key, each entry is represented by the tuple of the connection (sourceIP+sourcePort+destIP+destPort)
  \param value, the associated value of an entry is a conn_struct structure  */
-GTree * conn_tree;
+GTree *conn_tree;
 
 /*! \brief security writing lock for the Binary Tree
  */
@@ -87,30 +84,32 @@ GHashTable *module_to_save;
 /*! \brief pointer table for btree cleaning */
 GPtrArray *entrytoclean;
 
+/*!
+ \def running
+ *
+ * Init value: OK
+ * Set to NOK when honeybrid stops
+ * It is used to stop processing new data wht NF_QUEUE when honeybrid stops */
+status_t running;
+
+/*!
+ \def thread_clean
+ \def thread_log */
+GThread *thread_clean;
+GThread *thread_de;
+GThread *mod_backup;
+
+/*!
+ \def log level
+ */
+
+log_verbosity_t LOG_LEVEL;
+
+/*!
+ \Def file descriptor to log debug output
+ */
+int fdebug;
+
 /* -------------------------------------------------- */
 
-gpointer config_lookup(char * parameter, gboolean required);
-
-gint intcmp(gconstpointer a, gconstpointer b, gconstpointer c);
-
-void free_interface(gpointer data);
-
-void free_backend(gpointer data);
-
-#define ghashtable_foreach(table, i, key, val) \
-        g_hash_table_iter_init(i, table); \
-        while(g_hash_table_iter_next(i,(void**)key,(void**)val))
-
-#define CONFIG(parameter) \
-	(const char *)(config_lookup(parameter, FALSE))
-
-#define CONFIG_REQUIRED(parameter) \
-	(const char *)(config_lookup(parameter, TRUE))
-
-#define ICONFIG(parameter) \
-	(config_lookup(parameter, FALSE) ? *(const int *)config_lookup(parameter, FALSE) : NOK)
-
-#define ICONFIG_REQUIRED(parameter) \
-	(config_lookup(parameter, TRUE) ? *(const int *)config_lookup(parameter, TRUE) : NOK)
-
-#endif //__TABLES_H__
+#endif //__GLOBALS_H__
