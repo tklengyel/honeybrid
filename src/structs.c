@@ -51,7 +51,7 @@ void free_backend(struct backend *backend) {
 	}
 }
 
-void free_target_gfunc(struct target *t, gpointer user_data) {
+void free_target_gfunc(struct target *t, gpointer unused) {
 	g_free(t->filter);
 	g_free(t->front_handler);
 	g_tree_destroy(t->back_handlers);

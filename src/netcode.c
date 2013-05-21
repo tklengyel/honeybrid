@@ -32,7 +32,6 @@
 
 #include <sys/socket.h>
 
-#include "types.h"
 #include "globals.h"
 #include "convenience.h"
 #include "log.h"
@@ -53,13 +52,29 @@
  */
 int udp_rsd, tcp_rsd; // generic socket
 
+/*! ip_checksum
+ \brief IP checksum using in_cksum
+ */
+#define ip_checksum(hdr) \
+	((struct iphdr*)hdr)->check = \
+		in_cksum(hdr, \
+		sizeof(struct iphdr))
+
+/*! udp_checksum
+ \brief UDP checksum using in_cksum
+ */
+#define udp_checksum(hdr) \
+	((struct udp_packet *)hdr)->udp.check = \
+		in_cksum( hdr, \
+        sizeof(struct udphdr))
+
 /*! in_cksum
  \brief Checksum routine for Internet Protocol family headers
  \param[in] addr a pointer to the data
  \param[in] len the 32 bits data size
  \return sum a 16 bits checksum
  */
-uint16_t in_cksum(const void *addr, uint32_t len) {
+static inline uint16_t in_cksum(const void *addr, uint32_t len) {
 	uint32_t sum = 0;
 	const uint16_t *w = addr;
 	int nleft = len;
@@ -85,6 +100,43 @@ uint16_t in_cksum(const void *addr, uint32_t len) {
 	sum = (sum >> 16) + (sum & 0xffff); /*! add hi 16 to low 16 */
 	sum += (sum >> 16); /*! add carry */
 	return ((uint16_t) ~sum); /*! truncate to 16 bits */
+}
+
+/*!
+ * test for a new tcp checksum function
+ \param[in] pkt: packet to compute the checksum
+ \return OK
+ */
+static inline void tcp_checksum(struct tcp_packet* pkt) {
+
+	//int padd = (pkt->ip.tot_len) & 1;
+
+	struct tcp_chk_packet chk_p;
+	bzero(&chk_p, sizeof(struct tcp_chk_packet));
+
+	unsigned short TOT_SIZE = ntohs(pkt->ip.tot_len);
+	unsigned short IPHDR_SIZE = (pkt->ip.ihl << 2);
+	unsigned short TCPHDRDATA_SIZE = TOT_SIZE - IPHDR_SIZE;
+	unsigned short len_tcp = TCPHDRDATA_SIZE;
+
+	if (len_tcp - sizeof(struct tcphdr) >= BUFSIZE)
+		g_printerr("%s TCP data is greater then our buffer size! %lu > %i!\n",
+				H(0), len_tcp - sizeof(struct tcphdr), BUFSIZE);
+
+	chk_p.pseudohdr.saddr = pkt->ip.saddr;
+	chk_p.pseudohdr.daddr = pkt->ip.daddr;
+	chk_p.pseudohdr.proto = IPPROTO_TCP;
+	chk_p.pseudohdr.tcp_len = htons(len_tcp);
+
+	memcpy(&chk_p.tcp, &pkt->tcp, sizeof(struct tcphdr));
+	memcpy(&chk_p.payload, &pkt->payload, len_tcp - sizeof(struct tcphdr));
+	chk_p.tcp.check = 0x00;
+
+	pkt->tcp.check = in_cksum(&chk_p, sizeof(struct pseudotcphdr) + len_tcp);
+
+#ifdef DEBUG
+	g_printerr("%s TCP checksum set to 0x%x\n", H(21), pkt->tcp.check);
+#endif
 }
 
 /*! send_raw
@@ -382,7 +434,7 @@ status_t replay(struct conn_struct* conn, struct pkt_struct* pkt) {
  \param[in] pkt: packet metadata used
 
  */
-status_t define_expected_data(struct pkt_struct* pkt) {
+void define_expected_data(struct pkt_struct* pkt) {
 	g_rw_lock_writer_lock(&pkt->conn->lock);
 	pkt->conn->expected_data.ip_proto = pkt->packet.ip->protocol;
 	pkt->conn->expected_data.payload = pkt->packet.payload;
@@ -393,7 +445,6 @@ status_t define_expected_data(struct pkt_struct* pkt) {
 
 	}
 	g_rw_lock_writer_unlock(&pkt->conn->lock);
-	return OK;
 }
 
 /*! test_expected
@@ -508,7 +559,7 @@ void init_raw_sockets_backends(gpointer target, gpointer opt) {
 }
 
 /* Loop through each backend interface*/
-gboolean init_raw_sockets_backends2(gpointer key, gpointer value, gpointer opt) {
+gboolean init_raw_sockets_backends2(gpointer unused, gpointer value, gpointer opt) {
 
 	struct backend *back_handler = (struct backend *) value;
 	struct interface *iface = back_handler->iface;
@@ -545,66 +596,69 @@ gboolean init_raw_sockets_backends2(gpointer key, gpointer value, gpointer opt) 
 	return FALSE;
 }
 
-/*!
- * test for a new tcp checksum function
- \param[in] pkt: packet to compute the checksum
- \return OK
- */
-void tcp_checksum(struct tcp_packet* pkt) {
+//from http://svn.linuxvirtualserver.org/repos/tcpsp/tags/tcpsp-0-0-4/tcpsp_core.c
+//also modified slightly - slow parse now returns success/failure
+/* this function is modified from tcp_parse_option (tcp_input.c) */
+int tcp_parse_timestamps(const struct tcphdr *th, void **ts_p) {
+	unsigned char *ptr;
+	int length = (th->doff * 4) - sizeof(struct tcphdr);
 
-	//int padd = (pkt->ip.tot_len) & 1;
+	ptr = (unsigned char *) (th + 1);
 
-	struct tcp_chk_packet chk_p;
-	bzero(&chk_p, sizeof(struct tcp_chk_packet));
+	while (length > 0) {
+		int opcode = *ptr++;
+		int opsize;
 
-	unsigned short TOT_SIZE = ntohs(pkt->ip.tot_len);
-	unsigned short IPHDR_SIZE = (pkt->ip.ihl << 2);
-	unsigned short TCPHDRDATA_SIZE = TOT_SIZE - IPHDR_SIZE;
-	unsigned short len_tcp = TCPHDRDATA_SIZE;
-
-	if (len_tcp - sizeof(struct tcphdr) >= BUFSIZE)
-		g_printerr("%s TCP data is greater then our buffer size! %lu > %i!\n",
-				H(0), len_tcp - sizeof(struct tcphdr), BUFSIZE);
-
-	chk_p.pseudohdr.saddr = pkt->ip.saddr;
-	chk_p.pseudohdr.daddr = pkt->ip.daddr;
-	//chk_p.pseudohdr.res1 = 0;
-	chk_p.pseudohdr.proto = IPPROTO_TCP;
-	chk_p.pseudohdr.tcp_len = htons(len_tcp);
-
-	memcpy(&chk_p.tcp, &pkt->tcp, sizeof(struct tcphdr));
-	memcpy(&chk_p.payload, &pkt->payload, len_tcp - sizeof(struct tcphdr));
-	chk_p.tcp.check = 0x00;
-
-	pkt->tcp.check = in_cksum(&chk_p, sizeof(struct pseudotcphdr) + len_tcp);
-
-#ifdef DEBUG
-	g_printerr("%s TCP checksum set to 0x%x\n", H(21), pkt->tcp.check);
-#endif
+		switch (opcode) {
+		case TCPOPT_EOL:
+			return 0;
+		case TCPOPT_NOP: /* Ref: RFC 793 section 3.1 */
+			length--;
+			continue;
+		default:
+			opsize = *ptr++;
+			if (opsize < 2) /* "silly options" */
+				return 0;
+			if (opsize > length)
+				return 0; /* don't parse partial options */
+			switch (opcode) {
+			case TCPOPT_TIMESTAMP:
+				if (opsize == TCPOLEN_TIMESTAMP)
+					*ts_p = (unsigned int *) ptr;
+				return 1;
+				break;
+			}
+			;
+			ptr += opsize - 2;
+			length -= opsize;
+			break;
+		};
+	}
+	return 0;
 }
 
-/*! addr2int
- * \brief Convert an IP address from string to int
- * \param[in] the IP address (string format)
- *
- * \return the IP address (int format)
- */
-int addr2int(const char *address) {
-	gchar **addr;
-	int intaddr;
-
-	if (address == NULL) {
-		g_printerr("%s Error, null address can't be converted!\n", H(0));
-		return -1;
+/* it only parse timestamp locations*/
+static inline int
+tcp_fast_parse_timestamps(const struct tcphdr *th, void **ts_p)
+{
+	if (th->doff == sizeof(struct tcphdr)>>2) {
+		return 0;
 	}
 
-	addr = g_strsplit(address, ".", 0);
+	if (th->doff ==
+	    (sizeof(struct tcphdr)>>2)+(TCPOLEN_TSTAMP_APPA>>2)) {
+		unsigned int *ptr = (unsigned int *)(th + 1);
+		if (*ptr == ntohl(TCPOPT_TSTAMP_HDR)) {
+			++ptr;
+			*ts_p = ptr;
+			return 1;
+		}
+	}
 
-	intaddr = atoi(addr[0]) << 24;
-	intaddr += atoi(addr[1]) << 16;
-	intaddr += atoi(addr[2]) << 8;
-	intaddr += atoi(addr[3]);
-	g_strfreev(addr);
-	return intaddr;
+	/* there is a chance that the fast parse doesn't work, then
+	   try slow parse for TCP timestamps */
+	return tcp_parse_timestamps(th, ts_p);
+
+	//return 0;
 }
 

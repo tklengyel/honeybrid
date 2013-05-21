@@ -39,6 +39,31 @@
 
  */
 
+/*! addr2int
+ * \brief Convert an IP address from string to int
+ * \param[in] the IP address (string format)
+ *
+ * \return the IP address (int format)
+ */
+static inline int addr2int(const char *address) {
+	gchar **addr;
+	int intaddr;
+
+	if (address == NULL) {
+		g_printerr("%s Error, null address can't be converted!\n", H(0));
+		return -1;
+	}
+
+	addr = g_strsplit(address, ".", 0);
+
+	intaddr = atoi(addr[0]) << 24;
+	intaddr += atoi(addr[1]) << 16;
+	intaddr += atoi(addr[2]) << 8;
+	intaddr += atoi(addr[3]);
+	g_strfreev(addr);
+	return intaddr;
+}
+
 /*! init_pkt
  \brief init the current packet structure with meta-information such as the origin and the number of bytes of data
  \param[in] nf_packet: The raw packet from the queue
@@ -823,7 +848,7 @@ status_t init_conn(struct pkt_struct *pkt, struct conn_struct **conn) {
  \param[in] key, a pointer to the current B-Tree key value stored in the pointer table
  \param[in] trash, user data, unused
  */
-void free_conn(gpointer key, gpointer trash) {
+void free_conn(gpointer key, gpointer unused) {
 
 	g_rw_lock_writer_lock(&conntreelock);
 

@@ -123,7 +123,7 @@ void usage(char **argv) {
  \param[in] signal_nb: number of the signal
  \param[in] siginfo: informations regarding to the signal
  \param[in] context: NULL */
-int term_signal_handler(int signal_nb, siginfo_t * siginfo, void *context) {
+int term_signal_handler(int signal_nb, siginfo_t * siginfo, void *unused) {
 	g_printerr("%s: Signal %d received, halting engine\n", __func__, signal_nb);
 #ifdef DEBUG
 	g_printerr("* Signal number:\t%d\n", siginfo->si_signo);
@@ -702,8 +702,8 @@ process_packet(struct nfq_data *tb) {
  \brief Callback function launched by the netfilter queue handler each time a packet is received
  //TODO: push packets here into an internal flow-based queue which the DE_thread can process
  * */
-static int q_cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
-		struct nfq_data *nfa, void *data) {
+static int q_cb(struct nfq_q_handle *qh, struct nfgenmsg *unused,
+		struct nfq_data *nfa, void *unused2) {
 	/*! get packet id */
 	struct nfqnl_msg_packet_hdr *ph;
 	ph = nfq_get_msg_packet_hdr(nfa);

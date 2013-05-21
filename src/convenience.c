@@ -44,7 +44,7 @@ gpointer config_lookup(const char * parameter, gboolean required) {
 	return ret;
 }
 
-gint intcmp(gconstpointer v1, gconstpointer v2, gconstpointer v3) {
+gint intcmp(gconstpointer v1, gconstpointer v2, gconstpointer unused) {
 	return (*(uint32_t *) v1 < (*(uint32_t *) v2) ? 1 :
 			(*(uint32_t *) v1 == (*(uint32_t *) v2)) ? 0 : -1);
 }

@@ -87,7 +87,7 @@ void free_vmi_vm(gpointer data) {
 }
 
 // Each backend
-gboolean build_vmi_vms2(gpointer key, gpointer value, gpointer data) {
+gboolean build_vmi_vms2(gpointer key, gpointer value, gpointer unused) {
 
 	//int *vmi_sock=(int *)data;
 	struct backend *back_handler = (struct backend *) value;
@@ -173,7 +173,7 @@ void build_vmi_vms(gpointer data, gpointer user_data) {
 
 }
 
-gboolean find_free_vm(gpointer key, gpointer value, gpointer data) {
+gboolean find_free_vm(gpointer unused, gpointer value, gpointer data) {
 
 	//uint32_t *vmID=(uint32_t *)key;
 	struct vmi_vm *vm = (struct vmi_vm *) value;
@@ -280,7 +280,7 @@ void get_random_vm(struct vm_search *search) {
 	}
 }
 
-gboolean find_used_vm(gpointer key, gpointer value, gpointer data) {
+gboolean find_used_vm(gpointer unused, gpointer value, gpointer data) {
 	struct vmi_vm *vm = (struct vmi_vm *) value;
 	struct vm_search *search = (struct vm_search *) data;
 
@@ -300,7 +300,7 @@ gboolean find_used_vm(gpointer key, gpointer value, gpointer data) {
 	return FALSE;
 }
 
-gboolean find_if_banned(gpointer key, gpointer value, gpointer data) {
+gboolean find_if_banned(gpointer key, gpointer unused, gpointer data) {
 	struct attacker_search *attacker = (struct attacker_search *) data;
 	if (!strcmp((char *) key, attacker->srcIP)) {
 		attacker->banned = 1;
@@ -457,7 +457,7 @@ void mod_vmi_pick(struct mod_args *args) {
 	 */
 //}
 
-gboolean control_check_attacker(gpointer key, gpointer value, gpointer data) {
+gboolean control_check_attacker(gpointer unused, gpointer value, gpointer data) {
 	struct vmi_vm *vm = (struct vmi_vm *) value;
 	struct attacker_search *search = (struct attacker_search *) data;
 

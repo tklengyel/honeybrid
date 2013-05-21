@@ -159,7 +159,7 @@ module_function get_module(const char *modname) {
  *  \brief This function write a module backup memory to a file
  */
 
-int write_backup(const char *filename, GKeyFile *data, void *userdata)
+int write_backup(const char *filename, GKeyFile *data, void *unused)
 {
     g_printerr("%s saving backup module %p to %s\n", H(6), data, filename);
     gchar *buf;
