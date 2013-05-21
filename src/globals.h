@@ -46,7 +46,7 @@ GCond threading_cond;
 uint64_t c_id;
 
 /*! \brief max number of packets to save for replay in an EXT<->LIH connection (negative value = save all) */
-int max_packet_buffer;
+uint64_t max_packet_buffer;
 
 /*! \brief global array of pointers to hold target structures */
 GPtrArray *targets;

@@ -3,7 +3,7 @@
 honeybrid=$1
 config=$2
 
-G_DEBUG=gc-friendly G_SLICE=always-malloc valgrind --tool=memcheck --leak-check=full --leak-resolution=high --num-callers=20 --time-stamp=yes --trace-children=yes --track-origins=yes $honeybrid -c $config
+G_DEBUG=gc-friendly G_SLICE=always-malloc valgrind -v --tool=memcheck --leak-check=full --leak-resolution=high --num-callers=20 --time-stamp=yes --trace-children=yes --track-origins=yes $honeybrid -c $config
 
 exit
 

@@ -39,7 +39,7 @@
  \param[out] set result to 1 packet position match arg, 0 otherwise
  */
 void mod_counter(struct mod_args *args) {
-	int pktval = 0;
+	uint32_t pktval = 0;
 	gchar *param;
 
 	g_printerr("%s Module called\n", H(args->pkt->conn->id));
@@ -52,7 +52,7 @@ void mod_counter(struct mod_args *args) {
 				H(args->pkt->conn->id));
 		return;
 	} else {
-		pktval = atoi(param);
+		pktval = (uint32_t)atoi(param);
 	}
 
 	if (pktval <= args->pkt->conn->count_data_pkt_from_intruder) {

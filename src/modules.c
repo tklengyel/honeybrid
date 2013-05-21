@@ -159,7 +159,7 @@ module_function get_module(const char *modname) {
  *  \brief This function write a module backup memory to a file
  */
 
-int write_backup(const char *filename, GKeyFile *data, void *unused)
+int write_backup(const char *filename, GKeyFile *data, __attribute__((unused)) void *unused)
 {
     g_printerr("%s saving backup module %p to %s\n", H(6), data, filename);
     gchar *buf;
@@ -199,8 +199,11 @@ void save_backup_handler() {
 		if (module_to_save != NULL) {
 			removed = g_hash_table_foreach_steal(module_to_save,
 					(GHRFunc) write_backup, NULL);
-			g_printerr("%s %d entries saved and removed from module_to_save\n",
-					H(0), removed);
+
+			if (removed)
+				g_printerr(
+						"%s %d entries saved and removed from module_to_save\n",
+						H(0), removed);
 		}
 	}
 

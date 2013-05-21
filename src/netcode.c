@@ -50,7 +50,7 @@
  \brief Raw socket descriptor for TCP/IP raw socket
  *
  */
-int udp_rsd, tcp_rsd; // generic socket
+int udp_rsd, tcp_rsd; // generic sockets
 
 /*! ip_checksum
  \brief IP checksum using in_cksum
@@ -74,7 +74,8 @@ int udp_rsd, tcp_rsd; // generic socket
  \param[in] len the 32 bits data size
  \return sum a 16 bits checksum
  */
-static inline uint16_t in_cksum(const void *addr, uint32_t len) {
+static inline
+uint16_t in_cksum(const void *addr, uint32_t len) {
 	uint32_t sum = 0;
 	const uint16_t *w = addr;
 	int nleft = len;
@@ -103,11 +104,12 @@ static inline uint16_t in_cksum(const void *addr, uint32_t len) {
 }
 
 /*!
- * test for a new tcp checksum function
+ * tcp checksum function
  \param[in] pkt: packet to compute the checksum
  \return OK
  */
-static inline void tcp_checksum(struct tcp_packet* pkt) {
+static inline
+void tcp_checksum(struct tcp_packet* pkt) {
 
 	//int padd = (pkt->ip.tot_len) & 1;
 
@@ -130,13 +132,216 @@ static inline void tcp_checksum(struct tcp_packet* pkt) {
 
 	memcpy(&chk_p.tcp, &pkt->tcp, sizeof(struct tcphdr));
 	memcpy(&chk_p.payload, &pkt->payload, len_tcp - sizeof(struct tcphdr));
-	chk_p.tcp.check = 0x00;
+	chk_p.tcp.check = 0x00; // checksum field has to be zeroed before checksum
 
 	pkt->tcp.check = in_cksum(&chk_p, sizeof(struct pseudotcphdr) + len_tcp);
 
 #ifdef DEBUG
 	g_printerr("%s TCP checksum set to 0x%x\n", H(21), pkt->tcp.check);
 #endif
+}
+
+/*
+ * This will replace the TCP Timestamps option with TCPOPT_EOL
+ * but if there are no other options this TCP segment should be removed
+ * and the data offset (doff) updated accordingly (TODO)
+ *
+ * BEWARE: RIGHT NOW THIS CAN BE USED TO DETECT THE PRESENCE HONEYBRID
+ * Only matters if the LIH is configured not to send TS and the HIH is sending TS
+ *
+ */
+static inline
+void strip_tcp_timestamps(struct tcphdr *th) {
+
+	if (th->doff == sizeof(struct tcphdr) >> 2) {
+		return;
+	}
+
+	if (th->doff == (sizeof(struct tcphdr) >> 2) + (TCPOLEN_TSTAMP_APPA >> 2)) {
+		unsigned int *ptr = (unsigned int *) (th + 1);
+		if (*ptr == ntohl(TCPOPT_TSTAMP_HDR)) {
+			*(unsigned char *)ptr = TCPOPT_EOL;
+			return;
+		}
+	}
+
+	// In case there are other optional headers we need to parse normally
+	unsigned char *ptr = (unsigned char *) (th + 1);
+	unsigned char *length = ptr + (th->doff * 4) - sizeof(struct tcphdr) - 1;
+
+	while (ptr < length) {
+		int opcode = ptr[0];
+		int opsize = ptr[1];
+
+		switch (opcode) {
+		case TCPOPT_EOL:
+			return;
+		case TCPOPT_NOP: /* Ref: RFC 793 section 3.1 */
+			ptr++;
+			continue;
+		case TCPOPT_TIMESTAMP:
+			ptr[0] = TCPOPT_EOL;
+			return;
+		default:
+			ptr += opsize;
+			break;
+		};
+	}
+}
+
+static inline
+status_t get_tcp_timestamps(const struct tcphdr* th, uint32_t *tsval,
+		uint32_t *tsecho) {
+
+	if (th->doff == sizeof(struct tcphdr) >> 2) {
+		return NOK;
+	}
+
+	if (th->doff == (sizeof(struct tcphdr) >> 2) + (TCPOLEN_TSTAMP_APPA >> 2)) {
+		unsigned int *ptr = (unsigned int *) (th + 1);
+		if (*ptr == ntohl(TCPOPT_TSTAMP_HDR)) {
+
+			++ptr;
+
+			if(tsval)  *tsval = ntohl(ptr[0]);
+			if(tsecho) *tsecho = ntohl(ptr[1]);
+
+#ifdef DEBUG
+			g_printerr("%s TCP timestamps found. TSVal: %u TSEcho: %u \n",
+					H(31), ntohl(ptr[0]), ntohl(ptr[1]));
+#endif
+
+			return OK;
+		}
+	}
+
+	// In case there are other optional headers we need to parse normally
+	unsigned char *ptr = (unsigned char *) (th + 1);
+	unsigned char *length = ptr + (th->doff * 4) - sizeof(struct tcphdr) - 1;
+
+	while (ptr < length) {
+		int opcode = ptr[0];
+		int opsize = ptr[1];
+
+		switch (opcode) {
+		case TCPOPT_EOL:
+			return NOK;
+		case TCPOPT_NOP: /* Ref: RFC 793 section 3.1 */
+			ptr++;
+			continue;
+		case TCPOPT_TIMESTAMP:
+			if (opsize == TCPOLEN_TIMESTAMP) {
+
+				unsigned int *ts = (unsigned int *) (ptr + 2);
+
+				if (tsval)  *tsval = ntohl(ts[0]);
+				if (tsecho) *tsecho = ntohl(ts[1]);
+
+#ifdef DEBUG
+				g_printerr("%s TCP timestamps found. TSVal: %u. TSEcho: %u\n",
+						H(31), ntohl(ts[0]), ntohl(ts[1]));
+#endif
+
+				return OK;
+			}
+			break;
+		default:
+			ptr += opsize;
+			break;
+		};
+	}
+
+	return NOK;
+}
+
+static inline
+void set_tcp_timestamps(struct tcphdr* th, uint32_t *tsval, uint32_t *tsecho) {
+
+	if (th->doff == sizeof(struct tcphdr) >> 2 || (!tsval && !tsecho)) {
+		return;
+	}
+
+	if (th->doff == (sizeof(struct tcphdr) >> 2) + (TCPOLEN_TSTAMP_APPA >> 2)) {
+		unsigned int *ptr = (unsigned int *) (th + 1);
+		if (*ptr == ntohl(TCPOPT_TSTAMP_HDR)) {
+
+			++ptr;
+
+			if(tsval) ptr[0] = htonl(*tsval);
+			if(tsecho) ptr[1] = htonl(*tsecho);
+
+			return;
+		}
+	}
+
+	// In case there are other optional headers we need to parse normally
+	unsigned char *ptr = (unsigned char *) (th + 1);
+	unsigned char *length = ptr + (th->doff * 4) - sizeof(struct tcphdr) - 1;
+
+	while (ptr < length) {
+		int opcode = ptr[0];
+		int opsize = ptr[1];
+
+		switch (opcode) {
+		case TCPOPT_EOL:
+			return;
+		case TCPOPT_NOP: /* Ref: RFC 793 section 3.1 */
+			ptr++;
+			continue;
+		case TCPOPT_TIMESTAMP:
+			if (opsize == TCPOLEN_TIMESTAMP) {
+
+				unsigned int *ts = (unsigned int *) (ptr + 2);
+
+				if (tsval)  ts[0] = htonl(*tsval);
+				if (tsecho) ts[1] = htonl(*tsecho);
+
+				return;
+			}
+			break;
+		default:
+			ptr += opsize;
+			break;
+		};
+	}
+}
+
+static inline
+status_t fix_tcp_timestamps(struct tcphdr* th, const struct conn_struct *conn) {
+	if(conn->replay_problem & REPLAY_UNEXPECTED_TCP_TS) {
+		strip_tcp_timestamps(th);
+
+#ifdef DEBUG
+			g_printerr("%s TCP timestamps stripped. This is detectable!\n", H(21));
+#endif
+
+		return OK;
+	}
+	if (conn->replay_problem & REPLAY_TCP_TS_OUTOFSYNC) {
+
+		uint32_t tcp_ts;
+		if (OK == get_tcp_timestamps(th, &tcp_ts, NULL)) {
+			tcp_ts=(int)tcp_ts + (int)conn->tcp_ts_diff;
+			set_tcp_timestamps(th, &tcp_ts, NULL);
+
+#ifdef DEBUG
+			g_printerr("%s Updated TCP timestamp to %u!\n", H(21),
+					tcp_ts);
+#endif
+
+			return OK;
+		}
+	}
+	if (conn->replay_problem & REPLAY_EXPECTED_TCP_TS) {
+		//TODO
+#ifdef DEBUG
+		g_printerr(
+				"%s Was expecting TCP timestamps but didn't find them. This is detectable!\n",
+				H(21));
+#endif
+	}
+
+	return NOK;
 }
 
 /*! send_raw
@@ -156,6 +361,7 @@ status_t send_raw(const struct iphdr *p, const struct interface *iface) {
 #endif
 
 	struct sockaddr_in dst;
+	bzero(&dst, sizeof(struct sockaddr_in));
 	int bytes_sent;
 	int sockettouse = 0;
 	dst.sin_addr.s_addr = p->daddr;
@@ -178,7 +384,7 @@ status_t send_raw(const struct iphdr *p, const struct interface *iface) {
 	}
 
 	bytes_sent = sendto(sockettouse, p, ntohs(p->tot_len), 0,
-			(struct sockaddr *) &dst, sizeof(struct sockaddr_in));
+			(__CONST_SOCKADDR_ARG) &dst, sizeof(struct sockaddr_in));
 
 	if (bytes_sent < 0) {
 		g_printerr("%s Packet not sent\n", H(4));
@@ -220,6 +426,7 @@ status_t forward(struct pkt_struct* pkt) {
 			tcp_fwd->tcp.source = pkt->conn->hih.port;
 			tcp_fwd->tcp.seq = htonl(
 					ntohl(pkt->packet.tcp->seq) + pkt->conn->hih.delta);
+			fix_tcp_timestamps(&tcp_fwd->tcp, pkt->conn);
 			tcp_checksum(tcp_fwd);
 		}
 		/*!If UDP, we update the source port and the checksum*/
@@ -388,6 +595,7 @@ status_t replay(struct conn_struct* conn, struct pkt_struct* pkt) {
 	 * until we find a packet from LIH
 	 */
 	if (test_expected(conn, pkt) == OK) {
+
 		g_printerr("%s Looping over BUFFER\n", H(conn->id));
 		current = (struct pkt_struct*) g_slist_nth_data(conn->BUFFER,
 				conn->replay_id);
@@ -443,6 +651,13 @@ void define_expected_data(struct pkt_struct* pkt) {
 				+ ~pkt->conn->hih.delta + 1;
 		pkt->conn->expected_data.tcp_ack_seq = ntohl(pkt->packet.tcp->ack_seq);
 
+		uint32_t temp;
+		if(OK==get_tcp_timestamps(pkt->packet.tcp, &temp, NULL)) {
+			pkt->conn->expected_data.tcp_ts = (int64_t)temp;
+		} else {
+			pkt->conn->expected_data.tcp_ts = -1;
+		}
+
 	}
 	g_rw_lock_writer_unlock(&pkt->conn->lock);
 }
@@ -452,37 +667,85 @@ void define_expected_data(struct pkt_struct* pkt) {
  \brief get the packet from HIH, compare it to expected data, drop it and return the comparison result
  */
 status_t test_expected(struct conn_struct* conn, struct pkt_struct* pkt) {
-	status_t flag = NOK;
+	status_t flag = OK;
 
 	if (pkt->packet.ip->protocol != conn->expected_data.ip_proto) {
 		g_printerr("%s Unexpected protocol: %d\n", H(conn->id),
 				pkt->packet.ip->protocol);
 
-		conn->replay_problem = conn->replay_problem
-				| REPLAY_UNEXPECTED_PROTOCOL;
-	} else if ((pkt->packet.ip->protocol == TCP) && (pkt->packet.tcp->syn == 0)
-			&& (ntohl(pkt->packet.tcp->seq) != conn->expected_data.tcp_seq)) {
-		g_printerr("%s Unexpected TCP seq. number: %u. Expected: %u\n",
-				H(conn->id), ntohl(pkt->packet.tcp->seq),
-				conn->expected_data.tcp_seq);
+		conn->replay_problem |= REPLAY_UNEXPECTED_PROTOCOL;
 
-		conn->replay_problem = conn->replay_problem | REPLAY_UNEXPECTED_TCP_SEQ;
-	} else if ((pkt->packet.ip->protocol == TCP)
-			&& (ntohl(pkt->packet.tcp->ack_seq)
-					!= conn->expected_data.tcp_ack_seq)) {
-		g_printerr("%s Unexpected TCP ack. number\n", H(conn->id));
-		conn->replay_problem = conn->replay_problem | REPLAY_UNEXPECTED_TCP_ACK;
-	} else if ((pkt->packet.ip->protocol == TCP)
-			&& (!strncmp(pkt->packet.payload, conn->expected_data.payload,
-					pkt->data) == 0)) {
-		flag = OK;
-		g_printerr("%s Unexpected payload\n", H(conn->id));
-		conn->replay_problem = conn->replay_problem | REPLAY_UNEXPECTED_PAYLOAD;
-	} else {
-		flag = OK;
-		g_printerr("%s Expected data OK\n", H(conn->id));
+		flag = NOK;
+		goto test_done;
 	}
 
+	if (pkt->packet.ip->protocol == TCP) {
+		if (pkt->packet.tcp->syn == 0
+				&& (ntohl(pkt->packet.tcp->seq) != conn->expected_data.tcp_seq)) {
+
+			g_printerr("%s Unexpected TCP seq. number: %u. Expected: %u\n",
+					H(conn->id), ntohl(pkt->packet.tcp->seq),
+					conn->expected_data.tcp_seq);
+
+			conn->replay_problem |= REPLAY_UNEXPECTED_TCP_SEQ;
+
+			flag = NOK;
+			goto test_done;
+		}
+
+		if (ntohl(pkt->packet.tcp->ack_seq) != conn->expected_data.tcp_ack_seq) {
+
+			g_printerr("%s Unexpected TCP ack. number\n", H(conn->id));
+
+			conn->replay_problem |= REPLAY_UNEXPECTED_TCP_ACK;
+
+			flag = NOK;
+			goto test_done;
+		}
+
+		/*
+		 * Test TCP Timestamps. These problems can be handled.
+		 */
+		int64_t tcp_ts = -1;
+		uint32_t temp;
+		if(OK==get_tcp_timestamps(pkt->packet.tcp, &temp, NULL)) {
+			tcp_ts = (int64_t) temp;
+		}
+
+		if (conn->expected_data.tcp_ts == -1 && tcp_ts != -1) {
+			g_printerr("%s Unexpected TCP Timestamp (will be stripped)\n",
+					H(conn->id));
+
+			conn->replay_problem |= REPLAY_UNEXPECTED_TCP_TS;
+
+		} else if (conn->expected_data.tcp_ts > -1 && tcp_ts > -1
+				&& tcp_ts != conn->expected_data.tcp_ts) {
+
+			conn->tcp_ts_diff = conn->expected_data.tcp_ts - tcp_ts;
+			conn->replay_problem |= REPLAY_TCP_TS_OUTOFSYNC;
+
+			g_printerr(
+					"%s TCP Timestamp is smaller then expected (will be updated). Skew: %li.\n",
+					H(conn->id), conn->tcp_ts_diff);
+
+		} else if (conn->expected_data.tcp_ts > -1 && tcp_ts == -1) {
+			g_printerr("%s TCP Timestamp was expected (should be added)\n",
+					H(conn->id));
+
+			conn->replay_problem |= REPLAY_EXPECTED_TCP_TS;
+		}
+	}
+
+	if (!strncmp(pkt->packet.payload, conn->expected_data.payload, pkt->data)
+			== 0) {
+		g_printerr("%s Unexpected payload\n", H(conn->id));
+		conn->replay_problem = conn->replay_problem | REPLAY_UNEXPECTED_PAYLOAD;
+	}
+
+	if (flag == OK)
+		g_printerr("%s Expected data OK\n", H(conn->id));
+
+test_done:
 	return flag;
 }
 
@@ -559,7 +822,7 @@ void init_raw_sockets_backends(gpointer target, gpointer opt) {
 }
 
 /* Loop through each backend interface*/
-gboolean init_raw_sockets_backends2(gpointer unused, gpointer value, gpointer opt) {
+gboolean init_raw_sockets_backends2(__attribute__((unused)) gpointer unused, gpointer value, gpointer opt) {
 
 	struct backend *back_handler = (struct backend *) value;
 	struct interface *iface = back_handler->iface;
@@ -594,71 +857,5 @@ gboolean init_raw_sockets_backends2(gpointer unused, gpointer value, gpointer op
 				iface->name, iface->udp_socket);
 
 	return FALSE;
-}
-
-//from http://svn.linuxvirtualserver.org/repos/tcpsp/tags/tcpsp-0-0-4/tcpsp_core.c
-//also modified slightly - slow parse now returns success/failure
-/* this function is modified from tcp_parse_option (tcp_input.c) */
-int tcp_parse_timestamps(const struct tcphdr *th, void **ts_p) {
-	unsigned char *ptr;
-	int length = (th->doff * 4) - sizeof(struct tcphdr);
-
-	ptr = (unsigned char *) (th + 1);
-
-	while (length > 0) {
-		int opcode = *ptr++;
-		int opsize;
-
-		switch (opcode) {
-		case TCPOPT_EOL:
-			return 0;
-		case TCPOPT_NOP: /* Ref: RFC 793 section 3.1 */
-			length--;
-			continue;
-		default:
-			opsize = *ptr++;
-			if (opsize < 2) /* "silly options" */
-				return 0;
-			if (opsize > length)
-				return 0; /* don't parse partial options */
-			switch (opcode) {
-			case TCPOPT_TIMESTAMP:
-				if (opsize == TCPOLEN_TIMESTAMP)
-					*ts_p = (unsigned int *) ptr;
-				return 1;
-				break;
-			}
-			;
-			ptr += opsize - 2;
-			length -= opsize;
-			break;
-		};
-	}
-	return 0;
-}
-
-/* it only parse timestamp locations*/
-static inline int
-tcp_fast_parse_timestamps(const struct tcphdr *th, void **ts_p)
-{
-	if (th->doff == sizeof(struct tcphdr)>>2) {
-		return 0;
-	}
-
-	if (th->doff ==
-	    (sizeof(struct tcphdr)>>2)+(TCPOLEN_TSTAMP_APPA>>2)) {
-		unsigned int *ptr = (unsigned int *)(th + 1);
-		if (*ptr == ntohl(TCPOPT_TSTAMP_HDR)) {
-			++ptr;
-			*ts_p = ptr;
-			return 1;
-		}
-	}
-
-	/* there is a chance that the fast parse doesn't work, then
-	   try slow parse for TCP timestamps */
-	return tcp_parse_timestamps(th, ts_p);
-
-	//return 0;
 }
 

@@ -27,7 +27,7 @@
 
 #define ATTACK_TIMEOUT 600
 
-GThread vmi_status_updater;
+GThread *vmi_status_updater;
 GTree *vmi_vms;
 GTree *bannedIPs;
 int vmi_sock;
@@ -87,7 +87,7 @@ void free_vmi_vm(gpointer data) {
 }
 
 // Each backend
-gboolean build_vmi_vms2(gpointer key, gpointer value, gpointer unused) {
+gboolean build_vmi_vms2(gpointer key, gpointer value, __attribute__((unused)) gpointer unused) {
 
 	//int *vmi_sock=(int *)data;
 	struct backend *back_handler = (struct backend *) value;
@@ -173,7 +173,7 @@ void build_vmi_vms(gpointer data, gpointer user_data) {
 
 }
 
-gboolean find_free_vm(gpointer unused, gpointer value, gpointer data) {
+gboolean find_free_vm(__attribute__((unused)) gpointer unused, gpointer value, gpointer data) {
 
 	//uint32_t *vmID=(uint32_t *)key;
 	struct vmi_vm *vm = (struct vmi_vm *) value;
@@ -280,7 +280,7 @@ void get_random_vm(struct vm_search *search) {
 	}
 }
 
-gboolean find_used_vm(gpointer unused, gpointer value, gpointer data) {
+gboolean find_used_vm(__attribute__((unused)) gpointer unused, gpointer value, gpointer data) {
 	struct vmi_vm *vm = (struct vmi_vm *) value;
 	struct vm_search *search = (struct vm_search *) data;
 
@@ -300,7 +300,7 @@ gboolean find_used_vm(gpointer unused, gpointer value, gpointer data) {
 	return FALSE;
 }
 
-gboolean find_if_banned(gpointer key, gpointer unused, gpointer data) {
+gboolean find_if_banned(gpointer key, __attribute__((unused)) gpointer unused, gpointer data) {
 	struct attacker_search *attacker = (struct attacker_search *) data;
 	if (!strcmp((char *) key, attacker->srcIP)) {
 		attacker->banned = 1;
@@ -457,7 +457,7 @@ void mod_vmi_pick(struct mod_args *args) {
 	 */
 //}
 
-gboolean control_check_attacker(gpointer unused, gpointer value, gpointer data) {
+gboolean control_check_attacker(__attribute__((unused)) gpointer unused, gpointer value, gpointer data) {
 	struct vmi_vm *vm = (struct vmi_vm *) value;
 	struct attacker_search *search = (struct attacker_search *) data;
 
@@ -702,7 +702,7 @@ int init_mod_vmi() {
 		errx(1, "%s: ERROR opening socket", __func__);
 
 	/* build the server's Internet address */
-	bzero((char *) &vmi_addr, sizeof(vmi_addr));
+	bzero(&vmi_addr, sizeof(vmi_addr));
 	vmi_addr.sin_family = AF_INET;
 	vmi_addr.sin_addr.s_addr = inet_addr(vmi_server_ip);
 	vmi_addr.sin_port = htons(atoi(vmi_server_port));
@@ -730,7 +730,7 @@ int init_mod_vmi() {
 	bannedIPs = g_tree_new_full((GCompareDataFunc) strcmp, NULL,
 			(GDestroyNotify) g_free, NULL);
 
-	g_thread_new("vm_status_updater", (void *) vm_status_updater_thread, NULL);
+	vmi_status_updater=g_thread_new("vm_status_updater", (void *) vm_status_updater_thread, NULL);
 
 	return 0;
 }

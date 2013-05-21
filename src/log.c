@@ -374,7 +374,7 @@ void connection_log(const struct conn_struct *conn) {
 		break;
 	}
 
-	gint i;
+	conn_status_t i;
 	GString *status_info[6];
 	gdouble lasttime = conn->start_microtime;
 	gdouble duration = 0.0;

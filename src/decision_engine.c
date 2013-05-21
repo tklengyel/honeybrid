@@ -416,6 +416,8 @@ status_t DE_process_packet(struct pkt_struct *pkt) {
 				switch_state(pkt->conn, DECISION);
 			}
 			break;
+		default:
+			break;
 		}
 
 		result = OK;
@@ -459,6 +461,8 @@ status_t DE_process_packet(struct pkt_struct *pkt) {
 			break;
 		case CONTROL:
 			result = OK;
+			break;
+		default:
 			break;
 		}
 		break;

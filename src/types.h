@@ -51,6 +51,7 @@
 
 #define ETHER_ADDR_LEN	6
 #define ETHER_HDR_LEN	14
+#define UDP_HDR_LEN		8
 
 /*!
  \def PAYLOADSIZE
@@ -118,10 +119,13 @@ typedef enum {
 } status_t;
 
 typedef enum {
-	REPLAY_UNEXPECTED_PAYLOAD	= (1 << 0),
-	REPLAY_UNEXPECTED_TCP_ACK	= (1 << 1),
-	REPLAY_UNEXPECTED_TCP_SEQ 	= (1 << 2),
-	REPLAY_UNEXPECTED_PROTOCOL 	= (1 << 3)
+	REPLAY_UNEXPECTED_PROTOCOL 	= (1 << 0),
+	REPLAY_UNEXPECTED_PAYLOAD	= (1 << 1),
+	REPLAY_UNEXPECTED_TCP_ACK	= (1 << 2),
+	REPLAY_UNEXPECTED_TCP_SEQ 	= (1 << 3),
+	REPLAY_UNEXPECTED_TCP_TS 	= (1 << 4),
+	REPLAY_EXPECTED_TCP_TS		= (1 << 5),
+	REPLAY_TCP_TS_OUTOFSYNC		= (1 << 6)
 } replay_problem_t;
 
 /*!

@@ -80,12 +80,6 @@ status_t init_pkt(unsigned char *nf_packet, struct pkt_struct **pkt_in,
 
 	/* Init a new structure for the current packet */
 	pkt->origin = EXT;
-	pkt->DE = 0;
-	pkt->packet.ip = g_malloc0(ntohs(((struct iphdr*) nf_packet)->tot_len));
-	pkt->key = NULL;
-	pkt->key_src = NULL;
-	pkt->key_dst = NULL;
-	pkt->position = 0;
 	pkt->size = ntohs(((struct iphdr*) nf_packet)->tot_len);
 	pkt->mark = mark;
 
@@ -101,19 +95,19 @@ status_t init_pkt(unsigned char *nf_packet, struct pkt_struct **pkt_in,
 
 	/*! The most important part is to give to this ethernet header the type "IP protocol" */
 	(pkt->packet.FRAME)[12] = 0x08;
-	(pkt->packet.FRAME)[13] = 0x00;
 
-	/*! Add the packet IP header and payload to the packet structure */
-	memcpy(pkt->packet.ip, nf_packet, pkt->size);
+	/*! Assign the packet IP header and payload to the packet structure */
+	pkt->packet.ip = (struct iphdr *) (pkt->packet.FRAME + ETHER_HDR_LEN);
+
 	if (pkt->packet.ip->ihl < 0x5 || pkt->packet.ip->ihl > 0x08) {
 		g_printerr("%s Invalid IP header length: dropped\n", H(4));
 
 		goto done;
 	}
 
-	pkt->packet.tcp = (const struct tcphdr*) (((char *) pkt->packet.ip)
+	pkt->packet.tcp = (struct tcphdr*) (((char *) pkt->packet.ip)
 			+ (pkt->packet.ip->ihl << 2));
-	pkt->packet.udp = (const struct udphdr*) pkt->packet.tcp;
+
 	if (pkt->packet.ip->protocol == TCP) {
 		/*! Process TCP packets */
 		if (pkt->packet.tcp->doff < 0x05 || pkt->packet.tcp->doff > 0xFF) {
@@ -126,6 +120,7 @@ status_t init_pkt(unsigned char *nf_packet, struct pkt_struct **pkt_in,
 
 			goto done;
 		}
+
 		pkt->packet.payload = (char*) pkt->packet.tcp
 				+ (pkt->packet.tcp->doff << 2);
 
@@ -154,7 +149,7 @@ status_t init_pkt(unsigned char *nf_packet, struct pkt_struct **pkt_in,
 				- (pkt->packet.tcp->doff << 2);
 
 	} else if (pkt->packet.ip->protocol == UDP) {
-		pkt->packet.payload = (char*) pkt->packet.udp + 8;
+		pkt->packet.payload = (char*) pkt->packet.udp + UDP_HDR_LEN;
 		/*! Process UDP packet */
 		/*! key_src */
 		pkt->key_src = g_malloc0(
@@ -173,7 +168,7 @@ status_t init_pkt(unsigned char *nf_packet, struct pkt_struct **pkt_in,
 				inet_ntoa(*(struct in_addr*) &pkt->packet.ip->daddr),
 				ntohs(pkt->packet.udp->dest));
 		/* The volume of data is the value of udp->ulen minus the size of the UPD header (always 8 bytes) */
-		pkt->data = pkt->packet.udp->len - 8;
+		pkt->data = pkt->packet.udp->len - UDP_HDR_LEN;
 	} else {
 		/*! Every other packets are ignored */
 		g_printerr("%s Invalid protocol: %d, packet dropped\n", H(4),
@@ -208,7 +203,6 @@ done:
  */
 void free_pkt(struct pkt_struct *pkt) {
 	if (pkt != NULL) {
-		g_free(pkt->packet.ip);
 		g_free(pkt->packet.FRAME);
 		g_free(pkt->key);
 		g_free(pkt->key_src);
@@ -236,7 +230,7 @@ status_t store_pkt(struct conn_struct *conn, struct pkt_struct *pkt) {
 
 	length = g_slist_length(conn->BUFFER);
 
-	//if (max_packet_buffer > 0 && length < max_packet_buffer) {
+	if (length < max_packet_buffer) {
 
 		/*! Append pkt to the singly-linked list of conn */
 		conn->BUFFER = g_slist_append(conn->BUFFER, pkt);
@@ -245,7 +239,7 @@ status_t store_pkt(struct conn_struct *conn, struct pkt_struct *pkt) {
 		pkt->position = length;
 
 		ret = OK;
-	//}
+	}
 
 	/*! Unlock the structure */
 	g_rw_lock_writer_unlock(&conn->lock);
@@ -713,12 +707,12 @@ status_t create_conn(struct pkt_struct *pkt, struct conn_struct **conn,
 	g_tree_insert(conn_tree, conn_init->key, conn_init);
 	g_rw_lock_writer_unlock(&conntreelock);
 
-	g_rw_lock_reader_lock(&conntreelock);
+	/*g_rw_lock_reader_lock(&conntreelock);
 	if (TRUE
 			!= g_tree_lookup_extended(conn_tree, conn_init->key, NULL,
 					(gpointer *) conn))
 		return NOK;
-	g_rw_lock_reader_unlock(&conntreelock);
+	g_rw_lock_reader_unlock(&conntreelock);*/
 
 	g_printerr("%s Key '%s' inserted to conn_tree with uplink mark %u and downlink mark %u\n", H(0),
 			conn_init->key, conn_init->uplink_mark, conn_init->downlink_mark);
@@ -735,7 +729,7 @@ status_t update_conn(struct pkt_struct *pkt, struct conn_struct *conn,
 		gdouble microtime) {
 
 	/*! The key was found in the B-Tree */
-	int state = conn->state;
+	conn_status_t state = conn->state;
 
 	/*! We store control statistics in the proxy mode */
 	if (state == CONTROL) {
@@ -848,7 +842,7 @@ status_t init_conn(struct pkt_struct *pkt, struct conn_struct **conn) {
  \param[in] key, a pointer to the current B-Tree key value stored in the pointer table
  \param[in] trash, user data, unused
  */
-void free_conn(gpointer key, gpointer unused) {
+void free_conn(gpointer key, __attribute__((unused)) gpointer unused) {
 
 	g_rw_lock_writer_lock(&conntreelock);
 
@@ -1012,7 +1006,7 @@ status_t setup_redirection(struct conn_struct *conn, uint32_t hih_use) {
 		conn->hih.redirect_key = g_strdup(key_hih_ext->str);
 		/*! We then update the status of the connection structure */
 		conn->stat_time[DECISION] = microtime;
-		//conn->state = REPLAY;
+
 		switch_state(conn, REPLAY);
 
 		g_strfreev(tmp);
@@ -1027,26 +1021,24 @@ status_t setup_redirection(struct conn_struct *conn, uint32_t hih_use) {
 				conn->replay_id);
 
 		g_printerr("%s [** starting the forwarding loop... **]\n", H(conn->id));
-		// Does not correctly replay when MIN_DATA_DECISION is 0...
-		while (current->origin == EXT) {
+
+		while (current && current->origin == EXT) {
 
 			forward(current);
-			if (g_slist_next(g_slist_nth( conn->BUFFER, conn->replay_id ))
-					== NULL) {
-				//conn->state = FORWARD;
-				switch_state(conn, FORWARD);
-				//return OK;
-				break;
-			}
+
 			conn->replay_id++;
 			current = (struct pkt_struct*) g_slist_nth_data(conn->BUFFER,
 					conn->replay_id);
 		}
+
 		g_printerr("%s [** ...done with the forwarding loop **]\n",
 				H(conn->id));
-		g_printerr("%s [** defining expected data **]\n", H(conn->id));
-		define_expected_data(current);
-		conn->replay_id++;
+
+		if(current) {
+			g_printerr("%s [** defining expected data **]\n", H(conn->id));
+			define_expected_data(current);
+			conn->replay_id++;
+		}
 
 		return OK;
 

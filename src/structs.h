@@ -76,13 +76,19 @@ struct ethernet_hdr {
  *
  */
 struct packet {
-	struct iphdr *ip;
+	union {
+		const struct iphdr *ip;
+		const struct tcp_packet *tcppacket;
+		const struct udp_packet *udppacket;
+	};
 	union {
 		const struct tcphdr *tcp;
 		const struct udphdr *udp;
 	};
+
 	const char *payload;
-	char *FRAME;
+
+	char *FRAME; // This holds all the packet data
 };
 
 /*!
@@ -174,6 +180,7 @@ struct expected_data_struct {
 	unsigned short ip_proto;
 	unsigned tcp_seq;
 	unsigned tcp_ack_seq;
+	int64_t tcp_ts;
 	const char* payload;
 };
 
@@ -210,15 +217,16 @@ struct conn_struct {
 	char *key;
 	char *key_ext;
 	char *key_lih;
-	int protocol;
+	protocol_t protocol;
 	GString *start_timestamp;
 	gdouble start_microtime;
 	gint access_time;
-	int state;
-	unsigned id;
-	int replay_id;
-	int count_data_pkt_from_lih;
-	int count_data_pkt_from_intruder;
+	int64_t tcp_ts_diff;
+	conn_status_t state;
+	uint32_t id;
+	uint32_t replay_id;
+	uint32_t count_data_pkt_from_lih;
+	uint32_t count_data_pkt_from_intruder;
 	GSList *BUFFER;
 	struct expected_data_struct expected_data;
 	GRWLock lock;
@@ -231,11 +239,11 @@ struct conn_struct {
 	gdouble stat_time[8]; // = {0,0,0,0,0,0,0};
 	int stat_packet[8]; // = {0,0,0,0,0,0,0};
 	int stat_byte[8]; // = {0,0,0,0,0,0,0};
-	int total_packet;
-	int total_byte;
+	uint32_t total_packet;
+	uint32_t total_byte;
 	int decision_packet_id;
 	GString *decision_rule;
-	uint8_t replay_problem;
+	replay_problem_t replay_problem;
 	int invalid_problem; //unused
 
 	u_int32_t uplink_mark; // adding support for multiple uplinks
@@ -245,10 +253,10 @@ struct conn_struct {
 						 // the list elements have to point to struct custom_conn_data
 
 #ifdef HAVE_XMPP
-uint8_t dionaeaDownload;
-unsigned int dionaeaDownloadTime;
+	uint8_t dionaeaDownload;
+	unsigned int dionaeaDownloadTime;
 #endif
-}__attribute__ ((packed));
+} __attribute__ ((packed));
 
 /*! pkt_struct
  \brief The meta information of a packet stored in the conn_struct connection structure
@@ -270,7 +278,7 @@ struct pkt_struct {
 	char *key;
 	int position;
 
-	u_int32_t mark; // adding support for multiple uplinks
+	u_int32_t mark; // ip mark (can be used for custom routing/tagging)
 }__attribute__ ((packed));
 ;
 
