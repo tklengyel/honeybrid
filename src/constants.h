@@ -26,6 +26,8 @@
 
 #include "types.h"
 
+extern const char *banner;
+
 extern const char* protocol_string[__MAX_PROTOCOL];
 
 extern const char* packet_origin_string[__MAX_ORIGIN];

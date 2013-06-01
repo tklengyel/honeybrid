@@ -252,6 +252,9 @@ static void init_syslog(int argc, char *argv[]) {
  and parse it into a hash table or other tree data structures using Bison/Flex
  */
 void init_parser(char *filename) {
+
+	g_printerr("--------------------------\nReading configuration\n");
+
 	FILE *fp = fopen(filename, "r");
 	if (!fp)
 		err(1, "fopen(%s)", filename);
@@ -263,7 +266,7 @@ void init_parser(char *filename) {
 
 	fclose(fp);
 
-	g_printerr("Parsing done\n");
+	g_printerr("--------------------------\n\n");
 }
 
 void init_variables() {
@@ -902,12 +905,9 @@ int main(int argc, char *argv[]) {
 	int my_nfq_fd;
 #endif
 
-#ifdef DEBUG
-	g_printerr("\n\n");
-#endif
 	g_printerr(
-			"Honeybrid V%s Copyright (c)\n2007-2009 University of Maryland\n2012 University of Connecticut\n",
-			PACKAGE_VERSION);
+			"%s  v%s\n\n",
+			banner, PACKAGE_VERSION);
 
 	/*! parsing arguments */
 	if (argc < 2)
@@ -1098,9 +1098,9 @@ int main(int argc, char *argv[]) {
 	/*! create a thread for the management, cleaning stuffs and so on */
 	if ((thread_clean = g_thread_new("cleaner", (void *) clean, NULL))
 			== NULL) {
-		errx(1, "%s: Unable to start the cleaning thread", __func__);
+		errx(1, "%s Unable to start the cleaning thread", H(0));
 	} else {
-		g_printerr("%s: Cleaning thread started\n", __func__);
+		g_printerr("%s Cleaning thread started\n", H(0));
 	}
 	/*! Starting the nfqueue loop to start processing packets */
 	g_printerr("%s Starting netlink_loop\n", H(0));
