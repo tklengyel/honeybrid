@@ -28,6 +28,9 @@ int daemon(int, int);
 int yyparse(void);
 extern FILE *yyin;
 
+//int q_cb(struct nfq_q_handle *gh, struct nfgenmsg *nfmsg,
+//	       struct nfq_data *nfad, void *data);
+
 /*! Decision Engine thread enabled */
 //#define DE_THREAD
 /*! Two strategies: with thread or with libev 

@@ -95,10 +95,16 @@
 #include "modules.h"
 #include "connections.h"
 
+int q_cb(struct nfq_q_handle *gh,
+		struct nfgenmsg *nfmsg,
+		struct nfq_data *nfad,
+		void *data);
+
 #ifdef HAVE_LIBEV
 #include <ev.h>
-struct nfq_handle *h;
+struct ev_signal signals[7];
 struct ev_loop *loop;
+struct nfq_handle *h;
 #endif
 
 /*! usage function
@@ -123,30 +129,74 @@ void usage(char **argv) {
  \param[in] signal_nb: number of the signal
  \param[in] siginfo: informations regarding to the signal
  \param[in] context: NULL */
-int term_signal_handler(int signal_nb, siginfo_t * siginfo, __attribute__((unused)) void *unused) {
-	g_printerr("%s: Signal %d received, halting engine\n", __func__, signal_nb);
+static void term_signal_handler
+#ifdef HAVE_LIBEV
+
+	(struct ev_loop *loop, __attribute__((unused)) struct ev_signal *w,
+		__attribute__ ((unused)) int revents) {
+
+	ev_unloop(loop, EVUNLOOP_ALL);
+
 #ifdef DEBUG
-	g_printerr("* Signal number:\t%d\n", siginfo->si_signo);
-	g_printerr("* Signal code:  \t%d\n", siginfo->si_code);
-	g_printerr("* Signal error: \t%d '%s'\n", siginfo->si_errno,
-			strerror(siginfo->si_errno));
-	g_printerr("* Sending pid:  \t%d\n", siginfo->si_pid);
-	g_printerr("* Sending uid:  \t%d\n", siginfo->si_uid);
-	g_printerr("* Fault address:\t%p\n", siginfo->si_addr);
-	g_printerr("* Exit value:   \t%d\n", siginfo->si_status);
+		g_printerr("* Signal number:\t%d\n", w->signum);
 #endif
+
+#else
+
+	(int signal_nb, siginfo_t * siginfo, __attribute__((unused)) void *unused) {
+		g_printerr("%s: Signal %d received, halting engine\n", __func__, signal_nb);
+#ifdef DEBUG
+		g_printerr("* Signal number:\t%d\n", siginfo->si_signo);
+		g_printerr("* Signal code:  \t%d\n", siginfo->si_code);
+		g_printerr("* Signal error: \t%d '%s'\n", siginfo->si_errno,
+				strerror(siginfo->si_errno));
+		g_printerr("* Sending pid:  \t%d\n", siginfo->si_pid);
+		g_printerr("* Sending uid:  \t%d\n", siginfo->si_uid);
+		g_printerr("* Fault address:\t%p\n", siginfo->si_addr);
+		g_printerr("* Exit value:   \t%d\n", siginfo->si_status);
+
+#endif //DEBUG
+#endif //HAVE_LIBEV
+
 	running = NOK; /*! this will cause the queue loop to stop */
 
-#ifdef HAVE_LIBEV
-	ev_unloop (loop, EVUNLOOP_ALL);
-#endif
-	return 0;
 }
 
 /*! init_signal
  \brief installs signal handlers
  \return 0 if exit with success, anything else if not */
 void init_signal() {
+#ifdef HAVE_LIBEV
+
+	ev_signal_init(&signals[0], term_signal_handler, SIGHUP);
+	ev_signal_start(loop, &signals[0]);
+	ev_unref (loop);
+
+	ev_signal_init(&signals[1], term_signal_handler, SIGINT);
+	ev_signal_start(loop, &signals[1]);
+	ev_unref (loop);
+
+	ev_signal_init(&signals[2], term_signal_handler, SIGQUIT);
+	ev_signal_start(loop, &signals[2]);
+	ev_unref (loop);
+
+	ev_signal_init(&signals[3], term_signal_handler, SIGILL);
+	ev_signal_start(loop, &signals[3]);
+	ev_unref (loop);
+
+	ev_signal_init(&signals[4], term_signal_handler, SIGSEGV);
+	ev_signal_start(loop, &signals[4]);
+	ev_unref (loop);
+
+	ev_signal_init(&signals[5], term_signal_handler, SIGTERM);
+	ev_signal_start(loop, &signals[5]);
+	ev_unref (loop);
+
+	ev_signal_init(&signals[6], term_signal_handler, SIGBUS);
+	ev_signal_start(loop, &signals[6]);
+	ev_unref (loop);
+
+#else
 	/*! Install terminating signal handler: */
 	struct sigaction sa_term;
 	memset(&sa_term, 0, sizeof sa_term);
@@ -217,6 +267,7 @@ void init_signal() {
 	/*! SIGUSR1*/
 	if (sigaction(SIGUSR1, &sa_rotate_log, NULL) != 0)
 		errx(1, "%s: Failed to install sighandler for SIGUSR1", __func__);
+#endif
 }
 
 /*! init_syslog
@@ -332,6 +383,52 @@ void init_variables() {
 
 	/*! Enable data processing */
 	running = OK;
+
+#ifdef HAVE_LIBEV
+	loop = ev_default_loop(0);
+#endif
+}
+
+/*! init_nfqueue
+ *
+ \brief Function to create the NF_QUEUE loop
+ \param[in] queuenum the queue identifier
+ \return file descriptor for queue
+ */
+static int
+init_nfqueue(struct nfq_handle **h, struct nfq_q_handle **qh,
+		unsigned short int queuenum) {
+
+	running = OK;
+
+	*h = nfq_open();
+	if (!*h)
+		errx(1, "%s Error during nfq_open()", __func__);
+
+	if (nfq_unbind_pf(*h, AF_INET) < 0)
+		errx(1, "%s Error during nfq_unbind_pf()", __func__);
+
+	if (nfq_bind_pf(*h, AF_INET) < 0)
+		errx(1, "%s Error during nfq_bind_pf()", __func__);
+
+	syslog(LOG_INFO, "NFQUEUE: binding to queue '%hd'\n", queuenum);
+
+	*qh = nfq_create_queue(*h, queuenum, &q_cb, NULL);
+	if (!qh)
+		errx(1, "%s Error during nfq_create_queue()", __func__);
+
+	if (nfq_set_mode(*qh, NFQNL_COPY_PACKET, PAYLOADSIZE) < 0)
+		errx(1, "%s Can't set packet_copy mode", __func__);
+
+	return (nfnl_fd(nfq_nfnlh(*h)));
+}
+
+static void
+close_nfqueue(struct nfq_handle *h, struct nfq_q_handle *qh, unsigned short int queuenum) {
+	syslog(LOG_INFO, "NFQUEUE: unbinding from queue '%hd' (running: %d)\n",
+			queuenum, running);
+	nfq_destroy_queue(qh);
+	nfq_close(h);
 }
 
 /*! close_thread
@@ -352,6 +449,7 @@ int close_thread() {
 #endif
 
 	g_thread_join(mod_backup);
+	g_thread_join(thread_clean);
 
 	return 0;
 }
@@ -705,18 +803,18 @@ process_packet(struct nfq_data *tb) {
  \brief Callback function launched by the netfilter queue handler each time a packet is received
  //TODO: push packets here into an internal flow-based queue which the DE_thread can process
  * */
-static int q_cb(struct nfq_q_handle *qh, __attribute__((unused)) struct nfgenmsg *unused,
-		struct nfq_data *nfa, __attribute__((unused)) void *unused2) {
+int q_cb(struct nfq_q_handle *gh, __attribute__ ((unused)) struct nfgenmsg *nfmsg,
+	       struct nfq_data *nfad, __attribute__((unused)) void *data) {
 	/*! get packet id */
 	struct nfqnl_msg_packet_hdr *ph;
-	ph = nfq_get_msg_packet_hdr(nfa);
+	ph = nfq_get_msg_packet_hdr(nfad);
 	int id = ntohl(ph->packet_id);
 
 	/* The NAT table only has information about the connection to LIH */
 	/* We need to duplicate whatever mark was set on the LIH connection to forwarded connections to HIH */
 
 	/*! launch process function */
-	struct verdict *decision = process_packet(nfa);
+	struct verdict *decision = process_packet(nfad);
 	int to_return;
 
 	//printf("Final result: %u and set mark to %u\n", decision->statement, decision->mark);
@@ -737,10 +835,10 @@ static int q_cb(struct nfq_q_handle *qh, __attribute__((unused)) struct nfgenmsg
 		/*! ACCEPT the packet if the statement is 1 */
 		/* Also copy whatever mark has been on the packet initially, required for multi-uplink setups */
 
-		to_return = nfq_set_verdict2(qh, id, NF_ACCEPT, decision->mark, 0, NULL);
+		to_return = nfq_set_verdict2(gh, id, NF_ACCEPT, decision->mark, 0, NULL);
 	} else {
 		/*! DROP the packet if the statement is 0 (or something else than 1) */
-		to_return = nfq_set_verdict2(qh, id, NF_DROP, decision->mark, 0, NULL);
+		to_return = nfq_set_verdict2(gh, id, NF_DROP, decision->mark, 0, NULL);
 	}
 
 	free(decision);
@@ -754,37 +852,13 @@ static int q_cb(struct nfq_q_handle *qh, __attribute__((unused)) struct nfgenmsg
  \return status
  */
 short int netlink_loop(unsigned short int queuenum) {
-	struct nfq_handle *h = NULL;
 	struct nfq_q_handle *qh = NULL;
-	struct nfnl_handle *nh = NULL;
-	int fd = -1, rv = -1, watchdog;
+	struct nfq_handle *h = NULL;
+	int fd = -1, rv = -1, watchdog=0;
 	char buf[BUFSIZE];
 
-	running = OK;
+	fd = init_nfqueue(&h, &qh, queuenum);
 
-	h = nfq_open();
-	if (!h)
-		errx(1, "%s Error during nfq_open()", __func__);
-
-	if (nfq_unbind_pf(h, AF_INET) < 0)
-		errx(1, "%s Error during nfq_unbind_pf()", __func__);
-
-	if (nfq_bind_pf(h, AF_INET) < 0)
-		errx(1, "%s Error during nfq_bind_pf()", __func__);
-
-	syslog(LOG_INFO, "NFQUEUE: binding to queue '%hd'\n", queuenum);
-
-	qh = nfq_create_queue(h, queuenum, &q_cb, NULL);
-	if (!qh)
-		errx(1, "%s Error during nfq_create_queue()", __func__);
-
-	if (nfq_set_mode(qh, NFQNL_COPY_PACKET, PAYLOADSIZE) < 0)
-		errx(1, "%s Can't set packet_copy mode", __func__);
-
-	nh = nfq_nfnlh(h);
-	fd = nfnl_fd(nh);
-
-	watchdog = 0;
 	while (running == OK) {
 		memset(buf, 0, BUFSIZE);
 		rv = recv(fd, buf, BUFSIZE, 0);
@@ -806,85 +880,24 @@ short int netlink_loop(unsigned short int queuenum) {
 		}
 	}
 
-	syslog(LOG_INFO,
-			"NFQUEUE: unbinding from queue '%hd' (running: %d, rv: %d)\n",
-			queuenum, running, rv);
-	nfq_destroy_queue(qh);
-	nfq_close(h);
+	close_nfqueue(h, qh, queuenum);
 	return (0);
 }
 
 #else
 
-static void
-nfqueue_ev_cb(struct ev_loop *loop, ev_io *w, int revents)
-{
+static void nfqueue_ev_cb(__attribute__((unused))  struct ev_loop *loop,
+		struct ev_io *w, __attribute__ ((unused)) int revents) {
 	int rv;
 	char buf[BUFSIZE];
 
 	rv = recv(w->fd, buf, sizeof(buf), 0);
-	if (rv >= 0 && running == OK)
-	{
-		//nfq_handle_packet((struct nfq_handle *)w->data, buf, rv);
+	if (rv >= 0 && running == OK) {
 		nfq_handle_packet(h, buf, rv);
 	}
 }
 
-/*! init_nfqueue
- *
- \brief Function to create the NF_QUEUE loop
- \param[in] queuenum the queue identifier
- \return file descriptor for queue
- */
-int
-//init_nfqueue(struct nfq_handle *h, struct nfq_q_handle *qh, unsigned short int queuenum)
-init_nfqueue(struct nfq_q_handle *qh, unsigned short int queuenum)
-{
-	struct nfnl_handle *nh;
-
-	running = OK;
-
-	h = nfq_open();
-	if (!h)
-	errx(1,"%s Error during nfq_open()", __func__);
-
-	if (nfq_unbind_pf(h, AF_INET) < 0)
-	errx(1,"%s Error during nfq_unbind_pf()", __func__);
-
-	if (nfq_bind_pf(h, AF_INET) < 0)
-	errx(1,"%s Error during nfq_bind_pf()", __func__);
-
-	syslog(LOG_INFO, "NFQUEUE: binding to queue '%hd'\n", queuenum);
-
-	qh = nfq_create_queue(h, queuenum, &q_cb, NULL);
-	if (!qh)
-	errx(1,"%s Error during nfq_create_queue()", __func__);
-
-	if (nfq_set_mode(qh, NFQNL_COPY_PACKET, PAYLOADSIZE) < 0)
-	errx(1,"%s Can't set packet_copy mode", __func__);
-
-	nh = nfq_nfnlh(h);
-
-	return(nfnl_fd(nh));
-}
-
-static void
-//close_nfqueue(struct nfq_handle *h, struct nfq_q_handle *qh, unsigned short int queuenum)
-close_nfqueue(struct nfq_q_handle *qh, unsigned short int queuenum)
-{
-	syslog(LOG_INFO, "NFQUEUE: unbinding from queue '%hd' (running: %d)\n", queuenum, running);
-	nfq_destroy_queue(qh);
-	nfq_close(h);
-}
-
-static void
-timeout_clean_cb (EV_P_ ev_timer *w, int revents)
-{
-	//g_printerr("%s timeout reach for ev_timer!\n", H(0));
-	clean();
-}
 #endif
-//End Test
 
 /*! main
  \brief process arguments, daemonize, init variables, create QUEUE handler and process each packet
@@ -898,13 +911,6 @@ int main(int argc, char *argv[]) {
 	FILE *fp;
 
 	unsigned short int queuenum = 0;
-
-#ifdef HAVE_LIBEV
-	//struct nfq_handle *h;
-	struct nfq_q_handle *qh=NULL;
-	int my_nfq_fd;
-#endif
-
 	g_printerr(
 			"%s  v%s\n\n",
 			banner, PACKAGE_VERSION);
@@ -988,14 +994,14 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	/*! initialize signal handlers */
-	init_signal();
 	/*! initialize syslog */
 	init_syslog(argc, argv);
 	/*! initialize data structures */
 	init_variables();
 	/*! parse the configuration files and store values in memory */
 	init_parser(config_file_name);
+	/*! initialize signal handlers */
+	init_signal();
 
 	/*! Create PID file, we might not be able to remove it */
 	pidfile = g_malloc0(
@@ -1075,37 +1081,38 @@ int main(int argc, char *argv[]) {
 	init_modules();
 
 	/*! create the raw sockets for UDP/IP and TCP/IP */
-	if(NOK == init_raw_sockets())
+	if (NOK == init_raw_sockets())
 		errx(1, "%s: failed to create the raw sockets", __func__);
 
-#ifdef HAVE_LIBEV
-	loop = ev_default_loop(0);
-	//Watcher for cleaning conn_tree every 10 seconds:
-	ev_timer timeout_clean_watcher;
-	ev_timer_init (&timeout_clean_watcher, timeout_clean_cb, 10., 10.);
-	ev_timer_start (loop, &timeout_clean_watcher);
-	/*! Watcher for processing packets received on NF_QUEUE: */
-	my_nfq_fd = init_nfqueue(qh, queuenum);
-	ev_io queue_watcher;
-	ev_io_init (&queue_watcher, nfqueue_ev_cb, my_nfq_fd, EV_READ);
-	ev_io_start (EV_A_ &queue_watcher);
-	g_printerr("%s Starting ev_loop\n", H(0));
-	//ev_loop (loop, EVLOOP_NONBLOCK);
-	ev_loop(EV_A_ 0);
-	/*! To be moved inside close_all() */
-	close_nfqueue(qh, queuenum);
-#else
 	/*! create a thread for the management, cleaning stuffs and so on */
-	if ((thread_clean = g_thread_new("cleaner", (void *) clean, NULL))
-			== NULL) {
+	if ((thread_clean = g_thread_new("cleaner", (void *) clean, NULL)) == NULL) {
 		errx(1, "%s Unable to start the cleaning thread", H(0));
 	} else {
 		g_printerr("%s Cleaning thread started\n", H(0));
 	}
+
+#ifdef HAVE_LIBEV
+
+	struct nfq_q_handle *qh=NULL;
+	int my_nfq_fd;
+
+	my_nfq_fd = init_nfqueue(&h, &qh, queuenum);
+
+	/*! Watcher for processing packets received on NF_QUEUE: */
+	ev_io queue_watcher;
+	ev_io_init (&queue_watcher, nfqueue_ev_cb, my_nfq_fd, EV_READ);
+	ev_io_start (loop, &queue_watcher);
+
+	g_printerr("%s Starting ev_loop\n", H(0));
+
+	ev_loop(loop, 0);
+
+	/*! To be moved inside close_all() */
+	close_nfqueue(h, qh, queuenum);
+#else
 	/*! Starting the nfqueue loop to start processing packets */
 	g_printerr("%s Starting netlink_loop\n", H(0));
 	netlink_loop(queuenum);
-
 #endif
 
 	close_all();

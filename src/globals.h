@@ -38,7 +38,6 @@ const char *pidfile;
  * Set to NOK when honeybrid stops, used to terminate threads
  */
 status_t threading;
-
 GMutex threading_cond_lock;
 GCond threading_cond;
 
