@@ -24,6 +24,7 @@
 /src/Makefile.in
 /src/dionaea_xmpp_listener/Makefile
 /src/dionaea_xmpp_listener/Makefile.in
+/src/gmon.out
 /m4/Makefile
 /m4/Makefile.in
 /aclocal.m4

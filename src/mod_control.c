@@ -36,17 +36,17 @@
  \param[in] pkts, struct that contain the packet to control
  \param[out] set result to 1 if rate limit reached, 0 otherwise
  */
-void mod_control(struct mod_args *args) {
+mod_result_t mod_control(struct mod_args *args) {
 	gchar *backup_file;
 
 	if (args->pkt == NULL) {
 		g_printerr("%s Error, NULL packet\n", H(6));
-		args->node->result = -1;
-		return;
+		return REJECT;
 	}
 
 	g_printerr("%s Module called\n", H(args->pkt->conn->id));
 
+	mod_result_t result = DEFER;
 	int expiration;
 	int max_packet;
 	gchar *param;
@@ -60,8 +60,7 @@ void mod_control(struct mod_args *args) {
 
 	if (args->pkt->key_src == NULL) {
 		g_printerr("%s Error, key_src is NULL\n", H(args->pkt->conn->id));
-		args->node->result = -1;
-		return;
+		return result;
 	}
 
 	/*! get the IP address from the packet */
@@ -71,28 +70,26 @@ void mod_control(struct mod_args *args) {
 
 	/*! get the backup file for this module */
 	if (NULL
-			== (backup = (GKeyFile *) g_hash_table_lookup(args->node->arg,
+			== (backup = (GKeyFile *) g_hash_table_lookup(args->node->config,
 					"backup"))) {
 		/*! We can't decide */
-		args->node->result = -1;
 		g_printerr("%s mandatory argument 'backup' undefined!\n",
 				H(args->pkt->conn->id));
-		return;
+		return result;
 	}
 	/*! get the backup file path for this module */
 	if (NULL
-			== (backup_file = (gchar *) g_hash_table_lookup(args->node->arg,
+			== (backup_file = (gchar *) g_hash_table_lookup(args->node->config,
 					"backup_file"))) {
 		/*! We can't decide */
-		args->node->result = -1;
 		g_printerr("%s error, backup file path missing\n",
 				H(args->pkt->conn->id));
-		return;
+		return result;
 	}
 
 	/*! get control parameters */
 	if (NULL
-			== (param = (gchar *) g_hash_table_lookup(args->node->arg,
+			== (param = (gchar *) g_hash_table_lookup(args->node->config,
 					"expiration"))) {
 		/*! no value set for expiration, we go with the default one */
 		expiration = 600;
@@ -100,7 +97,7 @@ void mod_control(struct mod_args *args) {
 		expiration = atoi(param);
 	}
 	if (NULL
-			== (param = (gchar *) g_hash_table_lookup(args->node->arg,
+			== (param = (gchar *) g_hash_table_lookup(args->node->config,
 					"max_packet"))) {
 		/*! no value set for expiration, we go with the default one */
 		max_packet = 1000;
@@ -146,11 +143,11 @@ void mod_control(struct mod_args *args) {
 	if (atoi(info[0]) > max_packet) {
 		g_printerr("%s Rate limit reached! Packet rejected\n",
 				H(args->pkt->conn->id));
-		args->node->result = 0;
+		result = REJECT;
 	} else {
 		g_printerr("%s Rate limit not reached. Packet accepted\n",
 				H(args->pkt->conn->id));
-		args->node->result = 1;
+		result = ACCEPT;
 	}
 
 	g_key_file_set_string_list(backup, "source", key_src[0],
@@ -160,6 +157,6 @@ void mod_control(struct mod_args *args) {
 
 	/*! clean and exit */
 	//g_strfreev(key_src);
-	return;
+	return result;
 }
 

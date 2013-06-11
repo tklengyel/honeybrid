@@ -10,13 +10,14 @@
 #include <glib/gstdio.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <config.h>
 #include "globals.h"
 #include "structs.h"
 #include "convenience.h"
 #include "decision_engine.h"
 #include "modules.h"
-#include <sys/stat.h>
-#include <fcntl.h>
 
 /*! Type of capture link */
 #define LINKTYPE 1 	//LINKTYPE_ETHERNET=1 \todo dynamically assign link type from nfqueue
@@ -261,6 +262,7 @@ target: TARGET OPEN rule END {
 		}
 		*/
 		g_printerr("\tGoing to add new element to target array...\n");
+		$3->back_handler_count = g_tree_nnodes($3->back_handlers);
 		g_ptr_array_add(targets, $3);
 		g_printerr("\t...done\n");
 		/*g_printerr("\tAdded a new target with the following values:\n\tfront_handler: %s\n\tfront_rule: %s\n\tback_handler: %s\n\tback_rule: %s\n\tcontrol: %s\n",
@@ -303,10 +305,9 @@ rule: 	{
 		$$->front_rule = NULL;
 	} 
 	| rule FRONTEND honeynet QUOTE equation QUOTE SEMICOLON {
-		g_printerr("\tIP %s (%d) copied to handler\n", addr_ntoa($3), $3->addr_ip);
+		g_printerr("\tFrontend at %s: %s\n", addr_ntoa($3), $5->str);
 		$$->front_handler = $3;
 		$$->front_rule = DE_create_tree($5->str);
-		g_printerr("\tFront decision module is at %p\n", $$->front_rule->module);
 		g_string_free($5, TRUE);
 	}
 	| rule BACKPICK QUOTE equation QUOTE SEMICOLON {
@@ -322,7 +323,7 @@ rule: 	{
     		
     		// This will be freed automatically when the tree is destroyed
     		$$->backends++;
-    		uint32_t *key=g_malloc0(sizeof(uint32_t));
+    		uint32_t *key=malloc(sizeof(uint32_t));
     		*key=$$->backends;
     		
     		struct backend *back_handler = g_malloc0(sizeof(struct backend));
@@ -342,7 +343,7 @@ rule: 	{
 
     		// This will be freed automatically when the tree is destroyed
             $$->backends++;
-            uint32_t *key=g_malloc0(sizeof(uint32_t));
+            uint32_t *key=malloc(sizeof(uint32_t));
             *key=$$->backends;
             
             struct backend *back_handler = g_malloc0(sizeof(struct backend));
@@ -352,13 +353,13 @@ rule: 	{
             back_handler->iface->ip_str=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($3)) + 1);
             sprintf(back_handler->iface->ip_str, "%s", addr_ntoa($3));
             
+            g_printerr("\tBackend #%u at %s: %s\n",
+                *key, back_handler->iface->ip_str, $5->str);
+            
             back_handler->rule=DE_create_tree($5->str);
     
     		g_tree_insert($$->back_handlers, key, back_handler);
     		g_hash_table_insert($$->unique_backend_ips, back_handler->iface->ip_str, NULL);
-    	
-            g_printerr("\tBackend %u with IP %s copied to handler with rule: %s\n",
-                *key, back_handler->iface->ip_str, $5->str);
                 
            	g_string_free($5, TRUE);
         }
@@ -366,7 +367,7 @@ rule: 	{
 
             // This will be freed automatically when the tree is destroyed
             $$->backends++;
-            uint32_t *key=g_malloc0(sizeof(uint32_t));
+            uint32_t *key=malloc(sizeof(uint32_t));
             *key=$$->backends;
             
             struct backend *back_handler = g_malloc0(sizeof(struct backend));
@@ -378,12 +379,12 @@ rule: 	{
 		    back_handler->iface->ip=$6;
 		    back_handler->iface->ip_str=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($6)) + 1);
 		    sprintf(back_handler->iface->ip_str, "%s", addr_ntoa($6));
+		    
+            g_printerr("\tBackend #%u at %s on interface %s and tag %s: no rule\n",
+                *key, back_handler->iface->ip_str, back_handler->iface->name, back_handler->iface->tag);
 
             g_tree_insert($$->back_handlers, key, back_handler);
             g_hash_table_insert($$->unique_backend_ips, back_handler->iface->ip_str, NULL);
-
-            g_printerr("\tBackend %u with IP %s on interface %s and tag %s copied to handler without a rule\n",
-                *key, back_handler->iface->ip_str, back_handler->iface->name, back_handler->iface->tag);
                 
             g_string_free($4, TRUE);
 		    g_string_free($8, TRUE);
@@ -392,7 +393,7 @@ rule: 	{
               
              // This will be freed automatically when the tree is destroyed
             $$->backends++;
-            uint32_t *key=g_malloc0(sizeof(uint32_t));
+            uint32_t *key=malloc(sizeof(uint32_t));
             *key=$$->backends;
             
             struct backend *back_handler = g_malloc0(sizeof(struct backend));
@@ -404,13 +405,15 @@ rule: 	{
 		    back_handler->iface->ip=$6;
 		    back_handler->iface->ip_str=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($6)) + 1);
             sprintf(back_handler->iface->ip_str, "%s", addr_ntoa($6));
+            
+            g_printerr("\tBackend #%u at IP %s on interface %s and tag %s: %s\n", 
+                *key, back_handler->iface->ip_str, back_handler->iface->name, back_handler->iface->tag, $11->str);
+            
             back_handler->rule=DE_create_tree($11->str);
             
             g_tree_insert($$->back_handlers, key, back_handler);
             g_hash_table_insert($$->unique_backend_ips, back_handler->iface->ip_str, NULL);
 
-            g_printerr("\tBackend %u with IP %s on interface %s and tag %s copied to handler with rule: %s\n", 
-                *key, back_handler->iface->ip_str, back_handler->iface->name, back_handler->iface->tag, $11->str);
             g_string_free($4, TRUE);
 		    g_string_free($8, TRUE);
 		    g_string_free($11, TRUE);

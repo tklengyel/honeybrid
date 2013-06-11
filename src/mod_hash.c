@@ -91,38 +91,35 @@ int init_mod_hash() {
  *
  \param[out] set result to 0 if datas's fingerprint is found in search table, 1 if not
  */
-void mod_hash(struct mod_args *args) {
+mod_result_t mod_hash(struct mod_args *args) {
 	GKeyFile *backup;
 	gchar *backup_file;
 	int expiration = 24 * 3600;
+	mod_result_t result = DEFER;
 
 	/*! First, we make sure that we have data to work on */
 	if (args->pkt->data == 0) {
-		args->node->result = -1;
-		args->node->info_result = -1;
 		g_printerr("%s No data to work on\n", H(args->pkt->conn->id));
-		return;
+		return result;
 	}
 
 	/*! get the backup file for this module */
 	if (NULL
-			== (backup = (GKeyFile *) g_hash_table_lookup(args->node->arg,
+			== (backup = (GKeyFile *) g_hash_table_lookup(args->node->config,
 					"backup"))) {
 		/*! We can't decide */
-		args->node->result = -1;
 		g_printerr("%s mandatory argument 'backup' undefined!\n",
 				H(args->pkt->conn->id));
-		return;
+		return result;
 	}
 	/*! get the backup file path for this module */
 	if (NULL
-			== (backup_file = (gchar *) g_hash_table_lookup(args->node->arg,
+			== (backup_file = (gchar *) g_hash_table_lookup(args->node->config,
 					"backup_file"))) {
 		/*! We can't decide */
-		args->node->result = -1;
 		g_printerr("%s error, backup file path missing\n",
 				H(args->pkt->conn->id));
-		return;
+		return result;
 	}
 
 	uint32_t ascii_len = 64;
@@ -234,7 +231,7 @@ void mod_hash(struct mod_args *args) {
 			== (info = g_key_file_get_string_list(backup, port, hash, NULL,
 					&error))) {
 		/*! Unknown hash, so we accept the packet */
-		args->node->result = 1;
+		result = ACCEPT;
 		g_printerr("%s Hash not found because: %s\n", H(args->pkt->conn->id),
 				error->message);
 		g_printerr("%s Packet accepted and new entry created\n",
@@ -262,7 +259,7 @@ void mod_hash(struct mod_args *args) {
 		int age = atoi(info[HASH_DURATION]);
 		if (age > expiration) {
 			/*! Known hash but entry expired, so we accept the packet */
-			args->node->result = 1;
+			result = ACCEPT;
 			g_printerr(
 					"%s Hash found but expired... packet accepted and entry renewed\n",
 					H(args->pkt->conn->id));
@@ -273,7 +270,7 @@ void mod_hash(struct mod_args *args) {
 
 		} else {
 			/*! Known hash, so we reject the packet */
-			args->node->result = 0;
+			result = REJECT;
 			g_printerr("%s Hash found... packet rejected and entry updated\n",
 					H(args->pkt->conn->id));
 
@@ -316,6 +313,6 @@ void mod_hash(struct mod_args *args) {
 
 	save_backup(backup, backup_file);
 
-	return;
+	return result;
 }
 #endif

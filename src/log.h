@@ -60,6 +60,6 @@ status_t log_std(const struct conn_struct *conn, const GString *proto,
 		const GString *status, GString **status_info, gdouble duration,
 		output_t output);
 
-int init_mysql_log();
+status_t init_mysql_log();
 
 #endif ///__LOG_H_

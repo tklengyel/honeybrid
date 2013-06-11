@@ -310,7 +310,7 @@ gboolean find_if_banned(gpointer key, __attribute__((unused)) gpointer unused, g
 	return FALSE;
 }
 
-void mod_vmi_front(struct mod_args *args) {
+mod_result_t mod_vmi_front(struct mod_args *args) {
 	g_printerr("%s VMI Front Module called\n", H(args->pkt->conn->id));
 
 	gchar **values = g_strsplit(args->pkt->key_src, ":", 0);
@@ -336,18 +336,16 @@ void mod_vmi_front(struct mod_args *args) {
 		g_rw_lock_writer_unlock(&(vm.vm->lock));
 	}
 
-	args->node->result = 1;
-	//} else {
-	//	args->node->result = 0;
-	//}
 	g_strfreev(values);
 
+	return ACCEPT;
 }
 
-void mod_vmi_pick(struct mod_args *args) {
+mod_result_t mod_vmi_pick(struct mod_args *args) {
 
 	g_printerr("%s VMI Backpick Module called\n", H(args->pkt->conn->id));
 
+	mod_result_t result = REJECT;
 	struct vm_search search;
 	gchar **values = g_strsplit(args->pkt->key_src, ":", 0);
 	search.srcIP = values[0];
@@ -382,7 +380,7 @@ void mod_vmi_pick(struct mod_args *args) {
 	if (search.vm != NULL) {
 		//printf("%s Picking %s (%u).\n", H(args->pkt->conn->id), search.vm->name, search.vm->vmID);
 		args->backend_use = search.vm->vmID;
-		args->node->result = 1;
+		result = ACCEPT;
 
 		struct custom_conn_data *log = g_malloc0(
 				sizeof(struct custom_conn_data));
@@ -401,10 +399,11 @@ void mod_vmi_pick(struct mod_args *args) {
 	} else {
 		g_printerr("%s No available backend found, rejecting!\n",
 				H(args->pkt->conn->id));
-		args->node->result = 0;
+		result = REJECT;
 	}
 
 	g_strfreev(values);
+	return result;
 }
 
 //void mod_vmi_back(struct mod_args *args) {
@@ -496,15 +495,15 @@ printf			("%s Attack session found on clone %s!\n", H(67), vm->name);
 		return FALSE;
 }
 
-void mod_vmi_control(struct mod_args *args) {
+mod_result_t mod_vmi_control(struct mod_args *args) {
 	// Only control packets coming from the clones
 	if (args->pkt->mark == 0) {
-		args->node->result = 1;
-		return;
+		return ACCEPT;
 	}
 
 	g_printerr("%s VMI Control Module called\n", H(args->pkt->conn->id));
 
+	mod_result_t result = REJECT;
 	/*! get the IP address from the packet */
 	gchar **key_dst;
 	//key_src = g_strsplit( args->pkt->key_src, ":", 0);
@@ -536,7 +535,6 @@ void mod_vmi_control(struct mod_args *args) {
 		if (search.event) {
 			g_printerr("%s Cought network event, sending signal!\n",
 					H(args->pkt->conn->id));
-			args->node->result = 0;
 
 			char *buf = g_malloc0(
 					snprintf(NULL, 0, "%s,%s,%s\n", search.vm->name,
@@ -547,42 +545,39 @@ void mod_vmi_control(struct mod_args *args) {
 				g_printerr("%s Failed to write to socket!\n", H(args->pkt->conn->id));
 			free(buf);
 		} else
-			args->node->result = 1;
+			result = ACCEPT;
 
 		free(search.attacker);
-	} else {
-		args->node->result = 0;
 	}
 
 	g_strfreev(key_dst);
-	return;
+	return result;
 }
 
-void mod_vmi(struct mod_args *args) {
+mod_result_t mod_vmi(struct mod_args *args) {
 
 	gchar *mode;
 	/*! get the backup file for this module */
 	if (NULL
-			== (mode = (gchar *) g_hash_table_lookup(args->node->arg, "mode"))) {
+			== (mode = (gchar *) g_hash_table_lookup(args->node->config, "mode"))) {
 		/*! We can't decide */
-		args->node->result = -1;
 		g_printerr("%s mandatory argument 'mode' undefined (back/control)!\n",
 				H(args->pkt->conn->id));
-		return;
+		return DEFER;
 	}
 	//else
 	//printf("VMI Mode %s\n", mode);
 
 	if (!strcmp(mode, "front"))
-		mod_vmi_front(args);
+		return mod_vmi_front(args);
 	else if (!strcmp(mode, "pick"))
-		mod_vmi_pick(args);
+		return mod_vmi_pick(args);
 	//else if (!strcmp(mode, "back"))
 	//	mod_vmi_back(args);
 	else if (!strcmp(mode, "control"))
-		mod_vmi_control(args);
-	else
-		args->node->result = -1;
+		return mod_vmi_control(args);
+
+	return DEFER;
 }
 
 //////////////////////

@@ -31,7 +31,7 @@
  \brief structure to hold backend information (id, decision rule and interface information)
  */
 struct backend {
-	uint32_t id;
+	const uint32_t id;
 	struct node *rule;
 	struct interface *iface;
 };
@@ -47,6 +47,7 @@ struct target {
 	struct addr *front_handler; /* Honeypot IP address(es) handling the first response (front end) */
 	struct node *front_rule; /* Rules of decision modules to accept packet to be handled by the frontend */
 	GTree *back_handlers; /* Honeypot backends handling the second response with key: hihID, value: struct backend */
+	uint32_t back_handler_count; /* Number of backends defined in the GTree */
 	GHashTable *unique_backend_ips; /* Unique backend IPs of back_handlers */
 	struct node *back_picker; /* Rule(s) to pick which backend to use (such as VM name, etc.) */
 	struct node *control_rule; /* Rules of decision modules to limit outbound packets from honeypots */
@@ -77,6 +78,7 @@ struct ethernet_hdr {
  */
 struct packet {
 	union {
+		const struct ether_header *eth;
 		const struct iphdr *ip;
 		const struct tcp_packet *tcppacket;
 		const struct udp_packet *udppacket;
@@ -217,7 +219,7 @@ struct conn_struct {
 	char *key;
 	char *key_ext;
 	char *key_lih;
-	protocol_t protocol;
+	uint16_t protocol;
 	GString *start_timestamp;
 	gdouble start_microtime;
 	gint access_time;
@@ -246,8 +248,8 @@ struct conn_struct {
 	replay_problem_t replay_problem;
 	int invalid_problem; //unused
 
-	u_int32_t uplink_mark; // adding support for multiple uplinks
-	u_int32_t downlink_mark; // adding support for multiple backends on separate bridges
+	uint32_t uplink_mark; // adding support for multiple uplinks
+	uint32_t downlink_mark; // adding support for multiple backends on separate bridges
 
 	GSList *custom_data; // allow custom data to be assigned to the connection by modules
 						 // the list elements have to point to struct custom_conn_data
@@ -276,11 +278,12 @@ struct pkt_struct {
 	char *key_src;
 	char *key_dst;
 	char *key;
-	int position;
+	int position; // position in the connection queue
 
-	u_int32_t mark; // ip mark (can be used for custom routing/tagging)
+	gboolean last; // last packet to be pushed in the queue
+	uint32_t nfq_packet_id; // the nfq packet id of this packet
+	uint32_t mark; // ip mark (can be used for custom routing/tagging)
 }__attribute__ ((packed));
-;
 
 /*! \brief Structure to pass arguments to the Decision Engine
  \param conn, pointer to the refered conn_struct
@@ -307,9 +310,10 @@ struct verdict {
  \brief arguments sent to a module while processing the tree
  */
 struct mod_args {
-	struct node *node;
-	struct pkt_struct *pkt;
-	uint32_t backend_test, backend_use;
+	const struct node *node;
+	const struct pkt_struct *pkt;
+	const uint32_t backend_test;
+	uint32_t backend_use;
 };
 
 struct mod_def {
@@ -324,13 +328,11 @@ struct mod_def {
  */
 struct node {
 	module_function module;
-	GHashTable *arg;
+	GHashTable *config;
 	GString *module_name;
 	GString *function;
-	struct node *true;
-	struct node *false;
-	int result;
-	int info_result;
+	struct node *true_branch;
+	struct node *false_branch;
 };
 
 /*!
@@ -339,12 +341,11 @@ struct node {
  \brief structure to hold decision input/output of the DE engine
  */
 struct decision_holder {
-	struct pkt_struct *pkt;
+	const struct pkt_struct *pkt;
 	struct node *node;
-	struct mod_args args;
+	uint32_t backend_test;
+	uint32_t backend_use;
 	decision_t result;
-
-	uint32_t backend_test, backend_use;
 };
 
 struct log_event {

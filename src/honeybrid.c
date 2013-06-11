@@ -95,17 +95,17 @@
 #include "modules.h"
 #include "connections.h"
 
-int q_cb(struct nfq_q_handle *gh,
-		struct nfgenmsg *nfmsg,
-		struct nfq_data *nfad,
+int q_cb(struct nfq_q_handle *gh, struct nfgenmsg *nfmsg, struct nfq_data *nfad,
 		void *data);
 
 #ifdef HAVE_LIBEV
 #include <ev.h>
-struct ev_signal signals[7];
 struct ev_loop *loop;
-struct nfq_handle *h;
+struct ev_signal signals[7];
 #endif
+
+struct nfq_q_handle *qh;
+struct nfq_handle *h;
 
 /*! usage function
  \brief print command line informations */
@@ -132,13 +132,13 @@ void usage(char **argv) {
 static void term_signal_handler
 #ifdef HAVE_LIBEV
 
-	(struct ev_loop *loop, __attribute__((unused)) struct ev_signal *w,
+(struct ev_loop *loop, __attribute__((unused))   struct ev_signal *w,
 		__attribute__ ((unused)) int revents) {
 
 	ev_unloop(loop, EVUNLOOP_ALL);
 
 #ifdef DEBUG
-		g_printerr("* Signal number:\t%d\n", w->signum);
+	g_printerr("* Signal number:\t%d\n", w->signum);
 #endif
 
 #else
@@ -159,7 +159,6 @@ static void term_signal_handler
 #endif //HAVE_LIBEV
 
 	running = NOK; /*! this will cause the queue loop to stop */
-
 }
 
 /*! init_signal
@@ -170,31 +169,31 @@ void init_signal() {
 
 	ev_signal_init(&signals[0], term_signal_handler, SIGHUP);
 	ev_signal_start(loop, &signals[0]);
-	ev_unref (loop);
+	ev_unref(loop);
 
 	ev_signal_init(&signals[1], term_signal_handler, SIGINT);
 	ev_signal_start(loop, &signals[1]);
-	ev_unref (loop);
+	ev_unref(loop);
 
 	ev_signal_init(&signals[2], term_signal_handler, SIGQUIT);
 	ev_signal_start(loop, &signals[2]);
-	ev_unref (loop);
+	ev_unref(loop);
 
 	ev_signal_init(&signals[3], term_signal_handler, SIGILL);
 	ev_signal_start(loop, &signals[3]);
-	ev_unref (loop);
+	ev_unref(loop);
 
 	ev_signal_init(&signals[4], term_signal_handler, SIGSEGV);
 	ev_signal_start(loop, &signals[4]);
-	ev_unref (loop);
+	ev_unref(loop);
 
 	ev_signal_init(&signals[5], term_signal_handler, SIGTERM);
 	ev_signal_start(loop, &signals[5]);
-	ev_unref (loop);
+	ev_unref(loop);
 
 	ev_signal_init(&signals[6], term_signal_handler, SIGBUS);
 	ev_signal_start(loop, &signals[6]);
-	ev_unref (loop);
+	ev_unref(loop);
 
 #else
 	/*! Install terminating signal handler: */
@@ -207,31 +206,31 @@ void init_signal() {
 
 	/*! SIGHUP*/
 	if (sigaction(SIGHUP, &sa_term, NULL) != 0)
-		errx(1, "%s: Failed to install sighandler for SIGHUP", __func__);
+	errx(1, "%s: Failed to install sighandler for SIGHUP", __func__);
 
 	/*! SIGINT*/
 	if (sigaction(SIGINT, &sa_term, NULL) != 0)
-		errx(1, "%s: Failed to install sighandler for SIGINT", __func__);
+	errx(1, "%s: Failed to install sighandler for SIGINT", __func__);
 
 	/*! SIGQUIT*/
 	if (sigaction(SIGQUIT, &sa_term, NULL) != 0)
-		errx(1, "%s: Failed to install sighandler for SIGQUIT", __func__);
+	errx(1, "%s: Failed to install sighandler for SIGQUIT", __func__);
 
 	/*! SIGILL*/
 	if (sigaction(SIGILL, &sa_term, NULL) != 0)
-		errx(1, "%s: Failed to install sighandler for SIGILL", __func__);
+	errx(1, "%s: Failed to install sighandler for SIGILL", __func__);
 
 	/*! SIGSEGV*/
 	if (sigaction(SIGSEGV, &sa_term, NULL) != 0)
-		errx(1, "%s: Failed to install sighandler for SIGSEGV", __func__);
+	errx(1, "%s: Failed to install sighandler for SIGSEGV", __func__);
 
 	/*! SIGTERM*/
 	if (sigaction(SIGTERM, &sa_term, NULL) != 0)
-		errx(1, "%s: Failed to install sighandler for SIGTERM", __func__);
+	errx(1, "%s: Failed to install sighandler for SIGTERM", __func__);
 
 	/*! SIGBUS*/
 	if (sigaction(SIGBUS, &sa_term, NULL) != 0)
-		errx(1, "%s: Failed to install sighandler for SIGBUS", __func__);
+	errx(1, "%s: Failed to install sighandler for SIGBUS", __func__);
 
 	/*! ignore signals: */
 	struct sigaction sa_ignore;
@@ -241,19 +240,19 @@ void init_signal() {
 
 	/*! SIGABRT*/
 	if (sigaction(SIGABRT, &sa_ignore, NULL) != 0)
-		errx(1, "%s: Failed to install sighandler for SIGABRT", __func__);
+	errx(1, "%s: Failed to install sighandler for SIGABRT", __func__);
 
 	/*! SIGALRM*/
 	if (sigaction(SIGALRM, &sa_ignore, NULL) != 0)
-		errx(1, "%s: Failed to install sighandler for SIGALRM", __func__);
+	errx(1, "%s: Failed to install sighandler for SIGALRM", __func__);
 
 	/*! SIGUSR2*/
 	if (sigaction(SIGUSR2, &sa_ignore, NULL) != 0)
-		errx(1, "%s: Failed to install sighandler for SIGUSR2", __func__);
+	errx(1, "%s: Failed to install sighandler for SIGUSR2", __func__);
 
 	/*! SIGPOLL*/
 	if (sigaction(SIGPOLL, &sa_ignore, NULL) != 0)
-		errx(1, "%s: Failed to install sighandler for SIGPOLL", __func__);
+	errx(1, "%s: Failed to install sighandler for SIGPOLL", __func__);
 
 	/*! rotate logs: */
 	struct sigaction sa_rotate_log;
@@ -266,7 +265,7 @@ void init_signal() {
 
 	/*! SIGUSR1*/
 	if (sigaction(SIGUSR1, &sa_rotate_log, NULL) != 0)
-		errx(1, "%s: Failed to install sighandler for SIGUSR1", __func__);
+	errx(1, "%s: Failed to install sighandler for SIGUSR1", __func__);
 #endif
 }
 
@@ -347,16 +346,6 @@ void init_variables() {
 		errx(1, "%s: Fatal error while creating uplink hash table.\n",
 				__func__);
 
-#ifdef DE_THREAD
-	/*! init DE_queue */
-	DE_queue = NULL;
-#endif
-
-	/*! init the security locks */
-#ifdef DE_THREAD
-	g_rw_lock_init( &DE_queue_lock );
-#endif
-
 	/* create the main B-Tree to store meta informations of active connections */
 	if (NULL == (conn_tree = g_tree_new((GCompareFunc) g_strcmp0))) {
 		errx(1, "%s: Fatal error while creating conn_tree.\n", __func__);
@@ -395,36 +384,33 @@ void init_variables() {
  \param[in] queuenum the queue identifier
  \return file descriptor for queue
  */
-static int
-init_nfqueue(struct nfq_handle **h, struct nfq_q_handle **qh,
-		unsigned short int queuenum) {
+static int init_nfqueue(unsigned short int queuenum) {
 
-	running = OK;
-
-	*h = nfq_open();
-	if (!*h)
+	h = nfq_open();
+	if (!h)
 		errx(1, "%s Error during nfq_open()", __func__);
 
-	if (nfq_unbind_pf(*h, AF_INET) < 0)
+	if (nfq_unbind_pf(h, AF_INET) < 0)
 		errx(1, "%s Error during nfq_unbind_pf()", __func__);
 
-	if (nfq_bind_pf(*h, AF_INET) < 0)
+	if (nfq_bind_pf(h, AF_INET) < 0)
 		errx(1, "%s Error during nfq_bind_pf()", __func__);
 
 	syslog(LOG_INFO, "NFQUEUE: binding to queue '%hd'\n", queuenum);
 
-	*qh = nfq_create_queue(*h, queuenum, &q_cb, NULL);
+	qh = nfq_create_queue(h, queuenum, &q_cb, NULL);
 	if (!qh)
 		errx(1, "%s Error during nfq_create_queue()", __func__);
 
-	if (nfq_set_mode(*qh, NFQNL_COPY_PACKET, PAYLOADSIZE) < 0)
+	if (nfq_set_mode(qh, NFQNL_COPY_PACKET, PAYLOADSIZE) < 0)
 		errx(1, "%s Can't set packet_copy mode", __func__);
 
-	return (nfnl_fd(nfq_nfnlh(*h)));
+	running = OK;
+
+	return (nfnl_fd(nfq_nfnlh(h)));
 }
 
-static void
-close_nfqueue(struct nfq_handle *h, struct nfq_q_handle *qh, unsigned short int queuenum) {
+static void close_nfqueue(unsigned short int queuenum) {
 	syslog(LOG_INFO, "NFQUEUE: unbinding from queue '%hd' (running: %d)\n",
 			queuenum, running);
 	nfq_destroy_queue(qh);
@@ -435,18 +421,18 @@ close_nfqueue(struct nfq_handle *h, struct nfq_q_handle *qh, unsigned short int 
  \brief Function that waits for thread to close themselves */
 int close_thread() {
 
+	int i = 0;
+	struct pkt_struct *pkt = alloca(sizeof(struct pkt_struct));
+	pkt->last = TRUE;
+	for (; i < DE_THREADS; i++) {
+		g_async_queue_push(de_queues[i], pkt);
+		g_printerr("%s: Waiting for de_thread %i to terminate\n", __func__, i);
+		g_thread_join(de_threads[i]);
+		g_async_queue_unref(de_queues[i]);
+	}
+
 	threading = NOK;
 	g_cond_broadcast(&threading_cond);
-
-#ifndef HAVE_LIBEV
-	g_printerr("%s: Waiting for thread_clean to terminate\n", __func__);
-	g_thread_join(thread_clean);
-#endif
-
-#ifdef DE_THREAD
-	g_printerr("%s: Waiting for thread_de to terminate\n", __func__);
-	g_thread_join(thread_de);
-#endif
 
 	g_thread_join(mod_backup);
 	g_thread_join(thread_clean);
@@ -566,283 +552,300 @@ void close_all(void) {
  *
  \brief Function called for each received packet, this is the core of the redirection engine
  \param[in] tb a Netfilter Queue structure that contain both the packet and the metadatas
- \param[in] *mark a pointer to the mark field to be set on the packet
+ \param[in] nfq_packet_id the nfq packet id
  \return statement = 1 if the packet should be accepted or 0 if the packet has to be dropped. Default is to drop. */
-struct verdict *
-process_packet(struct nfq_data *tb) {
+struct pkt_struct *
+process_packet(struct nfq_data *tb, uint32_t nfq_packet_id) {
 
-	/*! We create the verdict structure to return */
-	struct verdict *to_return = g_malloc0(sizeof(struct verdict));
-
-	struct conn_struct * conn = NULL;
 	struct pkt_struct * pkt = NULL;
-
 	unsigned char *nf_packet;
 	struct in_addr in;
 
 	/*! extract ip header from packet payload */
-	int size;
-	size = nfq_get_payload(tb, &nf_packet);
+	int size = nfq_get_payload(tb, &nf_packet);
 	if (size < 0) {
-		return to_return;
+		goto done;
+	}
+
+	uint32_t mark = nfq_get_nfmark(tb);
+
+	/*! check if protocol is invalid (not TCP or UDP) */
+	if ((((struct iphdr*) nf_packet)->protocol != IPPROTO_TCP)
+			&& (((struct iphdr*) nf_packet)->protocol != IPPROTO_UDP)) {
+
+		g_printerr("%s Incorrect protocol: %d, packet dropped\n", H(0),
+				(((struct iphdr*) nf_packet)->protocol));
+
+		goto done;
 	}
 
 	in.s_addr = ((struct iphdr*) nf_packet)->saddr;
 
-	g_printerr("%s** NEW packet from %s %s, %d bytes. Mark %u **\n", H(0),
-			inet_ntoa(in), lookup_proto(((struct iphdr*) nf_packet)->protocol),
-			size, to_return->mark);
-
-	/*! check if protocol is invalid (not TCP or UDP) */
-	if ((((struct iphdr*) nf_packet)->protocol != TCP)
-			&& (((struct iphdr*) nf_packet)->protocol != UDP)) {
-		g_printerr("%s Incorrect protocol: %d, packet dropped\n", H(0),
-				(((struct iphdr*) nf_packet)->protocol));
-		return to_return;
-	}
-
 	/*! Initialize the packet structure (into pkt) and find the origin of the packet */
-	if (init_pkt(nf_packet, &pkt, nfq_get_nfmark(tb)) == NOK) {
-		g_printerr(
-				"%s Packet structure couldn't be initialized, packet dropped\n",
-				H(conn->id));
-		return to_return;
-	}
-
-	/*! Initialize the connection structure (into conn) and get the state of the connection */
-	if (init_conn(pkt, &conn) == NOK) {
-		g_printerr(
-				"%s Connection structure couldn't be initialized, packet dropped\n",
+	if (init_pkt(nf_packet, &pkt, mark, nfq_packet_id) == NOK) {
+		g_printerr("%s Packet structure couldn't be initialized\n",
 				H(0));
-		free_pkt(pkt);
-		return to_return;
+
+		pkt = NULL;
+		goto done;
+
 	}
 
-#ifdef DEBUG
-	g_printerr("%s Origin: %s %s, %i bytes\n", H(conn->id),
-			lookup_origin(pkt->origin), lookup_state(conn->state), pkt->data);
-#endif
+	g_printerr("%s** NEW packet from %s %s, %d bytes. Mark %u, NFQID %u **\n",
+			H(0), inet_ntoa(in),
+			lookup_proto(((struct iphdr*) nf_packet)->protocol), size, mark,
+			nfq_packet_id);
 
-	/*! Check that there was no problem getting the current connection structure
-	 *  and make sure the STATE is valid */
-	if (((conn->state < INIT) && (pkt->origin == EXT))
-			|| (conn->state <= INVALID)) {
-		///INIT == 1, INVALID == 0 and NOK == -1
-		g_printerr("%s Packet not from a valid connection %s\n", H(conn->id),
-				inet_ntoa(in));
-		if (pkt->packet.ip->protocol == TCP && ICONFIG("reset_ext"))
-			reply_reset(&(pkt->packet));
+	done: return pkt;
+}
 
-		free_pkt(pkt);
-		return to_return;
-	}
+void de_thread(gpointer data) {
 
-	if (conn->state == DROP) {
-		g_printerr("%s This connection is marked as DROPPED %s\n", H(conn->id),
-				inet_ntoa(in));
+	uint32_t thread_id = GPOINTER_TO_UINT(data);
+	struct pkt_struct *pkt = NULL;
+	struct conn_struct *conn = NULL;
 
-		if (pkt->packet.ip->protocol == TCP && ICONFIG("reset_ext"))
-			reply_reset(&(pkt->packet));
+	int deny_hih_init = ICONFIG("deny_hih_init");
+	int reset_ext = ICONFIG("reset_ext");
 
-		free_pkt(pkt);
-		return to_return;
-	}
+	while ((pkt = (struct pkt_struct *) g_async_queue_pop(de_queues[thread_id]))) {
 
-	// Setup iptables mark on the packet based on what's recorded in the conn_struct
-	init_mark(pkt, conn);
+		// Exit the thread
+		if (pkt->last) {
+			return;
+		}
 
-	switch (pkt->origin) {
-	/*! Packet is from the low interaction honeypot */
-	case LIH:
-		switch (conn->state) {
-		case INIT:
-			if (pkt->packet.ip->protocol == TCP && pkt->packet.tcp->syn != 0) {
-				conn->hih.lih_syn_seq = ntohl(pkt->packet.tcp->seq);
-			}
-			store_pkt(conn, pkt);
-			//conn->state = CONTROL;
-			//switch_state(conn, CONTROL); //Now it's when the connection is created that the state is on CONTROL for LIH
-			to_return->statement = 1; //DE_process_packet(pkt);	/*! For now, we don't analyze packets from LIH */
-			break;
-		case DECISION:
-			if (pkt->packet.ip->protocol == TCP && pkt->packet.tcp->syn != 0) {
-				conn->hih.lih_syn_seq = ntohl(pkt->packet.tcp->seq);
-			}
-			store_pkt(conn, pkt);
-			to_return->statement = 1; //DE_process_packet(pkt);	/*! For now, we don't analyze packets from LIH */
-			break;
-		case PROXY:
-#ifdef DEBUG
+		status_t statement = NOK;
+
+		/*! Initialize the connection structure (into conn) and get the state of the connection */
+		if (init_conn(pkt, &conn) == NOK) {
 			g_printerr(
-					"%s Packet from LIH proxied directly to its destination\n",
-					H(conn->id));
+					"%s Connection structure couldn't be initialized, packet dropped\n",
+					H(0));
+			free_pkt(pkt);
+			goto done;
+		}
+
+#ifdef DEBUG
+		g_printerr("%s Origin: %s %s, %i bytes\n", H(conn->id),
+				lookup_origin(pkt->origin), lookup_state(conn->state),
+				pkt->data);
 #endif
-			to_return->statement = 1;
-			break;
-		case CONTROL:
-			if (pkt->packet.ip->protocol == TCP && pkt->packet.tcp->syn != 0) {
-				conn->hih.lih_syn_seq = ntohl(pkt->packet.tcp->seq);
-			}
-			store_pkt(conn, pkt);
-			to_return->statement = DE_process_packet(pkt);
-			break;
-		default:
-			g_printerr("%s Packet from LIH at wrong state => reset %s\n",
-					H(conn->id), inet_ntoa(in));
-			if (pkt->packet.ip->protocol == TCP)
+
+		/*! Check that there was no problem getting the current connection structure
+		 *  and make sure the STATE is valid */
+		if (((conn->state < INIT) && (pkt->origin == EXT))
+				|| (conn->state <= INVALID)) {
+
+			g_printerr("%s Packet not from a valid connection\n", H(conn->id));
+			if (pkt->packet.ip->protocol == IPPROTO_TCP && reset_ext == 1)
 				reply_reset(&(pkt->packet));
-			free_pkt(pkt);
-			break;
-		}
-		break;
 
-		/*! Packet is from the high interaction honeypot */
-	case HIH:
-		switch (conn->state) {
-		case REPLAY:
-			/*! push the packet to the synchronization list in conn_struct */
-			if (pkt->packet.ip->protocol == TCP && pkt->packet.tcp->syn == 1) {
-				conn->hih.delta = ~ntohl(pkt->packet.tcp->seq) + 1
-						+ conn->hih.lih_syn_seq;
-			}
-			replay(conn, pkt);
 			free_pkt(pkt);
-			break;
-		case FORWARD:
-			forward(pkt);
-			free_pkt(pkt);
-			break;
-			/*! This one should never occur because PROXY are only between EXT and LIH... but we never know! */
-		case PROXY:
-#ifdef DEBUG
-			g_printerr(
-					"%s Packet from HIH proxied directly to its destination\n",
+			goto done;
+		}
+
+		if (conn->state == DROP) {
+			g_printerr("%s This connection is marked as DROPPED\n",
 					H(conn->id));
-#endif
-			to_return->statement = 1;
-			break;
-		case CONTROL:
-			to_return->statement = DE_process_packet(pkt);
+
+			if (pkt->packet.ip->protocol == IPPROTO_TCP && reset_ext == 1)
+				reply_reset(&(pkt->packet));
+
 			free_pkt(pkt);
-			break;
-		default:
-			/*! We are surely in the INIT state, so the HIH is initiating a connection to outside. We reset or control it */
-			if (ICONFIG("deny_hih_init") > 0) {
-				g_printerr(
-						"%s Packet from HIH at wrong state, so we reset %s\n",
-						H(conn->id), inet_ntoa(in));
-				if (pkt->packet.ip->protocol == TCP) {
-					reply_reset(&(pkt->packet));
+			goto done;
+		}
+
+		// Setup iptables mark on the packet based on what's recorded in the conn_struct
+		init_mark(pkt, conn);
+
+		switch (pkt->origin) {
+		/*! Packet is from the low interaction honeypot */
+		case LIH:
+			switch (conn->state) {
+			case INIT:
+				if (pkt->packet.ip->protocol == IPPROTO_TCP
+						&& pkt->packet.tcp->syn != 0) {
+					conn->hih.lih_syn_seq = ntohl(pkt->packet.tcp->seq);
 				}
-				to_return->statement = 0;
-				//conn->state = DROP;
-				switch_state(conn, DROP);
-				free_pkt(pkt);
-			} else {
+
+				// Only store packets if there are backends
+				if(conn->target->back_handler_count>0) {
+					store_pkt(conn, pkt);
+				}
+
+				statement = OK;
+				break;
+			case DECISION:
+				if (pkt->packet.ip->protocol == IPPROTO_TCP
+						&& pkt->packet.tcp->syn != 0) {
+					conn->hih.lih_syn_seq = ntohl(pkt->packet.tcp->seq);
+				}
+
+				// Only store packets if there are backends
+				if (conn->target->back_handler_count > 0) {
+					store_pkt(conn, pkt);
+				}
+
+				statement = OK;
+				break;
+			case PROXY:
+#ifdef DEBUG
 				g_printerr(
-						"%s Packet from HIH in a new connection, so we control it (%s)\n",
-						H(conn->id), inet_ntoa(in));
-				switch_state(conn, CONTROL);
-				to_return->statement = DE_process_packet(pkt);
+						"%s Packet from LIH proxied directly to its destination\n",
+						H(conn->id));
+#endif
+				statement = OK;
+				break;
+			case CONTROL:
+				if (pkt->packet.ip->protocol == IPPROTO_TCP
+						&& pkt->packet.tcp->syn != 0) {
+					conn->hih.lih_syn_seq = ntohl(pkt->packet.tcp->seq);
+				}
+
+				// Only store packets if there are backends
+				if (conn->target->back_handler_count > 0) {
+					store_pkt(conn, pkt);
+				}
+				statement = DE_process_packet(pkt);
+				break;
+			default:
+				g_printerr("%s Packet from LIH at wrong state => reset\n",
+						H(conn->id));
+				if (pkt->packet.ip->protocol == IPPROTO_TCP)
+					reply_reset(&(pkt->packet));
 				free_pkt(pkt);
+				break;
+			}
+			break;
+
+		case HIH:
+			/*! Packet is from the high interaction honeypot */
+			switch (conn->state) {
+			case REPLAY:
+				/*! push the packet to the synchronization list in conn_struct */
+				if (pkt->packet.ip->protocol == IPPROTO_TCP
+						&& pkt->packet.tcp->syn == 1) {
+					conn->hih.delta = ~ntohl(pkt->packet.tcp->seq) + 1
+							+ conn->hih.lih_syn_seq;
+				}
+				replay(conn, pkt);
+				free_pkt(pkt);
+				break;
+			case FORWARD:
+				forward(pkt);
+				free_pkt(pkt);
+				break;
+				/*! This one should never occur because PROXY are only between EXT and LIH... but we never know! */
+			case PROXY:
+#ifdef DEBUG
+				g_printerr(
+						"%s Packet from HIH proxied directly to its destination\n",
+						H(conn->id));
+#endif
+				statement = OK;
+				break;
+			case CONTROL:
+				statement = DE_process_packet(pkt);
+				free_pkt(pkt);
+				break;
+			default:
+				/*! We are surely in the INIT state, so the HIH is initiating a connection to outside. We reset or control it */
+				if (deny_hih_init == 1) {
+					g_printerr(
+							"%s Packet from HIH at wrong state, so we reset\n",
+							H(conn->id));
+					if (pkt->packet.ip->protocol == IPPROTO_TCP) {
+						reply_reset(&(pkt->packet));
+					}
+					statement = OK;
+					switch_state(conn, DROP);
+					free_pkt(pkt);
+				} else {
+					g_printerr(
+							"%s Packet from HIH in a new connection, so we control it\n",
+							H(conn->id));
+					switch_state(conn, CONTROL);
+					statement = DE_process_packet(pkt);
+					free_pkt(pkt);
+				}
+				break;
+			}
+			break;
+
+		case EXT:
+		default:
+			/*! Packet is from the external attacker (origin == EXT) */
+			switch (conn->state) {
+			case INIT:
+				// Only store packets if there are backends
+				if (conn->target->back_handler_count > 0) {
+					store_pkt(conn, pkt);
+				}
+				g_string_assign(conn->decision_rule, ";");
+				statement = DE_process_packet(pkt);
+				break;
+			case DECISION:
+				// Only store packets if there are backends
+				if (conn->target->back_handler_count > 0) {
+					store_pkt(conn, pkt);
+				}
+				statement = DE_process_packet(pkt);
+				break;
+			case FORWARD:
+				forward(pkt);
+				free_pkt(pkt);
+				break;
+			case PROXY:
+				g_printerr(
+						"%s Packet from EXT proxied directly to its destination (PROXY)\n",
+						H(conn->id));
+				statement = OK;
+				free_pkt(pkt);
+				break;
+			case CONTROL:
+				g_printerr(
+						"%s Packet from EXT proxied directly to its destination (CONTROL)\n",
+						H(conn->id));
+				statement = OK;
+				free_pkt(pkt);
+				break;
+			default:
+				free_pkt(pkt);
+				break;
 			}
 			break;
 		}
-		break;
 
-		/*! Packet is from the external attacker (origin == EXT) */
-	default:
-		switch (conn->state) {
-		case INIT:
-			store_pkt(conn, pkt);
-			g_string_assign(conn->decision_rule, ";");
-			to_return->statement = DE_process_packet(pkt);
-			break;
-		case DECISION:
-			store_pkt(conn, pkt);
-			to_return->statement = DE_process_packet(pkt);
-			break;
-		case FORWARD:
-			forward(pkt);
-			free_pkt(pkt);
-			break;
-		case PROXY:
-			//#ifdef DEBUG
-			g_printerr(
-					"%s Packet from EXT proxied directly to its destination (PROXY)\n",
-					H(conn->id));
-			//#endif
-			to_return->statement = 1;
-			free_pkt(pkt);
-			break;
-		case CONTROL:
-			//#ifdef DEBUG
-			g_printerr(
-					"%s Packet from EXT proxied directly to its destination (CONTROL)\n",
-					H(conn->id));
-			//#endif
-			to_return->statement = 1;
-			free_pkt(pkt);
-			break;
-		case DROP:
-			to_return->statement = 0;
-			free_pkt(pkt);
-			break;
-		default:
-			free_pkt(pkt);
-			break;
+		done: if (statement == OK) {
+			nfq_set_verdict2(qh, pkt->nfq_packet_id, NF_ACCEPT, pkt->mark, 0,
+					NULL);
+		} else {
+			nfq_set_verdict(qh, pkt->nfq_packet_id, NF_DROP, 0, NULL);
 		}
-		break;
 	}
-
-	return to_return;
 }
 
 /*! q_cb
  *
  \brief Callback function launched by the netfilter queue handler each time a packet is received
- //TODO: push packets here into an internal flow-based queue which the DE_thread can process
  * */
 int q_cb(struct nfq_q_handle *gh, __attribute__ ((unused)) struct nfgenmsg *nfmsg,
 	       struct nfq_data *nfad, __attribute__((unused)) void *data) {
+
 	/*! get packet id */
-	struct nfqnl_msg_packet_hdr *ph;
-	ph = nfq_get_msg_packet_hdr(nfad);
-	int id = ntohl(ph->packet_id);
+	struct nfqnl_msg_packet_hdr *ph = nfq_get_msg_packet_hdr(nfad);
+	uint32_t id = ntohl(ph->packet_id);
 
-	/* The NAT table only has information about the connection to LIH */
-	/* We need to duplicate whatever mark was set on the LIH connection to forwarded connections to HIH */
-
-	/*! launch process function */
-	struct verdict *decision = process_packet(nfad);
-	int to_return;
-
-	//printf("Final result: %u and set mark to %u\n", decision->statement, decision->mark);
-
-	if (decision->statement == OK) {
-		/*! nfq_set_verdict2
-		 \brief set a decision NF_ACCEPT or NF_DROP on the packet and put a mark on it
-		 *
-		 \param[in] qh netfilter queue handle obtained by call to nfq_create_queue
-		 \param[in] id id of the packet
-		 \param[in] verdict NF_ACCEPT or NF_DROP
-		 \param[in] mark netfilter mark value to mark packet with
-		 \param[in] data_len (optional) number of bytes of data pointer by buf
-		 \param[in] buf pointer to data buffer
-		 *
-		 \return 0 on success, non-zore on failure */
-
-		/*! ACCEPT the packet if the statement is 1 */
-		/* Also copy whatever mark has been on the packet initially, required for multi-uplink setups */
-
-		to_return = nfq_set_verdict2(gh, id, NF_ACCEPT, decision->mark, 0, NULL);
+	struct pkt_struct *pkt = process_packet(nfad, id);
+	if(pkt) {
+		uint32_t queue_id = pkt->packet.ip->saddr % DE_THREADS;
+		g_async_queue_push(de_queues[queue_id], pkt);
 	} else {
-		/*! DROP the packet if the statement is 0 (or something else than 1) */
-		to_return = nfq_set_verdict2(gh, id, NF_DROP, decision->mark, 0, NULL);
+		nfq_set_verdict(gh, id, NF_DROP, 0, NULL);
 	}
 
-	free(decision);
-	return to_return;
+	return running;
 }
 
 #ifndef HAVE_LIBEV
@@ -852,12 +855,11 @@ int q_cb(struct nfq_q_handle *gh, __attribute__ ((unused)) struct nfgenmsg *nfms
  \return status
  */
 short int netlink_loop(unsigned short int queuenum) {
-	struct nfq_q_handle *qh = NULL;
-	struct nfq_handle *h = NULL;
+
 	int fd = -1, rv = -1, watchdog=0;
 	char buf[BUFSIZE];
 
-	fd = init_nfqueue(&h, &qh, queuenum);
+	fd = init_nfqueue(queuenum);
 
 	while (running == OK) {
 		memset(buf, 0, BUFSIZE);
@@ -880,13 +882,13 @@ short int netlink_loop(unsigned short int queuenum) {
 		}
 	}
 
-	close_nfqueue(h, qh, queuenum);
+	close_nfqueue(queuenum);
 	return (0);
 }
 
 #else
 
-static void nfqueue_ev_cb(__attribute__((unused))  struct ev_loop *loop,
+static void nfqueue_ev_cb(__attribute__((unused))    struct ev_loop *loop,
 		struct ev_io *w, __attribute__ ((unused)) int revents) {
 	int rv;
 	char buf[BUFSIZE];
@@ -910,10 +912,11 @@ int main(int argc, char *argv[]) {
 	char *config_file_name = "";
 	FILE *fp;
 
+	qh = NULL;
+	h = NULL;
+
 	unsigned short int queuenum = 0;
-	g_printerr(
-			"%s  v%s\n\n",
-			banner, PACKAGE_VERSION);
+	g_printerr("%s  v%s\n\n", banner, PACKAGE_VERSION);
 
 	/*! parsing arguments */
 	if (argc < 2)
@@ -1019,7 +1022,7 @@ int main(int argc, char *argv[]) {
 	chmod(pidfile, 0644);
 	mainpid = getpid();
 
-	if(NOK != ICONFIG("max_packet_buffer"))
+	if (ICONFIG("max_packet_buffer")>0)
 		max_packet_buffer = ICONFIG("max_packet_buffer");
 	else
 		max_packet_buffer = ULLONG_MAX;
@@ -1048,7 +1051,7 @@ int main(int argc, char *argv[]) {
 				(void) dup2(fdebug, STDOUT_FILENO);
 				(void) dup2(fdebug, STDERR_FILENO);
 				if (fdebug > 2)
-					(void) close(fdebug);
+				(void) close(fdebug);
 				syslog(LOG_INFO, "done");
 			} else {
 				syslog(LOG_INFO, "file: %s", strerror(errno));
@@ -1061,21 +1064,25 @@ int main(int argc, char *argv[]) {
 #ifdef HAVE_MYSQL
 		init_mysql_log();
 #else
-		errx(1, "%s: Honeybrid wasn't compiled with MySQL!", __func__);
+	errx(1, "%s: Honeybrid wasn't compiled with MySQL!", __func__);
 #endif
 
 	if (output == OUTPUT_LOGFILES)
 		open_connection_log();
 
-#ifdef DE_THREAD
-	//TODO: Implement this
-	//TODO: Multiple DE threads to process faster?
-	/*! init the Decision Engine thread */
-	/*if( ( thread_de = g_thread_create_full ((void *)DE_submit_packet, NULL, 0, TRUE, TRUE, 0, NULL)) == NULL)
-	 errx(1, "%s: Unable to start the decision engine thread", __func__);
-	 else
-	 g_printerr("%s: Decision engine thread started\n", __func__);*/
-#endif
+	g_printerr("%s Starting with %u decision threads.\n", __func__, DE_THREADS);
+	uint32_t i;
+	for (i = 0; i < DE_THREADS; i++)
+		de_queues[i] = g_async_queue_new();
+
+	/*! init the Decision Engine threads */
+	for (i = 0; i < DE_THREADS; i++)
+		if ((de_threads[i] = g_thread_new("de_thread", (void *) de_thread,
+				GUINT_TO_POINTER(i))) == NULL)
+			errx(1, "%s: Unable to start the decision engine thread %i",
+					__func__, i);
+		else
+			g_printerr("%s: Decision engine thread %i started\n", __func__, i);
 
 	/*! initiate modules that can have only one instance */
 	init_modules();
@@ -1093,22 +1100,21 @@ int main(int argc, char *argv[]) {
 
 #ifdef HAVE_LIBEV
 
-	struct nfq_q_handle *qh=NULL;
 	int my_nfq_fd;
 
-	my_nfq_fd = init_nfqueue(&h, &qh, queuenum);
+	my_nfq_fd = init_nfqueue(queuenum);
 
 	/*! Watcher for processing packets received on NF_QUEUE: */
 	ev_io queue_watcher;
-	ev_io_init (&queue_watcher, nfqueue_ev_cb, my_nfq_fd, EV_READ);
-	ev_io_start (loop, &queue_watcher);
+	ev_io_init(&queue_watcher, nfqueue_ev_cb, my_nfq_fd, EV_READ);
+	ev_io_start(loop, &queue_watcher);
 
 	g_printerr("%s Starting ev_loop\n", H(0));
 
 	ev_loop(loop, 0);
 
 	/*! To be moved inside close_all() */
-	close_nfqueue(h, qh, queuenum);
+	close_nfqueue(queuenum);
 #else
 	/*! Starting the nfqueue loop to start processing packets */
 	g_printerr("%s Starting netlink_loop\n", H(0));
@@ -1116,7 +1122,7 @@ int main(int argc, char *argv[]) {
 #endif
 
 	close_all();
-	g_printerr("%s: Halted\n", __func__);
+	g_printerr("Honeybrid exited successfully.\n");
 	exit(0);
 
 	/* \todo to include in programmer documentation:

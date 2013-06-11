@@ -29,8 +29,8 @@
 
 status_t switch_state(struct conn_struct *conn, int new_state);
 
-status_t init_pkt(unsigned char *nf_packet, struct pkt_struct **pk,
-		u_int32_t mark);
+status_t init_pkt(const unsigned char *nf_packet, struct pkt_struct **pk,
+		uint32_t mark, uint32_t nfq_packet_id);
 
 void free_pkt(struct pkt_struct *pkt);
 

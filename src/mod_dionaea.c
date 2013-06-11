@@ -503,15 +503,17 @@ int init_mod_dionaea()
 	return 0;
 }
 
-void mod_dionaea(struct mod_args *args)
+mod_result_t mod_dionaea(struct mod_args *args)
 {
+
+	mod_result_t result = DEFER;
 
 	// Check if module is configured properly
 	if(xmpp_fifo==NULL) {
 		// It's not, can't decide
 		g_printerr("%s Dionaea module is not configured properly, can't decide!!\n", H(args->pkt->conn->id));
 		args->node->result = -1;
-		return;
+		return result;
 	}
 
 	//! get the IP address from the packet
@@ -594,22 +596,22 @@ void mod_dionaea(struct mod_args *args)
 
 		// Only allow it till we get a payload
 		if(dionaeaBackupSuccess==1 || dionaeaBTreeSuccess==1)
-		args->node->result=0;
+		result = REJECT;
 		else
-		args->node->result=1;
+		result = ACCEPT;
 
 	} else {
 		// Only switch it if we didn't get a payload
 		if(dionaeaBackupSuccess==1 || dionaeaBTreeSuccess==1 || ( dionaeaBackupSuccess==-1 && dionaeaBTreeSuccess==-1 ) )
-		args->node->result=0;
+		result = REJECT;
 		else
-		args->node->result=1;
+		result = ACCEPT;
 	}
 
 	free(connection_key);
 	free(info);
 
-	return;
+	return result;
 }
 #endif
 

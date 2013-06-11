@@ -33,9 +33,10 @@
  *
  \param[out] set result to 0 if attacker ip is found in search table, 1 if not
  */
-void mod_source_time(struct mod_args *args) {
+mod_result_t mod_source_time(struct mod_args *args) {
 	g_printerr("%s Module called\n", H(args->pkt->conn->id));
 
+	mod_result_t result = DEFER;
 	int expiration = 24 * 3600; /* a day */
 	int deny_after = 1200; /* 20 minutes */
 	int allow_after = 0; /* accept after this many seconds elapsed since first seeing src */
@@ -55,36 +56,34 @@ void mod_source_time(struct mod_args *args) {
 
 	/*! get the backup file for this module */
 	if (NULL
-			== (backup = (GKeyFile *) g_hash_table_lookup(args->node->arg,
+			== (backup = (GKeyFile *) g_hash_table_lookup(args->node->config,
 					"backup"))) {
 		/*! We can't decide */
-		args->node->result = -1;
 		g_printerr("%s mandatory argument 'backup' undefined!\n",
 				H(args->pkt->conn->id));
-		return;
+		return result;
 	}
 	/*! get the backup file path for this module */
 	if (NULL
-			== (backup_file = (gchar *) g_hash_table_lookup(args->node->arg,
+			== (backup_file = (gchar *) g_hash_table_lookup(args->node->config,
 					"backup_file"))) {
 		/*! We can't decide */
-		args->node->result = -1;
 		g_printerr("%s error, backup file path missing\n",
 				H(args->pkt->conn->id));
-		return;
+		return result;
 	}
 
-	if ((exp = (char *) g_hash_table_lookup(args->node->arg, "expiration"))
+	if ((exp = (char *) g_hash_table_lookup(args->node->config, "expiration"))
 			!= NULL) {
 		expiration = atoi(exp);
 	}
 
-	if ((timef = (char *) g_hash_table_lookup(args->node->arg, "deny_after"))
+	if ((timef = (char *) g_hash_table_lookup(args->node->config, "deny_after"))
 			!= NULL) {
 		deny_after = atoi(timef);
 	}
 
-	if ((timea = (char *) g_hash_table_lookup(args->node->arg, "allow_after"))
+	if ((timea = (char *) g_hash_table_lookup(args->node->config, "allow_after"))
 			!= NULL) {
 		allow_after = atoi(timea);
 	}
@@ -93,7 +92,7 @@ void mod_source_time(struct mod_args *args) {
 		g_printerr(
 				"%s Misconfiguration: allow_after is greater then deny_after!\n",
 				H(args->pkt->conn->id));
-		args->node->result = -1;
+		return result;
 	}
 
 	g_printerr("%s searching for this IP in the database...\n",
@@ -116,9 +115,9 @@ void mod_source_time(struct mod_args *args) {
 		g_snprintf(info[2], 20, "0"); /*! duration */
 
 		if (allow_after == 0)
-			args->node->result = 1;
+			result = ACCEPT;
 		else
-			args->node->result = 0;
+			result = REJECT;
 
 	} else {
 		/*! We check if we need to expire this entry */
@@ -133,9 +132,9 @@ void mod_source_time(struct mod_args *args) {
 			g_snprintf(info[2], 20, "0"); /*! duration */
 
 			if (allow_after == 0)
-				args->node->result = 1;
+				result = ACCEPT;
 			else
-				args->node->result = 0;
+				result = REJECT;
 
 		} else {
 			/*! Known IP, check time allowed */
@@ -143,9 +142,9 @@ void mod_source_time(struct mod_args *args) {
 					&& atoi(info[1]) + allow_after <= now) {
 				g_printerr("%s IP found within allowed time-frame\n",
 						H(args->pkt->conn->id));
-				args->node->result = 1;
+				result = ACCEPT;
 			} else {
-				args->node->result = 0;
+				result = REJECT;
 				g_printerr("%s IP found not withing allowed time-frame\n",
 						H(args->pkt->conn->id));
 			}
@@ -162,6 +161,6 @@ void mod_source_time(struct mod_args *args) {
 
 	/*! clean and exit */
 	//g_strfreev(key_src);
-	return;
+	return result;
 }
 

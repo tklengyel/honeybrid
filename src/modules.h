@@ -32,10 +32,10 @@
 
 void init_modules();
 
-#define run_module(module, args) \
+#define run_module(module, args, result) \
 	(module) ? \
-			((module_function)module)((struct mod_args *)args) : \
-			errx(1, "Error encountered while running module.\n")
+			result=((module_function)module)((struct mod_args *)args) : \
+			errx(1, "No module function defined!\n")
 
 module_function get_module(const char *mod_name);
 
@@ -48,42 +48,42 @@ int write_backup(const char *filename, GKeyFile *data, void *userdata);
 /*!************ [Basic Modules] **************/
 
 /*!** MODULE YESNO **/
-void mod_yesno(struct mod_args *args);
+mod_result_t mod_yesno(struct mod_args *args);
 
 /*!** MODULE COUNTER **/
-void mod_counter(struct mod_args *args);
+mod_result_t mod_counter(struct mod_args *args);
 
 /*!** MODULE RANDOM **/
-void mod_random(struct mod_args *args);
+mod_result_t mod_random(struct mod_args *args);
 
 /*!*********** [Advanced Modules] ************/
 
 /*!** MODULE HASH **/
 #ifdef HAVE_CRYPTO
 int init_mod_hash();
-void mod_hash(struct mod_args *args);
+mod_result_t mod_hash(struct mod_args *args);
 #endif
 
 /*!** MODULE SOURCE **/
-void mod_source(struct mod_args *args);
+mod_result_t mod_source(struct mod_args *args);
 
 /*!** MODULE CONTROL **/
-void mod_control(struct mod_args *args);
+mod_result_t mod_control(struct mod_args *args);
 
 #ifdef HAVE_XMPP
 /*!** MODULE DIONAEA **/
 int init_mod_dionaea();
-void mod_dionaea(struct mod_args *args);
+mod_result_t mod_dionaea(struct mod_args *args);
 #endif
 
 /*!** MODULE TIMED SOURCE **/
-void mod_source_time(struct mod_args *args);
+mod_result_t mod_source_time(struct mod_args *args);
 
 /*!** MODULE BACKPICK RANDOM **/
-void mod_backpick_random(struct mod_args *args);
+mod_result_t mod_backpick_random(struct mod_args *args);
 
 /*!** MODULE VMI **/
 int init_mod_vmi();
-void mod_vmi(struct mod_args *args);
+mod_result_t mod_vmi(struct mod_args *args);
 
 #endif //_MODULES_H_

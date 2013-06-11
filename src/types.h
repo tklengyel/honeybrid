@@ -35,23 +35,14 @@
 #include <err.h>
 
 // Include network headers
-//#include <linux/ip.h>
-//#include <linux/tcp.h>
-//#include <linux/icmp.h>
-
+#include <netinet/ether.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
 #include <pcap.h>
 #include <dumbnet.h>
-
-// Include GLib
 #include <glib.h>
-
-#define ETHER_ADDR_LEN	6
-#define ETHER_HDR_LEN	14
-#define UDP_HDR_LEN		8
 
 /*!
  \def PAYLOADSIZE
@@ -67,15 +58,9 @@
  */
 #define BUFSIZE 2048
 
-typedef enum {
-    ICMP    = 0x01,
-    IGMP    = 0x02,
-    TCP     = 0x06,
-    UDP     = 0x11,
-    GRE     = 0x2F,
-
-    __MAX_PROTOCOL
-} protocol_t;
+#ifndef DE_THREADS
+#define DE_THREADS 2
+#endif
 
 /*! \brief constants to define the origin of a packet
  */
@@ -105,17 +90,16 @@ typedef enum {
 /*! \brief output modes
  */
 typedef enum {
-    OUTPUT_INVALID  = -1,
-    OUTPUT_SYSLOG   = 1,
-    OUTPUT_STDOUT   = 2,
-    OUTPUT_LOGFILES = 3,
-    OUTPUT_MYSQL    = 4
+    OUTPUT_INVALID,
+    OUTPUT_SYSLOG,
+    OUTPUT_STDOUT,
+    OUTPUT_LOGFILES,
+    OUTPUT_MYSQL
 } output_t;
 
 typedef enum {
-	TIMEOUT = -2,
-	NOK 	= -1,
-	OK 		=  1
+	NOK = -1,
+	OK = 1
 } status_t;
 
 typedef enum {
@@ -132,11 +116,17 @@ typedef enum {
  \def decision types
  */
 typedef enum {
-	DE_NO_RULE = -2,
-	DE_DEFER = -1,
-	DE_REJECT = 0,
-	DE_ACCEPT =	1
+	DE_NO_RULE,
+	DE_DEFER,
+	DE_REJECT,
+	DE_ACCEPT
 } decision_t;
+
+typedef enum {
+	DEFER = DE_DEFER,
+	REJECT = DE_REJECT,
+	ACCEPT = DE_ACCEPT
+} mod_result_t;
 
 /*!
  \def verbosity channel
@@ -147,11 +137,11 @@ typedef enum {
  5 permanent internal processing events
  */
 typedef enum {
-	LOG_MIN = 1,
-	LOG_LOW = 2,
-	LOG_MED = 3,
-	LOG_HIGH = 4,
-	LOG_ALL = 5
+	LOG_MIN,
+	LOG_LOW,
+	LOG_MED,
+	LOG_HIGH,
+	LOG_ALL
 } log_verbosity_t;
 
 /*!
@@ -181,6 +171,6 @@ typedef enum {
 } log_id_t;
 
 struct mod_args;
-typedef void (*module_function)(struct mod_args *);
+typedef mod_result_t (*module_function)(struct mod_args *);
 
 #endif

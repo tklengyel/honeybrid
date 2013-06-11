@@ -53,7 +53,7 @@ AM_CFLAGS += $(MYSQL_CFLAGS)
 #AM_CFLAGS += $(HARDEN_CFLAGS)
 
 # Note that -pg is incompatable with $(HARDEN_LDFLAGS)
-AM_CFLAGS += -Wall -Wextra -Wno-override-init -g -ggdb3 -pg -DDEBUG
+AM_CFLAGS += -Wall -Wextra -Wno-override-init -Wno-strict-aliasing -g -ggdb3 -pg -DDEBUG
 
 AM_LDFLAGS =  $(GLIB_LIBS)
 AM_LDFLAGS += $(CRYPTO_LIBS)

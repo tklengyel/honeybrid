@@ -666,12 +666,16 @@ status_t log_mysql(const struct conn_struct *conn, const GString *proto,
 
 	return ret;
 }
-#else
-int init_mysql_log() {
+#else //HAVE_MYSQL
+status_t init_mysql_log() {
 	return NOK;
 }
 
-status_t log_mysql(const struct conn_struct *conn, const GString *proto, const GString *status, GString **status_info, gdouble duration) {
+status_t log_mysql(__attribute__((unused)) const struct conn_struct *conn,
+		__attribute__((unused)) const GString *proto,
+		__attribute__((unused)) const GString *status,
+		__attribute__((unused)) GString **status_info,
+		__attribute__((unused)) gdouble duration) {
 	return NOK;
 }
-#endif
+#endif //HAVE_MYSQL

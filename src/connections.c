@@ -71,8 +71,8 @@ static inline int addr2int(const char *address) {
  \param[in] mark: Netfilter mark of the packet
  \return the origin of the packet
  */
-status_t init_pkt(unsigned char *nf_packet, struct pkt_struct **pkt_in,
-		u_int32_t mark) {
+status_t init_pkt(const unsigned char *nf_packet, struct pkt_struct **pkt_in,
+		uint32_t mark, uint32_t nfq_packet_id) {
 
 	status_t ret = NOK;
 
@@ -82,8 +82,9 @@ status_t init_pkt(unsigned char *nf_packet, struct pkt_struct **pkt_in,
 	pkt->origin = EXT;
 	pkt->size = ntohs(((struct iphdr*) nf_packet)->tot_len);
 	pkt->mark = mark;
+	pkt->nfq_packet_id = nfq_packet_id;
 
-	if (pkt->size > 1500 || pkt->size < 40) {
+	if (pkt->size > BUFSIZE || pkt->size < 40) {
 		g_printerr("%s Invalid packet size: dropped\n", H(4));
 
 		goto done;
@@ -93,8 +94,10 @@ status_t init_pkt(unsigned char *nf_packet, struct pkt_struct **pkt_in,
 	pkt->packet.FRAME = g_malloc0(ETHER_HDR_LEN + pkt->size);
 	memcpy(pkt->packet.FRAME + ETHER_HDR_LEN, nf_packet, pkt->size);
 
-	/*! The most important part is to give to this ethernet header the type "IP protocol" */
-	(pkt->packet.FRAME)[12] = 0x08;
+	pkt->packet.eth = (struct ether_header *) pkt->packet.FRAME;
+
+	// Set IP type on the header
+	((struct ether_header *)pkt->packet.eth)->ether_type = htons(ETHERTYPE_IP);
 
 	/*! Assign the packet IP header and payload to the packet structure */
 	pkt->packet.ip = (struct iphdr *) (pkt->packet.FRAME + ETHER_HDR_LEN);
@@ -108,7 +111,7 @@ status_t init_pkt(unsigned char *nf_packet, struct pkt_struct **pkt_in,
 	pkt->packet.tcp = (struct tcphdr*) (((char *) pkt->packet.ip)
 			+ (pkt->packet.ip->ihl << 2));
 
-	if (pkt->packet.ip->protocol == TCP) {
+	if (pkt->packet.ip->protocol == IPPROTO_TCP) {
 		/*! Process TCP packets */
 		if (pkt->packet.tcp->doff < 0x05 || pkt->packet.tcp->doff > 0xFF) {
 			g_printerr("%s Invalid TCP header length: dropped\n", H(4));
@@ -148,7 +151,7 @@ status_t init_pkt(unsigned char *nf_packet, struct pkt_struct **pkt_in,
 		pkt->data = ntohs(pkt->packet.ip->tot_len) - (pkt->packet.ip->ihl << 2)
 				- (pkt->packet.tcp->doff << 2);
 
-	} else if (pkt->packet.ip->protocol == UDP) {
+	} else if (pkt->packet.ip->protocol == IPPROTO_UDP) {
 		pkt->packet.payload = (char*) pkt->packet.udp + UDP_HDR_LEN;
 		/*! Process UDP packet */
 		/*! key_src */
@@ -189,7 +192,6 @@ status_t init_pkt(unsigned char *nf_packet, struct pkt_struct **pkt_in,
 done:
 	if (ret == NOK) {
 		free(pkt);
-		*pkt_in = NULL;
 	} else {
 		*pkt_in = pkt;
 	}
@@ -537,7 +539,7 @@ status_t conn_lookup(struct pkt_struct *pkt, struct conn_struct **conn) {
 status_t create_conn(struct pkt_struct *pkt, struct conn_struct **conn,
 		gdouble microtime) {
 	/*! The key could not be found, so we need to figure out where this packet comes from */
-	if (pkt->packet.ip->protocol == TCP && pkt->packet.tcp->syn == 0) {
+	if (pkt->packet.ip->protocol == IPPROTO_TCP && pkt->packet.tcp->syn == 0) {
 
 		g_printerr("%s ~~~~ TCP packet without SYN: we drop %s -> %s~~~~\n",
 				H(0), pkt->key_src, pkt->key_dst);

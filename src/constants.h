@@ -28,13 +28,15 @@
 
 extern const char *banner;
 
-extern const char* protocol_string[__MAX_PROTOCOL];
+extern const char* protocol_string[IPPROTO_MAX];
 
 extern const char* packet_origin_string[__MAX_ORIGIN];
 
 extern const char* conn_status_string[__MAX_CONN_STATUS];
 
-const char *lookup_proto(protocol_t proto);
+extern const char* mod_result_string[];
+
+const char *lookup_proto(uint16_t protocol);
 
 const char *lookup_origin(origin_t origin);
 

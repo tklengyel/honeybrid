@@ -24,21 +24,5 @@
 #include "types.h"
 
 int daemon(int, int);
-
 int yyparse(void);
 extern FILE *yyin;
-
-//int q_cb(struct nfq_q_handle *gh, struct nfgenmsg *nfmsg,
-//	       struct nfq_data *nfad, void *data);
-
-/*! Decision Engine thread enabled */
-//#define DE_THREAD
-/*! Two strategies: with thread or with libev 
- *  If HAVE_LIBEV is defined, the program loops on the main libev loop:
- *	- packets on queue are processed through libev callback
- *	- connection structures are cleaned by libev timer
- *  If not, then the program loops on nfqueue:
- *	- packets on queue are processed through nfqueue callback
- *	- connection structures are cleaned by a thread
- */
-//#define HAVE_LIBEV

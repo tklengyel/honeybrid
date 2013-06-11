@@ -95,8 +95,10 @@ status_t running;
  \def thread_clean
  \def thread_log */
 GThread *thread_clean;
-GThread *thread_de;
 GThread *mod_backup;
+
+GThread *de_threads[DE_THREADS];
+GAsyncQueue *de_queues[DE_THREADS];
 
 /*!
  \def log level

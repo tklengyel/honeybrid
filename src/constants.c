@@ -39,15 +39,12 @@ const char *banner =
 	"/_/ /_/\\____/_/ /_/\\___/\\__, /_.___/_/  /_/\\__,_/\n"
 	"                       /____/";
 
-const char* protocol_string[__MAX_PROTOCOL] = {
+const char* protocol_string[IPPROTO_MAX] = {
 
-	[0 ... __MAX_PROTOCOL-1] = "INVALID",
+	[0 ... IPPROTO_MAX-1] = "Unsupported protocol",
 
-	[ICMP] 	= "ICMP",
-	[IGMP] 	= "IGMP",
-	[TCP] 	= "TCP",
-	[UDP] 	= "UDP",
-	[GRE] 	= "GRE"
+	[IPPROTO_TCP] 	= "TCP",
+	[IPPROTO_UDP] 	= "UDP"
 };
 
 const char *packet_origin_string[__MAX_ORIGIN] = {
@@ -72,7 +69,13 @@ const char *conn_status_string[__MAX_CONN_STATUS] = {
 	[CONTROL] 	= "CONTROL"
 };
 
-const char *lookup_proto(protocol_t proto) {
+const char *mod_result_string[] = {
+	[DEFER] = "DEFER",
+	[ACCEPT] = "ACCEPT",
+	[REJECT] = "REJECT"
+};
+
+const char *lookup_proto(uint16_t proto) {
 	return protocol_string[proto];
 }
 

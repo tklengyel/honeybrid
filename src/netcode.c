@@ -26,6 +26,8 @@
 
  \author Julien Vehent, 2007
  \author Thomas Coquelin, 2008
+ \author Tamas K Lengyel, 2013
+
  */
 
 #include "netcode.h"
@@ -368,16 +370,16 @@ status_t send_raw(const struct iphdr *p, const struct interface *iface) {
 	dst.sin_family = AF_INET;
 
 	if (!iface) {
-		if (p->protocol == TCP)
+		if (p->protocol == IPPROTO_TCP)
 			sockettouse = tcp_rsd;
-		else if (p->protocol == UDP)
+		else if (p->protocol == IPPROTO_UDP)
 			sockettouse = udp_rsd;
 		else
 			return NOK;
 	} else {
-		if (p->protocol == TCP)
+		if (p->protocol == IPPROTO_TCP)
 			sockettouse = iface->tcp_socket;
-		else if (p->protocol == UDP)
+		else if (p->protocol == IPPROTO_UDP)
 			sockettouse = iface->udp_socket;
 		else
 			return NOK;
@@ -419,7 +421,7 @@ status_t forward(struct pkt_struct* pkt) {
 		/*!We set LIH source IP*/
 		fwd->saddr = pkt->conn->hih.lih_addr;
 		/*!If TCP, we update the source port, the sequence number, and the checksum*/
-		if (fwd->protocol == TCP) {
+		if (fwd->protocol == IPPROTO_TCP) {
 
 			struct tcp_packet* tcp_fwd = (struct tcp_packet*) fwd;
 
@@ -430,7 +432,7 @@ status_t forward(struct pkt_struct* pkt) {
 			tcp_checksum(tcp_fwd);
 		}
 		/*!If UDP, we update the source port and the checksum*/
-		else if (fwd->protocol == UDP) //udp
+		else if (fwd->protocol == IPPROTO_UDP) //udp
 				{
 			((struct udp_packet*) fwd)->udp.source = pkt->conn->hih.port;
 			udp_checksum(fwd);
@@ -451,7 +453,7 @@ status_t forward(struct pkt_struct* pkt) {
 		fwd->daddr = pkt->conn->hih.addr;
 
 		/*!If TCP, we update the destination port, the acknowledgement number if any, and the checksum*/
-		if (fwd->protocol == TCP) {
+		if (fwd->protocol == IPPROTO_TCP) {
 
 			struct tcp_packet* tcp_fwd = (struct tcp_packet*) fwd;
 
@@ -464,7 +466,7 @@ status_t forward(struct pkt_struct* pkt) {
 			tcp_checksum(tcp_fwd);
 		}
 		/*!If UDP, we update the destination port and the checksum*/
-		else if (fwd->protocol == UDP) {
+		else if (fwd->protocol == IPPROTO_UDP) {
 			((struct udp_packet*) fwd)->udp.dest = pkt->conn->hih.port;
 			udp_checksum(fwd);
 		}
@@ -498,12 +500,10 @@ status_t reply_reset(const struct packet *p) {
 	/*! fill up the IP header */
 	rst.ip.version = 4;
 	rst.ip.ihl = sizeof(struct iphdr) >> 2;
-	//rst.ip.tos = 0x0;
 	rst.ip.tot_len = ntohs(sizeof(struct iphdr) + sizeof(struct tcphdr));
-	//rst.ip.id = 0x00;
 	rst.ip.frag_off = ntohs(0x4000);
 	rst.ip.ttl = 0x40;
-	rst.ip.protocol = TCP;
+	rst.ip.protocol = IPPROTO_TCP;
 	//rst.ip.check = 0x00;
 	rst.ip.saddr = p->ip->daddr;
 	rst.ip.daddr = p->ip->saddr;
@@ -514,27 +514,15 @@ status_t reply_reset(const struct packet *p) {
 	rst.tcp.dest = p->tcp->source;
 	if (p->tcp->ack == 1)
 		rst.tcp.seq = (p->tcp->ack_seq);
-	//else
-	//    rst.tcp.seq = 0x0;
 	rst.tcp.ack_seq = htonl(
 			ntohl(p->tcp->seq) + p->tcp->syn + p->tcp->fin
 			+ ntohs(p->ip->tot_len) - (p->ip->ihl << 2)
 			- (p->tcp->doff << 2));
-	//rst.tcp.res1 = 0x0;
 	rst.tcp.doff = 0x5;
-	//rst.tcp.fin = 0x0;
-	//rst.tcp.syn = 0x0;
 	rst.tcp.rst = 0x1;
-	//rst.tcp.psh = 0x0;
 	rst.tcp.ack = 0x1;
-	//rst.tcp.urg = 0x0;
-	//rst.tcp.res2 = 0x0;
-	//rst.tcp.window = 0x00;
-	//rst.tcp.check = 0x00;
-	//rst.tcp.urg_ptr = 0x00;
 	tcp_checksum(&rst);
 	res = send_raw((struct iphdr*) &rst, NULL);
-	//free(rst);
 	return res;
 }
 
@@ -547,7 +535,7 @@ status_t reply_reset(const struct packet *p) {
 status_t reset_lih(struct conn_struct* conn) {
 
 	//! reset only tcp connections
-	if (conn->protocol != TCP)
+	if (conn->protocol != IPPROTO_TCP)
 		return OK;
 
 	status_t res = NOK;
@@ -646,7 +634,7 @@ void define_expected_data(struct pkt_struct* pkt) {
 	g_rw_lock_writer_lock(&pkt->conn->lock);
 	pkt->conn->expected_data.ip_proto = pkt->packet.ip->protocol;
 	pkt->conn->expected_data.payload = pkt->packet.payload;
-	if (pkt->packet.ip->protocol == TCP) {
+	if (pkt->packet.ip->protocol == IPPROTO_TCP) {
 		pkt->conn->expected_data.tcp_seq = ntohl(pkt->packet.tcp->seq)
 				+ ~pkt->conn->hih.delta + 1;
 		pkt->conn->expected_data.tcp_ack_seq = ntohl(pkt->packet.tcp->ack_seq);
@@ -679,7 +667,7 @@ status_t test_expected(struct conn_struct* conn, struct pkt_struct* pkt) {
 		goto test_done;
 	}
 
-	if (pkt->packet.ip->protocol == TCP) {
+	if (pkt->packet.ip->protocol == IPPROTO_TCP) {
 		if (pkt->packet.tcp->syn == 0
 				&& (ntohl(pkt->packet.tcp->seq) != conn->expected_data.tcp_seq)) {
 

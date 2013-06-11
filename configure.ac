@@ -21,7 +21,7 @@
 
 AC_PREREQ(2.61)
 AC_INIT([honeybrid],
-        [0.1.6],
+        [1.0.0-rc],
         [Tamas K Lengyel, tamas.k.lengyel@gmail.com],
         [honeybrid])
 AM_INIT_AUTOMAKE([1.10 foreign])
