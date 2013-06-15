@@ -130,6 +130,13 @@ GAsyncQueue **de_queues;
 log_verbosity_t LOG_LEVEL;
 
 /*!
+ \def log printing header lock
+ */
+GMutex log_header_lock;
+
+char log_header_string[200];
+
+/*!
  \Def file descriptor to log debug output
  */
 int fdebug;

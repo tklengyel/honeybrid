@@ -104,7 +104,7 @@ const struct mod_def module_definitions[__MAX_HONEYBRID_MODULE] = {
 
 // TODO: Only init modules/threads here that are actually used by a target
 void init_modules() {
-	g_printerr("%s Initiate modules\n", H(6));
+	printerr("%s Initiate modules\n", H(6));
 
 #ifdef HAVE_CRYPTO
 	init_mod_hash();
@@ -161,14 +161,14 @@ module_function get_module(const char *modname) {
 
 int write_backup(const char *filename, GKeyFile *data, __attribute__((unused)) void *unused)
 {
-    g_printerr("%s saving backup module %p to %s\n", H(6), data, filename);
+    printerr("%s saving backup module %p to %s\n", H(6), data, filename);
     gchar *buf;
     buf = g_key_file_to_data(data, NULL, NULL);
 
     FILE *file_fd;
     if (NULL == (file_fd = fopen(filename, (char *) "w+")))
     {
-        g_printerr(
+        printerr(
                 "%s Failed to save module backup \"%s\": can't open file for writing\n",
                 H(0), filename);
         return FALSE;
@@ -201,7 +201,7 @@ void save_backup_handler() {
 					(GHRFunc) write_backup, NULL);
 
 			if (removed)
-				g_printerr(
+				printerr(
 						"%s %d entries saved and removed from module_to_save\n",
 						H(0), removed);
 		}
@@ -215,19 +215,19 @@ void save_backup_handler() {
  */
 int save_backup(GKeyFile *data, char *filename)
 {
-    g_printerr("%s called for %p (%s)\n", H(0), data, filename);
+    printerr("%s called for %p (%s)\n", H(0), data, filename);
     if (FALSE
             == g_hash_table_lookup_extended(module_to_save, filename, NULL,
                     NULL))
     {
-        g_printerr("%s adding a new entry in module_to_save\n", H(0));
+        printerr("%s adding a new entry in module_to_save\n", H(0));
         g_hash_table_insert(module_to_save, filename, data);
         return 1;
     }
     else
     {
         g_hash_table_replace(module_to_save, filename, data);
-        g_printerr("%s module_to_save already had this entry, updated\n", H(0));
+        printerr("%s module_to_save already had this entry, updated\n", H(0));
         return 0;
     }
 }

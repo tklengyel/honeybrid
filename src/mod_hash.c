@@ -72,7 +72,7 @@ const EVP_MD *md;
 #define HASH_ASCII 5
 
 int init_mod_hash() {
-	g_printerr("%s Initializing Hash Module\n", H(0));
+	printerr("%s Initializing Hash Module\n", H(0));
 
 	/*! init OpenSSL SHA-1 engine */
 	OpenSSL_add_all_digests();
@@ -99,7 +99,7 @@ mod_result_t mod_hash(struct mod_args *args) {
 
 	/*! First, we make sure that we have data to work on */
 	if (args->pkt->data == 0) {
-		g_printerr("%s No data to work on\n", H(args->pkt->conn->id));
+		printerr("%s No data to work on\n", H(args->pkt->conn->id));
 		return result;
 	}
 
@@ -108,7 +108,7 @@ mod_result_t mod_hash(struct mod_args *args) {
 			== (backup = (GKeyFile *) g_hash_table_lookup(args->node->config,
 					"backup"))) {
 		/*! We can't decide */
-		g_printerr("%s mandatory argument 'backup' undefined!\n",
+		printerr("%s mandatory argument 'backup' undefined!\n",
 				H(args->pkt->conn->id));
 		return result;
 	}
@@ -117,7 +117,7 @@ mod_result_t mod_hash(struct mod_args *args) {
 			== (backup_file = (gchar *) g_hash_table_lookup(args->node->config,
 					"backup_file"))) {
 		/*! We can't decide */
-		g_printerr("%s error, backup file path missing\n",
+		printerr("%s error, backup file path missing\n",
 				H(args->pkt->conn->id));
 		return result;
 	}
@@ -154,7 +154,7 @@ mod_result_t mod_hash(struct mod_args *args) {
 			0, 0, NULL);
 	if (TRUE == g_regex_match(ip_regex, payload, 0, NULL)) {
 		char *payload_tmp = g_strdup(payload);
-		g_printerr("%s found an IP in the payload! Replacing it...\n",
+		printerr("%s found an IP in the payload! Replacing it...\n",
 				H(args->pkt->conn->id));
 		payload = g_regex_replace(ip_regex, payload_tmp, -1, 0, "<0.0.0.0>", 0,
 				NULL);
@@ -167,7 +167,7 @@ mod_result_t mod_hash(struct mod_args *args) {
 	 int j, h, pos;
 	 if (strlen(key_dst[0]) >= 7) {
 	 while(NULL != (position = strstr(payload, key_dst[0]))) {
-	 g_printerr("%s found the dst ip in the payload! Replacing it...\n", H(args->pkt->conn->id));
+	 printerr("%s found the dst ip in the payload! Replacing it...\n", H(args->pkt->conn->id));
 
 	 pos = (int)(position-payload);
 
@@ -194,7 +194,7 @@ mod_result_t mod_hash(struct mod_args *args) {
 	}
 	ascii = g_malloc0(ascii_len + 1);
 
-	g_printerr("%s Computing payload digest\n", H(args->pkt->conn->id));
+	printerr("%s Computing payload digest\n", H(args->pkt->conn->id));
 
 	/*! digest the payload */
 	EVP_MD_CTX ctx;
@@ -209,7 +209,7 @@ mod_result_t mod_hash(struct mod_args *args) {
 	for (i = 0; i < md_len; i++)
 		sprintf(hash + (i << 1), "%02x", md_value[i]);
 
-	g_printerr("%s Computing payload ASCII representation\n",
+	printerr("%s Computing payload ASCII representation\n",
 			H(args->pkt->conn->id));
 
 	for (i = 0; i < ascii_len; i++) {
@@ -221,9 +221,9 @@ mod_result_t mod_hash(struct mod_args *args) {
 	}
 	ascii[ascii_len] = '\0';
 
-	g_printerr("%s ASCII of %d char [%s]\n", H(args->pkt->conn->id), ascii_len,
+	printerr("%s ASCII of %d char [%s]\n", H(args->pkt->conn->id), ascii_len,
 			ascii);
-	g_printerr("%s Searching for fingerprint in %p on port %s\n",
+	printerr("%s Searching for fingerprint in %p on port %s\n",
 			H(args->pkt->conn->id), backup, port);
 
 	GError *error = NULL;
@@ -232,9 +232,9 @@ mod_result_t mod_hash(struct mod_args *args) {
 					&error))) {
 		/*! Unknown hash, so we accept the packet */
 		result = ACCEPT;
-		g_printerr("%s Hash not found because: %s\n", H(args->pkt->conn->id),
+		printerr("%s Hash not found because: %s\n", H(args->pkt->conn->id),
 				error->message);
-		g_printerr("%s Packet accepted and new entry created\n",
+		printerr("%s Packet accepted and new entry created\n",
 				H(args->pkt->conn->id));
 
 		info = malloc(6 * sizeof(char *));
@@ -260,7 +260,7 @@ mod_result_t mod_hash(struct mod_args *args) {
 		if (age > expiration) {
 			/*! Known hash but entry expired, so we accept the packet */
 			result = ACCEPT;
-			g_printerr(
+			printerr(
 					"%s Hash found but expired... packet accepted and entry renewed\n",
 					H(args->pkt->conn->id));
 
@@ -271,7 +271,7 @@ mod_result_t mod_hash(struct mod_args *args) {
 		} else {
 			/*! Known hash, so we reject the packet */
 			result = REJECT;
-			g_printerr("%s Hash found... packet rejected and entry updated\n",
+			printerr("%s Hash found... packet rejected and entry updated\n",
 					H(args->pkt->conn->id));
 
 			g_snprintf(info[HASH_COUNTER], 20, "%d",
@@ -286,29 +286,29 @@ mod_result_t mod_hash(struct mod_args *args) {
 
 	}
 
-	g_printerr("%s Set string list...\n", H(args->pkt->conn->id));
+	printerr("%s Set string list...\n", H(args->pkt->conn->id));
 
 	g_key_file_set_string_list(backup, port, hash, (const gchar * const *) info,
 			6);
 
-	g_printerr("%s ... done\n", H(args->pkt->conn->id));
+	printerr("%s ... done\n", H(args->pkt->conn->id));
 
 	/*! clean and exit */
 	g_free(payload);
-	//g_printerr("%s Free 1/5\n", H(args->pkt->conn->id));
+	//printerr("%s Free 1/5\n", H(args->pkt->conn->id));
 	g_free(ascii);
-	//g_printerr("%s Free 2/5\n", H(args->pkt->conn->id));
+	//printerr("%s Free 2/5\n", H(args->pkt->conn->id));
 	g_free(hash);
-	//g_printerr("%s Free 3/5\n", H(args->pkt->conn->id));
+	//printerr("%s Free 3/5\n", H(args->pkt->conn->id));
 	g_free(port);
 	/*
-	 g_printerr("%s Free 4/5\n", H(args->pkt->conn->id));
+	 printerr("%s Free 4/5\n", H(args->pkt->conn->id));
 	 g_free(key_dst[0]);
-	 g_printerr("%s Free 5/5\n", H(args->pkt->conn->id));
+	 printerr("%s Free 5/5\n", H(args->pkt->conn->id));
 	 g_free(key_dst[1]);
-	 g_printerr("%s Free 6/5\n", H(args->pkt->conn->id));
+	 printerr("%s Free 6/5\n", H(args->pkt->conn->id));
 	 g_free(key_dst);
-	 g_printerr("%s Free 7/5\n", H(args->pkt->conn->id));
+	 printerr("%s Free 7/5\n", H(args->pkt->conn->id));
 	 */
 
 	save_backup(backup, backup_file);

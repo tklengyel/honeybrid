@@ -42,7 +42,7 @@
  \param[out] set result to 0 if attacker ip is found in search table, 1 if not
  */
 mod_result_t mod_source(struct mod_args *args) {
-	g_printerr("%s Module called\n", H(args->pkt->conn->id));
+	printerr("%s Module called\n", H(args->pkt->conn->id));
 
 	mod_result_t result = DEFER;
 	int expiration = 24 * 3600;
@@ -58,14 +58,14 @@ mod_result_t mod_source(struct mod_args *args) {
 	/*! get the IP address from the packet */
 	key_src = g_strsplit(args->pkt->key_src, ":", 0);
 
-	g_printerr("%s source IP is %s\n", H(args->pkt->conn->id), key_src[0]);
+	printerr("%s source IP is %s\n", H(args->pkt->conn->id), key_src[0]);
 
 	/*! get the backup file for this module */
 	if (NULL
 			== (backup = (GKeyFile *) g_hash_table_lookup(args->node->config,
 					"backup"))) {
 		/*! We can't decide */
-		g_printerr("%s mandatory argument 'backup' undefined!\n",
+		printerr("%s mandatory argument 'backup' undefined!\n",
 				H(args->pkt->conn->id));
 		return result;
 	}
@@ -74,19 +74,19 @@ mod_result_t mod_source(struct mod_args *args) {
 			== (backup_file = (gchar *) g_hash_table_lookup(args->node->config,
 					"backup_file"))) {
 		/*! We can't decide */
-		g_printerr("%s error, backup file path missing\n",
+		printerr("%s error, backup file path missing\n",
 				H(args->pkt->conn->id));
 		return result;
 	}
 
-	g_printerr("%s searching for this IP in the database...\n",
+	printerr("%s searching for this IP in the database...\n",
 			H(args->pkt->conn->id));
 
 	if (NULL == (info = g_key_file_get_string_list(backup, "source", /* generic group name \todo: group by port number? */
 	key_src[0], NULL, NULL))) {
 		/*! Unknown IP, so we accept the packet */
 		result = ACCEPT;
-		g_printerr("%s IP not found... packet accepted and new entry created\n",
+		printerr("%s IP not found... packet accepted and new entry created\n",
 				H(args->pkt->conn->id));
 
 		info = malloc(3 * sizeof(char *));
@@ -105,7 +105,7 @@ mod_result_t mod_source(struct mod_args *args) {
 		if (age > expiration) {
 			/*! Known IP but entry expired, so we accept the packet */
 			result = ACCEPT;
-			g_printerr(
+			printerr(
 					"%s IP found but expired... packet accepted and entry renewed\n",
 					H(args->pkt->conn->id));
 
@@ -115,7 +115,7 @@ mod_result_t mod_source(struct mod_args *args) {
 		} else {
 			/*! Known IP, so we reject the packet */
 			result = REJECT;
-			g_printerr("%s IP found... packet rejected and entry updated\n",
+			printerr("%s IP found... packet rejected and entry updated\n",
 					H(args->pkt->conn->id));
 
 			g_snprintf(info[0], 20, "%d", atoi(info[0]) + 1); /*! counter */

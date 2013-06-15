@@ -32,21 +32,6 @@
  * 	Then the goal of the Decision Engine is to filter interesting attacks from the noise of incoming traffic received.
  * 	Filtered attacks are forwarded to the Redirection Engine which is able to actively redirect the destination of the connection, so that it can be further investigated using a high interaction back-end.
  *
- * 	\section Requirements
- *
- * 	Dependencies:
- *	- linux kernel >= 2.6.18 & <=2.6.23
- * 	- libnetfilter-queue-dev & libnetfilter-queue1
- *	- libnfnetlink >= 0.0.25
- *	- libglib2.0-dev & libglib2.0-0
- *	- openssl
- *	- libssl-dev
- *	- libev
- *
- * 	\section Installation
- *
- *	Installation is defined in the INSTALL file.
- *
  */
 
 /*!	\file honeybrid.c
@@ -54,24 +39,38 @@
 
  This is the main program file for Honeybrid. It creates a hook using LibNetfilter Queue
  and, for each connection, maintain a stateful table.
- It forward a packet to a determined destination and submit this packet to the decision engine.
- When the decision engine decide to redirect a connection, this redirection engine replay the recorded
- connection to its new destination and maintain it until its end.
+ It forwards a packet to a determined destination and submits this packet to the decision engine.
+ When the decision engine decides to redirect a connection, this redirection engine replays the recorded
+ connection to its new destination and maintains it until its end.
 
  Packets needs to be redirected to the QUEUE destination using netfilter, this can be done using:
  # iptables -A INPUT -j QUEUE && iptables -A FORWARD -j QUEUE && iptables -A OUTPUT -j QUEUE
 
- filters can also be set up using the regulars iptables capabilities, it is also recommended to limit the redirections to TCP and UDP packets (just add the option -p to the iptables commands)
-
- Dependencies:
- - libnetfilter-queue-dev & libnetfilter-queue1 >= 1.0
- - libnfnetlink >= 0.0.25
- - libglib2.0-dev & libglib2.0-0 >= 2.32
+ Other filters can also be set up using the regulars iptables capabilities,
+ it is also recommended to limit the redirections to TCP and UDP packets
+ (just add the option -p to the iptables commands)
 
  \Author J. Vehent, 2007
  \Author Thomas Coquelin, 2008
  \Author Robin Berthier, 2007-2009
  \Author Tamas K Lengyel, 2012-2013
+ */
+
+/* \todo to include in programmer documentation:
+ //What we should use to log messages:
+ //For debugging:
+ printerr("%smessage\n", H(30));
+
+ //For processing information:
+ syslog(LOG_INFO,"message");
+
+ //For critical warning
+ warn("open");
+ warnx("%s message", __func__);
+
+ //For fatal error
+ err("fopen");
+ errx(1,"%s message", __func__);
  */
 
 #include "honeybrid.h"
@@ -95,8 +94,24 @@
 #include "modules.h"
 #include "connections.h"
 
+// Forward declare q_cb
 int q_cb(struct nfq_q_handle *gh, struct nfgenmsg *nfmsg, struct nfq_data *nfad,
         void *data);
+
+// Get the Queue ID the packet should be assigned to
+// based on the last byte of the src and dst IP address
+#define PKT2QUEUEID(pkt) \
+    ( \
+        (uint32_t) \
+            ( \
+                ( \
+                ((pkt->packet.ip->saddr & 0xFF000000) >> 24) \
+                + \
+                ((pkt->packet.ip->daddr & 0xFF000000) >> 24) \
+                ) \
+                % decision_threads \
+            ) \
+    )
 
 #ifdef HAVE_LIBEV
 #include <ev.h>
@@ -104,21 +119,23 @@ struct ev_loop *loop;
 struct ev_signal signals[7];
 #endif
 
-struct nfq_q_handle *qh;
-struct nfq_handle *h;
+static struct nfq_q_handle *qh = NULL;
+static struct nfq_handle *h = NULL;
 
 /*! usage function
  \brief print command line informations */
 void usage(char **argv) {
     g_printerr(
-            "Honeybrid version %s\n"
-                    "usage: %s <commands>\n\n"
-                    "where commands include:\n"
+            "Usage: %s <commands>\n\n"
+                    "Where commands include:\n"
                     "  -c <config_file>: start with config file\n"
-                    "  -x <pid>: halt the engine using its PID\n"
+                    "            For example: honeybrid -c /etc/honeybrid.conf\n"
+                    "  -x <pid>: halt a running engine using its PID\n"
+                    "            For example: honeybrid -x `cat /var/run/honeybrid.pid`\n"
                     "  -q <queuenum>: select a specific queue number for NF_QUEUE to listen to\n"
+                    "  -d: daemonize Honeybrid (send it to the background)\n"
                     //"  -s: show status information\n"
-                    "  -h: print the help\n\n", PACKAGE_VERSION, argv[0]);
+                    "  -h: print this help\n\n", argv[0]);
     exit(1);
 }
 
@@ -137,27 +154,26 @@ static void term_signal_handler (struct ev_loop *loop, __attribute__((unused))  
 
     ev_unloop(loop, EVUNLOOP_ALL);
 
-#ifdef DEBUG
-    g_printerr("* Signal number:\t%d\n", w->signum);
-#endif
+    printerr("%s Signal number:\t%d\n", H(0), w->signum);
+
+    if(fdebug!=-1) g_printerr("\n");
 
 }
 #else
 static void term_signal_handler(int signal_nb, siginfo_t * siginfo, __attribute__((unused)) void *unused) {
-        g_printerr("%s: Signal %d received, halting engine\n", __func__, signal_nb);
-#ifdef DEBUG
-        g_printerr("* Signal number:\t%d\n", siginfo->si_signo);
-        g_printerr("* Signal code:  \t%d\n", siginfo->si_code);
-        g_printerr("* Signal error: \t%d '%s'\n", siginfo->si_errno,
+        printerr("%s: Signal %d received, halting engine\n", __func__, signal_nb);
+        printerr("* Signal number:\t%d\n", siginfo->si_signo);
+        printerr("* Signal code:  \t%d\n", siginfo->si_code);
+        printerr("* Signal error: \t%d '%s'\n", siginfo->si_errno,
                 strerror(siginfo->si_errno));
-        g_printerr("* Sending pid:  \t%d\n", siginfo->si_pid);
-        g_printerr("* Sending uid:  \t%d\n", siginfo->si_uid);
-        g_printerr("* Fault address:\t%p\n", siginfo->si_addr);
-        g_printerr("* Exit value:   \t%d\n", siginfo->si_status);
+        printerr("* Sending pid:  \t%d\n", siginfo->si_pid);
+        printerr("* Sending uid:  \t%d\n", siginfo->si_uid);
+        printerr("* Fault address:\t%p\n", siginfo->si_addr);
+        printerr("* Exit value:   \t%d\n", siginfo->si_status);
 
-#endif //DEBUG
     /*! this will cause the queue loop to stop */
     running = NOK;
+    g_printerr("\n");
 }
 #endif //HAVE_LIBEV
 
@@ -256,7 +272,7 @@ void init_signal() {
 
     /*! rotate logs: */
     struct sigaction sa_rotate_log;
-    memset(&sa_rotate_log, 0, sizeof sa_rotate_log);
+    memset(&sa_rotate_log, 0, sizeof(sa_rotate_log));
 
     sa_rotate_log.sa_sigaction = (void *) rotate_connection_log;
     //sa_rotate_log.sa_flags = SA_SIGINFO | SA_RESETHAND;
@@ -316,7 +332,7 @@ void init_parser(char *filename) {
 
     fclose(fp);
 
-    g_printerr("--------------------------\n\n");
+    g_printerr("--------------------------\n");
 }
 
 void init_variables() {
@@ -363,6 +379,9 @@ void init_variables() {
         errx(1,
                 "%s: Fatal error while creating high_redirection_table hash table.\n",
                 __func__);
+
+    /* set debug file */
+    fdebug = -1;
 
     /*! init the connection id counter */
     c_id = 0;
@@ -411,8 +430,8 @@ static int init_nfqueue(unsigned short int queuenum) {
 }
 
 static void close_nfqueue(unsigned short int queuenum) {
-    syslog(LOG_INFO, "NFQUEUE: unbinding from queue '%hd' (running: %d)\n",
-            queuenum, running);
+    syslog(LOG_INFO, "NFQUEUE: unbinding from queue '%hd'\n",
+            queuenum);
     nfq_destroy_queue(qh);
     nfq_close(h);
 }
@@ -426,7 +445,7 @@ int close_thread() {
     struct pkt_struct pkt = { .last = TRUE };
     for (i = 0; i < decision_threads; i++) {
         g_async_queue_push(de_queues[i], &pkt);
-        g_printerr("%s: Waiting for de_thread %i to terminate\n", __func__, i);
+        printerr("%s: Waiting for de_thread %i to terminate\n", H(0), i);
         g_thread_join(de_threads[i]);
         g_async_queue_unref(de_queues[i]);
     }
@@ -448,31 +467,31 @@ int close_hash() {
      */
 
     if (high_redirection_table != NULL) {
-        g_printerr("%s: Destroying table high_redirection_table\n", __func__);
+        printerr("%s: Destroying table high_redirection_table\n", H(0));
         g_rw_lock_writer_lock(&hihredirlock);
         g_hash_table_destroy(high_redirection_table);
         high_redirection_table = NULL;
     }
 
     if (config != NULL) {
-        g_printerr("%s: Destroying table config\n", __func__);
+        printerr("%s: Destroying table config\n", H(0));
         g_hash_table_destroy(config);
         config = NULL;
     }
 
     if (module != NULL) {
-        g_printerr("%s: Destroying table module\n", __func__);
+        printerr("%s: Destroying table module\n", H(0));
         g_hash_table_destroy(module);
     }
 
     if (uplink != NULL) {
-        g_printerr("%s: Destroying table uplink\n", __func__);
+        printerr("%s: Destroying table uplink\n", H(0));
         g_hash_table_destroy(uplink);
         uplink = NULL;
     }
 
     if (module_to_save != NULL) {
-        g_printerr("%s: Destroying table module_to_save\n", __func__);
+        printerr("%s: Destroying table module_to_save\n", H(0));
         g_hash_table_destroy(module_to_save);
         module_to_save = NULL;
     }
@@ -484,7 +503,7 @@ int close_hash() {
  \brief Function to free memory taken by conn_tree */
 int close_conn_tree() {
 
-    g_printerr("%s: Destroying connection tree\n", __func__);
+    printerr("%s: Destroying connection tree\n", H(0));
 
     /*! clean the memory
      * traverse the B-Tree to remove the singly linked lists and then destroy the B-Tree
@@ -511,7 +530,7 @@ int close_conn_tree() {
 /*! close_target
  \brief destroy global structure "targets" when the program has to quit */
 int close_target(void) {
-    g_printerr("%s: Destroying targets\n", __func__);
+    printerr("%s: Destroying targets\n", H(0));
     g_ptr_array_foreach(targets, (GFunc) free_target_gfunc, NULL);
     g_ptr_array_free(targets, TRUE);
     return OK;
@@ -522,30 +541,32 @@ int close_target(void) {
 void close_all(void) {
     /*! wait for thread to close */
     if (close_thread() < 0)
-        g_printerr("%s: Error when waiting for threads to close\n", __func__);
+        g_printerr("%s: Error when waiting for threads to close\n", H(0));
 
     /*! delete conn_tree */
     if (close_conn_tree() < 0)
-        g_printerr("%s: Error when closing conn_tree\n", __func__);
+        g_printerr("%s: Error when closing conn_tree\n", H(0));
 
-    /*! delete lock file (only if the process ran as a daemon) */
-    output_t output = ICONFIG_REQUIRED("output");
-    if (output != OUTPUT_STDOUT) {
-        if (unlink(pidfile) < 0)
-            g_printerr("%s: Error when removing lock file\n", __func__);
-    }
+    /*! delete lock file */
+    if (unlink(pidfile) < 0)
+            g_printerr("%s: Error when removing lock file\n", H(0));
 
     /*! close log file */
-    if (output == OUTPUT_LOGFILES) {
+    if (OUTPUT_LOGFILES == ICONFIG_REQUIRED("output")) {
         close_connection_log();
+    }
+
+    /*! close debug log file */
+    if(fdebug!=-1) {
+        close_debug_log();
     }
 
     /*! delete hashes */
     if (close_hash() < 0)
-        g_printerr("%s: Error when closing hashes\n", __func__);
+        printerr("%s: Error when closing hashes\n", H(0));
 
     if (close_target() < 0)
-        g_printerr("%s: Error when closing targets\n", __func__);
+        printerr("%s: Error when closing targets\n", H(0));
 
 }
 
@@ -574,7 +595,7 @@ process_packet(struct nfq_data *tb, uint32_t nfq_packet_id) {
     if ((((struct iphdr*) nf_packet)->protocol != IPPROTO_TCP)
             && (((struct iphdr*) nf_packet)->protocol != IPPROTO_UDP)) {
 
-        g_printerr("%s Incorrect protocol: %d, packet dropped\n", H(0),
+        printerr("%s Incorrect protocol: %d, packet dropped\n", H(0),
                 (((struct iphdr*) nf_packet)->protocol));
 
         goto done;
@@ -584,14 +605,14 @@ process_packet(struct nfq_data *tb, uint32_t nfq_packet_id) {
 
     /*! Initialize the packet structure (into pkt) and find the origin of the packet */
     if (init_pkt(nf_packet, &pkt, mark, nfq_packet_id) == NOK) {
-        g_printerr("%s Packet structure couldn't be initialized\n", H(0));
+        printerr("%s Packet structure couldn't be initialized\n", H(0));
 
         pkt = NULL;
         goto done;
 
     }
 
-    g_printerr("%s** NEW packet from %s %s, %d bytes. Mark %u, NFQID %u **\n",
+    printerr("%s** NEW packet from %s %s, %d bytes. Mark %u, NFQID %u **\n",
             H(0), inet_ntoa(in),
             lookup_proto(((struct iphdr*) nf_packet)->protocol), size, mark,
             nfq_packet_id);
@@ -604,13 +625,13 @@ void de_thread(gpointer data) {
     uint32_t thread_id = GPOINTER_TO_UINT(data);
     struct pkt_struct *pkt = NULL;
 
+    printerr("%s: Decision engine thread %i started\n", H(0), thread_id);
+
     while ((pkt = (struct pkt_struct *) g_async_queue_pop(de_queues[thread_id]))) {
 
         // Exit the thread
         if (pkt->last) {
-#ifdef DEBUG
-            g_printerr("%s Shutting down thread %u\n", H(1), thread_id);
-#endif
+            printerr("%s Shutting down thread %u\n", H(1), thread_id);
             return;
         }
 
@@ -622,25 +643,23 @@ void de_thread(gpointer data) {
         /*! Initialize the connection structure (into conn) and get the state of the connection */
         if (init_conn(pkt, &conn) == NOK) {
             conn = NULL;
-            g_printerr(
+            printerr(
                     "%s Connection structure couldn't be initialized, packet dropped\n",
                     H(0));
             free_pkt(pkt);
             goto done;
         }
 
-#ifdef DEBUG
-        g_printerr("%s Origin: %s %s, %i bytes\n", H(conn->id),
+        printerr("%s Origin: %s %s, %i bytes\n", H(conn->id),
                 lookup_origin(pkt->origin), lookup_state(conn->state),
                 pkt->data);
-#endif
 
         /*! Check that there was no problem getting the current connection structure
          *  and make sure the STATE is valid */
         if (((conn->state < INIT) && (pkt->origin == EXT))
                 || (conn->state == INVALID)) {
 
-            g_printerr("%s Packet not from a valid connection\n", H(conn->id));
+            printerr("%s Packet not from a valid connection\n", H(conn->id));
             if (pkt->packet.ip->protocol == IPPROTO_TCP && reset_ext == 1)
                 reply_reset(&(pkt->packet));
 
@@ -649,7 +668,7 @@ void de_thread(gpointer data) {
         }
 
         if (conn->state == DROP) {
-            g_printerr("%s This connection is marked as DROPPED\n",
+            printerr("%s This connection is marked as DROPPED\n",
                     H(conn->id));
 
             if (pkt->packet.ip->protocol == IPPROTO_TCP && reset_ext == 1)
@@ -698,11 +717,9 @@ void de_thread(gpointer data) {
                         statement = OK;
                         break;
                     case PROXY:
-#ifdef DEBUG
-                        g_printerr(
+                        printerr(
                                 "%s Packet from LIH proxied directly to its destination\n",
                                 H(conn->id));
-#endif
                         statement = OK;
                         free_pkt(pkt);
                         break;
@@ -722,7 +739,7 @@ void de_thread(gpointer data) {
                         }
                         break;
                     default:
-                        g_printerr(
+                        printerr(
                                 "%s Packet from LIH at wrong state => reset\n",
                                 H(conn->id));
                         if (pkt->packet.ip->protocol == IPPROTO_TCP)
@@ -751,11 +768,9 @@ void de_thread(gpointer data) {
                         break;
                         /*! This one should never occur because PROXY are only between EXT and LIH... but we never know! */
                     case PROXY:
-#ifdef DEBUG
-                        g_printerr(
+                        printerr(
                                 "%s Packet from HIH proxied directly to its destination\n",
                                 H(conn->id));
-#endif
                         statement = OK;
                         free_pkt(pkt);
                         break;
@@ -766,7 +781,7 @@ void de_thread(gpointer data) {
                     default:
                         /*! We are surely in the INIT state, so the HIH is initiating a connection to outside. We reset or control it */
                         if (deny_hih_init == 1) {
-                            g_printerr(
+                            printerr(
                                     "%s Packet from HIH at wrong state, so we reset\n",
                                     H(conn->id));
                             if (pkt->packet.ip->protocol == IPPROTO_TCP) {
@@ -776,7 +791,7 @@ void de_thread(gpointer data) {
                             switch_state(conn, DROP);
                             free_pkt(pkt);
                         } else {
-                            g_printerr(
+                            printerr(
                                     "%s Packet from HIH in a new connection, so we control it\n",
                                     H(conn->id));
                             switch_state(conn, CONTROL);
@@ -815,14 +830,14 @@ void de_thread(gpointer data) {
                         free_pkt(pkt);
                         break;
                     case PROXY:
-                        g_printerr(
+                        printerr(
                                 "%s Packet from EXT proxied directly to its destination (PROXY)\n",
                                 H(conn->id));
                         statement = OK;
                         free_pkt(pkt);
                         break;
                     case CONTROL:
-                        g_printerr(
+                        printerr(
                                 "%s Packet from EXT proxied directly to its destination (CONTROL)\n",
                                 H(conn->id));
                         statement = OK;
@@ -850,31 +865,6 @@ void de_thread(gpointer data) {
     }
 }
 
-/*! addr2int
- * \brief Convert an IP address from string to int
- * \param[in] the IP address (string format)
- *
- * \return the IP address (int format)
- */
-static inline int addr_last_byte(const char *address) {
-    gchar **addr;
-    int intaddr;
-
-    if (address == NULL) {
-        g_printerr("%s Error, null address can't be converted!\n", H(0));
-        return -1;
-    }
-
-    addr = g_strsplit(address, ".", 0);
-
-    intaddr = atoi(addr[0]) << 24;
-    //intaddr += atoi(addr[1]) << 16;
-    //intaddr += atoi(addr[2]) << 8;
-    //intaddr += atoi(addr[3]);
-    g_strfreev(addr);
-    return intaddr;
-}
-
 /*! q_cb
  *
  \brief Callback function launched by the netfilter queue handler each time a packet is received
@@ -888,12 +878,7 @@ int q_cb(struct nfq_q_handle *gh, __attribute__ ((unused)) struct nfgenmsg *nfms
 
     struct pkt_struct *pkt = process_packet(nfad, id);
     if(pkt) {
-        struct addr src, dst;
-        addr_pton(inet_ntoa(*(struct in_addr*) &pkt->packet.ip->saddr), &src);
-        addr_pton(inet_ntoa(*(struct in_addr*) &pkt->packet.ip->daddr), &dst);
-        uint32_t queue_id = (src.addr_ip & 0x000F + dst.addr_ip & 0x000F) % decision_threads;
-        printf("Last byte: %u and %u", src.addr_ip & 0x000F, dst.addr_ip & 0x000F);
-        g_async_queue_push(de_queues[queue_id], pkt);
+        g_async_queue_push(de_queues[PKT2QUEUEID(pkt)], pkt);
     } else {
         nfq_set_verdict(gh, id, NF_DROP, 0, NULL);
     }
@@ -918,11 +903,11 @@ short int netlink_loop(unsigned short int queuenum) {
         memset(buf, 0, BUFSIZE);
         rv = recv(fd, buf, BUFSIZE, 0);
         if (rv < 0) {
-            g_printerr("%s Error %d: recv() returned %d '%s'\n", H(0), errno,
+            printerr("%s Error %d: recv() returned %d '%s'\n", H(0), errno,
                     rv, strerror(errno));
             watchdog++;
             if (watchdog > 100) {
-                g_printerr(
+                printerr(
                         "%s Error: too many consecutive failures, giving up\n",
                         H(0));
                 running = NOK;
@@ -961,20 +946,19 @@ static void nfqueue_ev_cb(__attribute__((unused))      struct ev_loop *loop,
  *
  \return 0 if exit with success, anything else if not */
 int main(int argc, char *argv[]) {
-    int argument;
-    char *config_file_name = "";
-    FILE *fp;
 
-    gboolean daemonize = FALSE;
-    qh = NULL;
-    h = NULL;
-
-    unsigned short int queuenum = 0;
     g_printerr("%s  v%s\n\n", banner, PACKAGE_VERSION);
 
     /*! parsing arguments */
-    if (argc < 2)
+    if (argc < 2) {
         usage(argv);
+    }
+
+    int argument;
+    char *config_file_name = "";
+    unsigned short int nfqueuenum = 0;
+    gboolean daemonize = FALSE;
+
     while ((argument = getopt(argc, argv, "sc:x:V:q:h:d?")) != -1) {
         switch (argument) {
             case 'c':
@@ -988,7 +972,7 @@ int main(int argc, char *argv[]) {
                 /*! convert argument to int */
                 int pid = atoi(optarg);
 
-                /*! check that processus exists */
+                /*! check that process exists */
                 if (-1 == kill(pid, 0)) {
                     errx(1, "%s: ERROR: Process does not exist", __func__);
                 } else {
@@ -1003,7 +987,7 @@ int main(int argc, char *argv[]) {
                 exit(0);
                 break;
             case 'q':
-                queuenum = (unsigned short int) atoi(optarg);
+                nfqueuenum = (unsigned short int) atoi(optarg);
                 break;
             case 's':
                 g_printerr("Status informations not yet implemented\n");
@@ -1064,22 +1048,6 @@ int main(int argc, char *argv[]) {
     /*! initialize signal handlers */
     init_signal();
 
-    /*! Create PID file, we might not be able to remove it */
-    pidfile = g_malloc0(
-            snprintf(NULL, 0, "%s/honeybrid.pid",
-                    CONFIG_REQUIRED("exec_directory")) + 1);
-    sprintf((char *) pidfile, "%s/honeybrid.pid",
-            CONFIG_REQUIRED("exec_directory"));
-    unlink(pidfile);
-    if ((fp = fopen(pidfile, "w")) == NULL) {
-        err(1, "fopen: %s", pidfile);
-    }
-    fprintf(fp, "%d\n", getpid());
-    fclose(fp);
-
-    chmod(pidfile, 0644);
-    mainpid = getpid();
-
     if (ICONFIG("max_packet_buffer") > 0) {
         max_packet_buffer = ICONFIG("max_packet_buffer");
     } else {
@@ -1099,13 +1067,27 @@ int main(int argc, char *argv[]) {
             if (daemon(1, 0) < 0) {
                 unlink(pidfile);
                 err(1, "daemon");
-            } else {
-
             }
         } else {
             g_printerr("Output is defined as STDOUT, can't daemonize!\n");
         }
     }
+
+    /*! Create PID file */
+    pidfile = g_malloc0(
+            snprintf(NULL, 0, "%s/honeybrid.pid",
+                    CONFIG_REQUIRED("exec_directory")) + 1);
+    sprintf((char *) pidfile, "%s/honeybrid.pid",
+            CONFIG_REQUIRED("exec_directory"));
+    unlink(pidfile);
+    FILE *fp;
+    if ((fp = fopen(pidfile, "w")) == NULL) {
+        err(1, "fopen: %s", pidfile);
+    }
+    mainpid = getpid();
+    fprintf(fp, "%d\n", mainpid);
+    fclose(fp);
+    chmod(pidfile, 0644);
 
     /* Setting debug file */
     if (output != OUTPUT_STDOUT) {
@@ -1115,12 +1097,19 @@ int main(int argc, char *argv[]) {
 #ifndef DEBUG
         if (ICONFIG("debug") > 0) {
             if ((fdebug = open_debug_log()) != -1) {
+
+                if(!daemonize) {
+                    g_printerr("Redirecting output to %s/%s.\n", CONFIG_REQUIRED("log_directory"), CONFIG_REQUIRED("debug_file"));
+                    g_printerr("You should start with -d to daemonize Honeybrid!\n");
+                }
+
                 (void) dup2(fdebug, STDIN_FILENO);
                 (void) dup2(fdebug, STDOUT_FILENO);
                 (void) dup2(fdebug, STDERR_FILENO);
-                if (fdebug > 2)
-                (void) close(fdebug);
-                syslog(LOG_INFO, "done");
+                if (fdebug > 2) {
+                    close(fdebug);
+                }
+                syslog(LOG_INFO, "Starting Honeybrid.\n");
             } else {
                 syslog(LOG_INFO, "file: %s", strerror(errno));
             }
@@ -1141,7 +1130,7 @@ int main(int argc, char *argv[]) {
     }
 
     decision_threads = ICONFIG_REQUIRED("decision_threads");
-    g_printerr("%s Starting with %u decision threads.\n", __func__,
+    printerr("%s Starting with %u decision threads.\n", H(0),
             decision_threads);
 
     de_threads = malloc(sizeof(GThread*)*decision_threads);
@@ -1158,8 +1147,6 @@ int main(int argc, char *argv[]) {
                 GUINT_TO_POINTER(i))) == NULL) {
             errx(1, "%s: Unable to start the decision engine thread %i",
                     __func__, i);
-        } else {
-            g_printerr("%s: Decision engine thread %i started\n", __func__, i);
         }
     }
 
@@ -1174,51 +1161,32 @@ int main(int argc, char *argv[]) {
     if ((thread_clean = g_thread_new("cleaner", (void *) clean, NULL)) == NULL) {
         errx(1, "%s Unable to start the cleaning thread", H(0));
     } else {
-        g_printerr("%s Cleaning thread started\n", H(0));
+        printerr("%s Cleaning thread started\n", H(0));
     }
 
 #ifdef HAVE_LIBEV
 
     int my_nfq_fd;
 
-    my_nfq_fd = init_nfqueue(queuenum);
+    my_nfq_fd = init_nfqueue(nfqueuenum);
 
     /*! Watcher for processing packets received on NF_QUEUE: */
     ev_io queue_watcher;
     ev_io_init(&queue_watcher, nfqueue_ev_cb, my_nfq_fd, EV_READ);
     ev_io_start(loop, &queue_watcher);
 
-    g_printerr("%s Starting ev_loop\n", H(0));
+    printerr("%s Starting ev_loop\n", H(0));
 
     ev_loop(loop, 0);
 
-    /*! To be moved inside close_all() */
-    close_nfqueue(queuenum);
+    close_nfqueue(nfqueuenum);
 #else
     /*! Starting the nfqueue loop to start processing packets */
-    g_printerr("%s Starting netlink_loop\n", H(0));
+    printerr("%s Starting netlink_loop\n", H(0));
     netlink_loop(queuenum);
 #endif
 
     close_all();
     g_printerr("Honeybrid exited successfully.\n");
     exit(0);
-
-    /* \todo to include in programmer documentation:
-     //What we should use to log messages:
-     //For debugging:
-     g_printerr("%smessage\n", H(30));
-
-     //For processing information:
-     syslog(LOG_INFO,"message");
-
-     //For critical warning
-     warn("open");
-     warnx("%s message", __func__);
-
-     //For fatal error
-     err("fopen");
-     errx(1,"%s message", __func__);
-
-     */
 }

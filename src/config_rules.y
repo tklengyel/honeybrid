@@ -18,6 +18,7 @@
 #include "convenience.h"
 #include "decision_engine.h"
 #include "modules.h"
+#include "log.h"
 
 /*! Type of capture link */
 #define LINKTYPE 1 	//LINKTYPE_ETHERNET=1 \todo dynamically assign link type from nfqueue
@@ -132,7 +133,7 @@ parameter: WORD EQ WORD {
 
 
 uplink: UPLINK QUOTE WORD QUOTE OPEN uplink_settings END { 
-
+		g_printerr("Parsing uplink\n");
         struct interface *iface=(struct interface *)$6;
         if(iface && iface->name && iface->ip_str && iface->mark) {
             iface->tag=$3;
@@ -261,10 +262,10 @@ target: TARGET OPEN rule END {
                 	yyerror("bad pcap filter");
 		}
 		*/
-		g_printerr("\tGoing to add new element to target array...\n");
+		printerr("\tGoing to add new element to target array...\n");
 		$3->back_handler_count = g_tree_nnodes($3->back_handlers);
 		g_ptr_array_add(targets, $3);
-		g_printerr("\t...done\n");
+		printerr("\t...done\n");
 		/*g_printerr("\tAdded a new target with the following values:\n\tfront_handler: %s\n\tfront_rule: %s\n\tback_handler: %s\n\tback_rule: %s\n\tcontrol: %s\n",
 				//addr_ntoa($3->front_handler), "-", //$3->front_rule->module_name->str,
 				//addr_ntoa($3->back_handler), "-"); //$3->back_rule->module_name->str);
@@ -276,7 +277,7 @@ target: TARGET OPEN rule END {
 	;
 
 rule: 	{
-		g_printerr("\tAllocating memory for new structure 'target'\n");
+		printerr("\tAllocating memory for new structure 'target'\n");
 		$$ = (struct target *)g_malloc0(sizeof(struct target));
 		
 		// This tree holds the main backend structures
@@ -295,7 +296,7 @@ rule: 	{
 			g_printerr("\tPCAP ERROR: '%s'\n", $4->str);
                 	yyerror("\tIncorrect pcap filter");
 		}
-		g_printerr("\tPCAP filter compiled:%s\n", $4->str);	
+		g_printerr("\tPCAP filter:%s\n", $4->str);	
 		g_string_free($4, TRUE);
 	}
 	| rule FRONTEND honeynet SEMICOLON {

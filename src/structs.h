@@ -161,12 +161,12 @@ void free_interface(struct interface *iface);
  */
 struct hih_struct {
 	int hihID;
-	int addr;
+	uint32_t addr;
 	struct interface *iface;
-	short port;
+	uint16_t port;
 	unsigned lih_syn_seq;
 	unsigned delta;
-	int lih_addr;
+	uint32_t lih_addr;
 	char *redirect_key;
 };
 

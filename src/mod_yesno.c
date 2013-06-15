@@ -43,29 +43,26 @@
  \param[out] set result to 1 when 'arg' is "yes", 0 otherwise
  */
 mod_result_t mod_yesno(struct mod_args *args) {
-	g_printerr("%s Module called\n", H(args->pkt->conn->id));
+	printerr("%s Module called\n", H(args->pkt->conn->id));
 
-	int value = 0;
-	gchar *param;
+	int *param;
 
-	if ((param = (char *) g_hash_table_lookup(args->node->config, "value")) == NULL) {
+	if ((param = (int *) g_hash_table_lookup(args->node->config, "value")) == NULL) {
 		/*! We can't decide */
-		g_printerr("%s mandatory argument 'value' undefined!\n",
+		printerr("%s mandatory argument 'value' undefined!\n",
 				H(args->pkt->conn->id));
 		return DEFER;
-	} else {
-		value = atoi(param);
 	}
 
-	if (0 == value) {
+	if (0 == *param) {
 		/*! We accept this packet */
-		g_printerr("%s PACKET MATCH RULE for yesno(%d)\n",
-				H(args->pkt->conn->id), value);
+		printerr("%s PACKET MATCH RULE for yesno(%d)\n",
+				H(args->pkt->conn->id), *param);
 		return ACCEPT;
 	} else {
 		/*! We reject this packet */
-		g_printerr("%s PACKET DOES NOT MATCH RULE for yesno(%d)\n",
-				H(args->pkt->conn->id), value);
+		printerr("%s PACKET DOES NOT MATCH RULE for yesno(%d)\n",
+				H(args->pkt->conn->id), *param);
 		return REJECT;
 	}
 }

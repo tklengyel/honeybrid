@@ -43,12 +43,12 @@ mod_result_t mod_counter(struct mod_args *args) {
 	gchar *param;
 	mod_result_t result = DEFER;
 
-	g_printerr("%s Module called\n", H(args->pkt->conn->id));
+	printerr("%s Module called\n", H(args->pkt->conn->id));
 
 	if ((param = (char *) g_hash_table_lookup(args->node->config, "counter"))
 			== NULL) {
 		/*! We can't decide */
-		g_printerr("%s mandatory argument 'counter' undefined!\n",
+		printerr("%s mandatory argument 'counter' undefined!\n",
 				H(args->pkt->conn->id));
 		return result;
 	} else {
@@ -58,13 +58,13 @@ mod_result_t mod_counter(struct mod_args *args) {
 	if (pktval <= args->pkt->conn->count_data_pkt_from_intruder) {
 		/*! We accept this packet */
 		result = ACCEPT;
-		g_printerr("%s PACKET MATCH RULE for counter(%d) with value %d\n",
+		printerr("%s PACKET MATCH RULE for counter(%d) with value %d\n",
 				H(args->pkt->conn->id), pktval,
 				args->pkt->conn->count_data_pkt_from_intruder);
 	} else {
 		/*! We reject this packet */
 		result = REJECT;
-		g_printerr(
+		printerr(
 				"%s PACKET DOES NOT MATCH RULE for counter(%d) with value %d\n",
 				H(args->pkt->conn->id), pktval,
 				args->pkt->conn->count_data_pkt_from_intruder);

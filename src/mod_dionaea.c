@@ -62,7 +62,7 @@ GList *cleanup;
 char *xmpp_fifo;
 
 void InfoDest(void *a) {
-	g_printerr("%s Destroying element in dionaea connection tree!\n",H(0));
+	printerr("%s Destroying element in dionaea connection tree!\n",H(0));
 	free(((struct dionaeaSession*)a)->incident);
 	free(((struct dionaeaSession*)a)->localIP);
 	free(((struct dionaeaSession*)a)->remoteIP);
@@ -82,10 +82,10 @@ static void parseXML(xmlNode *a_node, struct dionaeaEvent *event) {
 	xmlNode *cur_node = NULL;
 	for (cur_node = a_node; cur_node; cur_node = cur_node->next) {
 		if (cur_node->type == XML_ELEMENT_NODE) {
-			//g_printerr(" --\n name: %s\n", cur_node->name);
+			//printerr(" --\n name: %s\n", cur_node->name);
 			if( strcmp((char *)cur_node->name, "dionaea")==0 ) {
 				event->dionaea=1;
-				//g_printerr("Dionaea msg found!\n");
+				//printerr("Dionaea msg found!\n");
 			}
 		}
 
@@ -93,7 +93,7 @@ static void parseXML(xmlNode *a_node, struct dionaeaEvent *event) {
 		for(xmlAttrPtr attr = cur_node->properties; NULL != attr; attr = attr->next) {
 			xmlChar *value=NULL;
 			value = xmlGetProp(cur_node,attr->name);
-			//g_printerr("  %s: %s\n", attr->name,value);
+			//printerr("  %s: %s\n", attr->name,value);
 
 			if( strcmp((char *)attr->name,"incident")==0 ) {
 				event->incident=malloc(50 * sizeof(gchar));
@@ -146,13 +146,13 @@ void logDionaeaEvent(struct dionaeaEvent *dionaeaEvent) {
 
 void handleDionaeaEvent(struct dionaeaEvent *dionaeaEvent) {
 	if(dionaeaEvent->dionaea && dionaeaEvent->incident != NULL) {
-		g_printerr("%s Dionaea incident: %s, reference: %u\n", H(0),dionaeaEvent->incident, dionaeaEvent->reference);
+		printerr("%s Dionaea incident: %s, reference: %u\n", H(0),dionaeaEvent->incident, dionaeaEvent->reference);
 
 		struct dionaeaKeys *keys;
 		gboolean reference_exists = g_tree_lookup_extended(dionaea_reference, &(dionaeaEvent->reference), NULL, (gpointer *) &keys);
 
 		if (reference_exists == FALSE && dionaeaEvent->start == 1) {
-			g_printerr("%s Creating new node in reference GTree with reference key %u!\n", H(0),dionaeaEvent->reference);
+			printerr("%s Creating new node in reference GTree with reference key %u!\n", H(0),dionaeaEvent->reference);
 			// create new dionaea reference info
 
 			keys=(struct dionaeaKeys *)malloc(sizeof(struct dionaeaKeys));
@@ -168,7 +168,7 @@ void handleDionaeaEvent(struct dionaeaEvent *dionaeaEvent) {
 			// We cought this dionaea message mid-stream, can't handle it! (we don't know which session should we assign it)
 			return;
 		} else if (reference_exists == TRUE && dionaeaEvent->start ==1) {
-			g_printerr("%s Double start of the same dionaea reference?!\n",H(0));
+			printerr("%s Double start of the same dionaea reference?!\n",H(0));
 		}
 
 		struct dionaeaSession *session;
@@ -176,7 +176,7 @@ void handleDionaeaEvent(struct dionaeaEvent *dionaeaEvent) {
 		gboolean connection_exists = g_tree_lookup_extended(dionaea_connection, keys->connectionKey, NULL, (gpointer *) &session);
 		g_rw_lock_writer_lock (&dionaea_connection_lock);
 		if(connection_exists == FALSE) {
-			g_printerr("%s Inserting new connection to dionaea conn tree!\n",H(0));
+			printerr("%s Inserting new connection to dionaea conn tree!\n",H(0));
 			session=(struct dionaeaSession *)malloc(sizeof(struct dionaeaSession));
 			session->download=dionaeaEvent->download;
 
@@ -244,12 +244,12 @@ void handleDionaeaEvent(struct dionaeaEvent *dionaeaEvent) {
 			if(dionaeaEvent->end)
 			session->sessionEndCount++;
 
-			g_printerr("%s Updating dionaea conn tree entry! i:%u a:%u e:%u\n",H(0),session->incidentCount,session->sessionCount,session->sessionEndCount);
+			printerr("%s Updating dionaea conn tree entry! i:%u a:%u e:%u\n",H(0),session->incidentCount,session->sessionCount,session->sessionEndCount);
 		}
 		g_rw_lock_writer_unlock (&dionaea_connection_lock);
 
 		if(dionaeaEvent->end) {
-			g_printerr("%s Removing reference key %u!\n", H(0),dionaeaEvent->reference);
+			printerr("%s Removing reference key %u!\n", H(0),dionaeaEvent->reference);
 			unsigned int *refkey=(unsigned int*)malloc(sizeof(unsigned int));
 			*refkey=dionaeaEvent->reference;
 			g_tree_remove(dionaea_reference,refkey);
@@ -269,9 +269,9 @@ void xmpp_listener() {
 	while(1) {
 		doc = xmlReadFile(xmpp_fifo, NULL, XML_PARSE_RECOVER);
 		if (doc == NULL) {
-			g_printerr("%s Failed to parse XML from FIFO queue!\n",H(0));
+			printerr("%s Failed to parse XML from FIFO queue!\n",H(0));
 		} else {
-			//g_printerr("--------------- Got a message!\n");
+			//printerr("--------------- Got a message!\n");
 			struct dionaeaEvent * dionaeaEvent=(struct dionaeaEvent *)malloc(sizeof(struct dionaeaEvent));
 			dionaeaEvent->download=0;
 			dionaeaEvent->end=0;
@@ -354,7 +354,7 @@ gboolean xmpp_loop_tree(gpointer key, gpointer value, gpointer data) {
 				6
 		);
 
-		//g_printerr("%s XMPP Backup has added an entry: %s\n", H(0), (gchar *)key);
+		//printerr("%s XMPP Backup has added an entry: %s\n", H(0), (gchar *)key);
 		save_backup(xmpp_backup_file, xmpp_db);
 		cleanup=g_list_prepend(cleanup,key);
 	}
@@ -363,7 +363,7 @@ gboolean xmpp_loop_tree(gpointer key, gpointer value, gpointer data) {
 void xmpp_backup() {
 	// Loop the conn tree every minute and save sessions that are all closed!
 	while(1) {
-		//g_printerr("XMPP Backup running\n");
+		//printerr("XMPP Backup running\n");
 		cleanup=NULL;
 		g_rw_lock_writer_lock (&dionaea_connection_lock);
 		g_tree_foreach(dionaea_connection, xmpp_loop_tree, NULL);
@@ -371,13 +371,13 @@ void xmpp_backup() {
 
 		while(cleanup!=NULL) {
 			gchar *key = (gchar *)cleanup->data;
-			//g_printerr("%s Removing key from dionaea conn tree: %s\n",H(0),key);
+			//printerr("%s Removing key from dionaea conn tree: %s\n",H(0),key);
 			g_tree_remove(dionaea_connection,key);
 			counter++;
 			cleanup=g_list_next(cleanup);
 		}
 
-		g_printerr("%s Removed %i elements from dionaea conn tree!\n", H(0),counter);
+		printerr("%s Removed %i elements from dionaea conn tree!\n", H(0),counter);
 		g_list_free(cleanup);
 		g_rw_lock_writer_unlock (&dionaea_connection_lock);
 		g_usleep(60000000);
@@ -470,7 +470,7 @@ int init_mod_dionaea()
 	if(NULL != (xmpp_db=(gchar *)g_hash_table_lookup(config,"xmpp_db"))) {
 		xmpp_backup_file=g_key_file_new();
 		if(g_key_file_load_from_file(xmpp_backup_file, xmpp_db,0,NULL)) {
-			g_printerr("%s Dionaea XMPP backup loaded from file %s\n",H(0),xmpp_db);
+			printerr("%s Dionaea XMPP backup loaded from file %s\n",H(0),xmpp_db);
 		}
 	} else {
 		errx(1,"%s: Dionaea XMPP backup file not defined!\n",__func__);
@@ -492,13 +492,13 @@ int init_mod_dionaea()
 	if( ( xmpp_listener_thread = g_thread_new ("xmpp_listener", ((void *)xmpp_listener), NULL)) == NULL)
 	errx(1, "%s: Unable to start the XMPP listener thread", __func__);
 	else
-	g_printerr("%s: Dionaea XMPP listener thread started\n", H(0));
+	printerr("%s: Dionaea XMPP listener thread started\n", H(0));
 
 	// create xmpp backup thread
 	if( ( xmpp_backup_thread = g_thread_new ("xmpp_backup", ((void *)xmpp_backup), NULL)) == NULL)
 	errx(1, "%s: Unable to start the XMPP backup thread", __func__);
 	else
-	g_printerr("%s: Dionaea XMPP backup thread started\n", H(0));
+	printerr("%s: Dionaea XMPP backup thread started\n", H(0));
 
 	return 0;
 }
@@ -511,7 +511,7 @@ mod_result_t mod_dionaea(struct mod_args *args)
 	// Check if module is configured properly
 	if(xmpp_fifo==NULL) {
 		// It's not, can't decide
-		g_printerr("%s Dionaea module is not configured properly, can't decide!!\n", H(args->pkt->conn->id));
+		printerr("%s Dionaea module is not configured properly, can't decide!!\n", H(args->pkt->conn->id));
 		args->node->result = -1;
 		return result;
 	}
@@ -531,14 +531,14 @@ mod_result_t mod_dionaea(struct mod_args *args)
 
 	u_short protocol = args->pkt->packet.ip->protocol;
 
-	g_printerr("%s: Protocol: %u | %i | %s:%s -> %s:%s | M:%u\n", H(args->pkt->conn->id), protocol, args->pkt->origin, key_src[0], srcport, key_dst[0], dstport,args->pkt->conn->mark);
+	printerr("%s: Protocol: %u | %i | %s:%s -> %s:%s | M:%u\n", H(args->pkt->conn->id), protocol, args->pkt->origin, key_src[0], srcport, key_dst[0], dstport,args->pkt->conn->mark);
 
 	gchar *mode;
 	/*! get the backup file for this module */
 	if ( NULL == (mode = (gchar *)g_hash_table_lookup(args->node->arg, "mode"))) {
 		/*! We can't decide */
 		args->node->result = -1;
-		g_printerr("%s mandatory argument 'mode' undefined (front/back)!\n", H(args->pkt->conn->id));
+		printerr("%s mandatory argument 'mode' undefined (front/back)!\n", H(args->pkt->conn->id));
 		return;
 	}
 
@@ -561,7 +561,7 @@ mod_result_t mod_dionaea(struct mod_args *args)
 							NULL)
 			)
 	) {
-		g_printerr("%s XMPP Backup info found: %s\n", H(args->pkt->conn->id),info[0]);
+		printerr("%s XMPP Backup info found: %s\n", H(args->pkt->conn->id),info[0]);
 		if( strcmp(info[0],"1")==0 ) {
 			// According to backup dionaea handled this in the past successfully
 			dionaeaBackupSuccess=1;

@@ -204,7 +204,7 @@ void decide(struct decision_holder *decision) {
 	/*! start processing the tree from the root */
 	while (1) {
 
-		g_printerr("%s >> Calling module %s at address %p\n",
+		printerr("%s >> Calling module %s at address %p\n",
 				H(decision->pkt->conn->id), node->module_name->str,
 				node->module);
 
@@ -214,7 +214,7 @@ void decide(struct decision_holder *decision) {
 
 		run_module(node->module, &args, result);
 
-		g_printerr("%s >> Done, result is %s\n", H(decision->pkt->conn->id),
+		printerr("%s >> Done, result is %s\n", H(decision->pkt->conn->id),
 				lookup_result(result));
 
 		switch (result) {
@@ -226,7 +226,7 @@ void decide(struct decision_holder *decision) {
 
 			/* Global multi-hih module that tells which HIH ID to use */
 			if (decision->backend_use != 0) {
-				g_printerr("%s >> Module suggested using HIH %u\n",
+				printerr("%s >> Module suggested using HIH %u\n",
 						H(decision->pkt->conn->id), args.backend_use);
 			}
 
@@ -274,12 +274,12 @@ static inline
 void get_decision(struct decision_holder *decision) {
 
 	if (decision->node == NULL) {
-		g_printerr("%s rule is NULL for state %s on target %p\n",
+		printerr("%s rule is NULL for state %s on target %p\n",
 				H(decision->pkt->conn->id),
 				lookup_state(decision->pkt->conn->state),
 				decision->pkt->conn->target);
 	} else {
-		g_printerr("%s Rule available, deciding...\n",
+		printerr("%s Rule available, deciding...\n",
 				H(decision->pkt->conn->id));
 		decide(decision);
 		decision->pkt->conn->decision_packet_id =
@@ -318,7 +318,7 @@ status_t DE_process_packet(struct pkt_struct *pkt) {
 
 	status_t result = NOK;
 
-	g_printerr("%s Packet pushed to DE: %s\n", H(pkt->conn->id),
+	printerr("%s Packet pushed to DE: %s\n", H(pkt->conn->id),
 			pkt->conn->key);
 
 	switch (pkt->conn->state) {
@@ -338,7 +338,7 @@ status_t DE_process_packet(struct pkt_struct *pkt) {
 
 			if (decision.result == DE_ACCEPT && decision.backend_use != 0) {
 				// Back picker gave us a HIH, run it's test (if any)
-				g_printerr("%s Global backend rule gave us a HIH: %u\n",
+				printerr("%s Global backend rule gave us a HIH: %u\n",
 						H(pkt->conn->id), decision.backend_use);
 
 				struct backend *back_handler = (struct backend *) g_tree_lookup(
@@ -350,7 +350,7 @@ status_t DE_process_packet(struct pkt_struct *pkt) {
 					get_decision(&decision);
 				}
 			} else {
-				g_printerr(
+				printerr(
 						"%s Backend picking rule didn't specify HIH, rejecting!\n",
 						H(pkt->conn->id));
 			}
@@ -368,7 +368,7 @@ status_t DE_process_packet(struct pkt_struct *pkt) {
 		break;
 	default:
 		/* should never happen */
-		g_printerr("%s Packet sent to DE with invalid state: %d\n",
+		printerr("%s Packet sent to DE with invalid state: %d\n",
 				H(pkt->conn->id), pkt->conn->state);
 		break;
 	}
@@ -398,12 +398,12 @@ status_t DE_process_packet(struct pkt_struct *pkt) {
 		break;
 	case DE_DEFER:
 		/* Rule can't decide (yet) */
-		g_printerr("%s Rule can't decide (yet)\n", H(pkt->conn->id));
+		printerr("%s Rule can't decide (yet)\n", H(pkt->conn->id));
 		/*! we leave the state unmodified (the rule probably needs more material to decide), and we release the packet */
 		result = OK;
 		break;
 	case DE_REJECT:
-		g_printerr("%s Rule decides to reject\n", H(pkt->conn->id));
+		printerr("%s Rule decides to reject\n", H(pkt->conn->id));
 		switch (pkt->conn->state) {
 		case DECISION:
 			result = OK;
@@ -414,11 +414,11 @@ status_t DE_process_packet(struct pkt_struct *pkt) {
 		}
 		break;
 	case DE_ACCEPT:
-		g_printerr("%s Rule decides to accept\n", H(pkt->conn->id));
+		printerr("%s Rule decides to accept\n", H(pkt->conn->id));
 		switch (pkt->conn->state) {
 		case INIT:
 			if (pkt->conn->target->back_handler_count == 0) {
-				g_printerr("%s No back rules and back picker is null\n",
+				printerr("%s No back rules and back picker is null\n",
 						H(pkt->conn->id));
 				switch_state(pkt->conn, PROXY);
 			} else {
@@ -427,10 +427,10 @@ status_t DE_process_packet(struct pkt_struct *pkt) {
 			result = OK;
 			break;
 		case DECISION:
-			g_printerr("%s Redirecting to HIH: %u\n", H(pkt->conn->id),
+			printerr("%s Redirecting to HIH: %u\n", H(pkt->conn->id),
 					decision.backend_use);
 			if (NOK == setup_redirection(pkt->conn, decision.backend_use)) {
-				g_printerr("%s setup_redirection() failed\n", H(pkt->conn->id));
+				printerr("%s setup_redirection() failed\n", H(pkt->conn->id));
 			}
 			break;
 		case CONTROL:

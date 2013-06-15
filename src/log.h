@@ -26,22 +26,54 @@
 
 #include "types.h"
 #include "structs.h"
+#include "globals.h"
 
 #define L(sdata,ddata,level,id) \
 	if (0 != honeylog(sdata,ddata,level,id)) \
-	{g_print("******LOG ENGINE ERROR******\n");}
-#define H(id) 				log_header(__func__, id)
+	{g_printerr("******LOG ENGINE ERROR******\n");}
 
-const char* log_header(const char* function_name, int id);
-const char* now(void);
+#ifdef DEBUG
+#define printerr(...)  \
+        g_mutex_lock(&log_header_lock); \
+        g_printerr (__VA_ARGS__); \
+        g_mutex_unlock(&log_header_lock);
+#else
+#define printerr(...) \
+    if(fdebug!=-1) { \
+    	g_mutex_lock(&log_header_lock); \
+    	g_printerr (__VA_ARGS__); \
+    	g_mutex_unlock(&log_header_lock); \
+    }
+#endif
+
+// Should only be used with printerr()
+#define H(id) log_header(__func__, id)
+static inline const char* log_header(const char* function_name, int id) {
+    struct tm *tm;
+    struct timeval tv;
+    struct timezone tz;
+    gettimeofday(&tv, &tz);
+    tm = localtime(&tv.tv_sec);
+    if (tm == NULL) {
+        perror("localtime");
+        return '\0';
+    }
+    snprintf(log_header_string, 200, "%d-%02d-%02d %02d:%02d:%02d.%.6d;%6u;%s:\t",
+            (1900 + tm->tm_year), (1 + tm->tm_mon), tm->tm_mday,
+            tm->tm_hour, tm->tm_min, tm->tm_sec,
+            (int) tv.tv_usec, id, function_name);
+    return log_header_string;
+}
 
 status_t honeylog(char *sdata, char *ddata, log_verbosity_t level, unsigned id);
 
 int open_debug_log(void);
 
-int close_connection_log(void);
+int close_debug_log(void);
 
 void open_connection_log(void);
+
+int close_connection_log(void);
 
 //void rotate_log(int signal_nb, void *siginfo, void *context);
 void rotate_connection_log(int signal_nb);

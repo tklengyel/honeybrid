@@ -31,6 +31,7 @@
 #include "log.h"
 
 #include <fcntl.h>
+#include <stdarg.h>
 #include <glib/gprintf.h>
 
 #include "globals.h"
@@ -54,40 +55,6 @@ unsigned long last_rotation;
  */
 
 FILE *logfd;
-
-/*! log_header
- *
- *\brief return a header for debug log messages, including
- * the timestamp and the name of the function
- */
-const char*
-log_header(const char* function_name, int id) {
-	static char log_header[200];
-	snprintf(log_header, 200, "%s;%6u;%s:\t", now(), id, function_name);
-	return log_header;
-}
-
-/*! now
- *
- *\brief return the current timestamp as a string
- */
-const char*
-now(void) {
-	static char now[30];
-	struct tm *tm;
-	struct timeval tv;
-	struct timezone tz;
-	gettimeofday(&tv, &tz);
-	tm = localtime(&tv.tv_sec);
-	if (tm == NULL) {
-		perror("localtime");
-		return '\0';
-	}
-	snprintf(now, 30, "%d-%02d-%02d %02d:%02d:%02d.%.6d", (1900 + tm->tm_year),
-			(1 + tm->tm_mon), tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec,
-			(int) tv.tv_usec);
-	return now;
-}
 
 /*! honeylog
  *
@@ -143,16 +110,18 @@ status_t honeylog(char *sdata, char *ddata, log_verbosity_t level, unsigned id) 
 
 int open_debug_log(void) {
 	int fd;
-	if (0 != chdir(g_hash_table_lookup(config, "log_directory")))
+	if (0 != chdir(CONFIG_REQUIRED("log_directory")))
 		errx(1, "%s: can't change directory", __func__);
-	if (NULL == g_hash_table_lookup(config, "debug_file"))
-		errx(1, "%s: no log file specified in the config", __func__);
-	if ((fd = open(g_hash_table_lookup(config, "debug_file"),
+	if ((fd = open(CONFIG_REQUIRED("debug_file"),
 			O_CREAT | O_WRONLY | O_APPEND, 0744)) == -1)
 		err(1, "%s: open", __func__);
-	if (0 != chdir(g_hash_table_lookup(config, "exec_directory")))
+	if (0 != chdir(CONFIG_REQUIRED("exec_directory")))
 		warnx("%s: can't change directory", __func__);
 	return fd;
+}
+
+int close_debug_log(void) {
+    return close(fdebug);
 }
 
 int close_connection_log(void) {
@@ -163,21 +132,21 @@ int close_connection_log(void) {
  \brief open the file honeybrid.log
  */
 void open_connection_log(void) {
-	if (0 != chdir(CONFIG("log_directory"))) {
+	if (0 != chdir(CONFIG_REQUIRED("log_directory"))) {
 		errx(1, "%s: can't change directory", __func__);
 	}
 
-	if (NULL == CONFIG("log_file")) {
+	if (NULL == CONFIG_REQUIRED("log_file")) {
 		errx(1, "%s: no log file specified in the config", __func__);
 	}
-	if (NULL == (logfd = fopen(CONFIG("log_file"), (char *) "a"))) {
+	if (NULL == (logfd = fopen(CONFIG_REQUIRED("log_file"), (char *) "a"))) {
 		err(1, "fopen");
 	}
 
 	/*! Enable line buffer */
 	setlinebuf(logfd);
 
-	if (0 != chdir(g_hash_table_lookup(config, "exec_directory"))) {
+	if (0 != chdir(CONFIG_REQUIRED("exec_directory"))) {
 		warnx("%s: can't change directory", __func__);
 	}
 }
@@ -232,13 +201,7 @@ void rotate_connection_log(int signal_nb) {
 
 		fclose(logfd);
 
-		//logfile_name = malloc(sizeof(g_hash_table_lookup(config,"log_file"))+1);
-		//logfile_name = malloc(512);
-		///logfile_name = g_new0(char, 256);
-		///logfile_name = g_hash_table_lookup(config,"log_file");
-		///new_name = malloc(sizeof(logfile_name) + 64);
-		///sprintf(new_name,"%s.%d%02d%02d_%02d%02d", logfile_name, (1900+tm->tm_year), (1+tm->tm_mon), tm->tm_mday, tm->tm_hour, tm->tm_min);
-		logfile_name = g_string_new(g_hash_table_lookup(config, "log_file"));
+		logfile_name = g_string_new(CONFIG_REQUIRED("log_file"));
 #ifdef DEBUG
 		g_print("rotate_connection_log()\tlogfile_name is %s\n",
 				logfile_name->str);
@@ -256,7 +219,7 @@ void rotate_connection_log(int signal_nb) {
 		L(NULL, logbuf, LOG_HIGH, LOG_LOG);
 
 
-		if(chdir(g_hash_table_lookup(config, "log_directory")) < 0)
+		if(chdir(CONFIG_REQUIRED("log_directory")) < 0)
 			errx(1, "Failed to chdir to log_directory!\n");
 
 		if (rename(logfile_name->str, new_name->str)) {
@@ -265,9 +228,9 @@ void rotate_connection_log(int signal_nb) {
 		}
 
 		//i = open(logfile_name, O_RDWR | O_CREAT, 0640);
-		logfd = fopen(g_hash_table_lookup(config, "log_file"), (char *) "a");
+		logfd = fopen(CONFIG_REQUIRED("log_file"), (char *) "a");
 
-		if(chdir(g_hash_table_lookup(config, "exec_directory")) < 0)
+		if(chdir(CONFIG_REQUIRED("exec_directory")) < 0)
 			errx(1, "Failed to chdir to exec_directory!\n");
 
 		///g_free(logfile_name);

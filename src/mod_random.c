@@ -42,7 +42,7 @@
  */
 mod_result_t mod_random(struct mod_args *args)
 {
-    g_printerr("%s Module called\n", H(args->pkt->conn->id));
+    printerr("%s Module called\n", H(args->pkt->conn->id));
 
     unsigned int proba;
     uint32_t selector = 1;
@@ -53,7 +53,7 @@ mod_result_t mod_random(struct mod_args *args)
     if ((value = (const uint32_t *)g_hash_table_lookup(args->node->config, "value")) == NULL)
     {
         /*! We can't decide */
-        g_printerr("%s Incorrect value parameter: %d\n", H(args->pkt->conn->id),
+        printerr("%s Incorrect value parameter: %d\n", H(args->pkt->conn->id),
                 *value);
         return result;
     }
@@ -62,7 +62,7 @@ mod_result_t mod_random(struct mod_args *args)
     {
         /*! We can't decide */
         result = REJECT;
-        g_printerr("%s Incorrect value parameter: %d\n", H(args->pkt->conn->id),
+        printerr("%s Incorrect value parameter: %d\n", H(args->pkt->conn->id),
                 *value);
         return result;
     }
@@ -74,14 +74,14 @@ mod_result_t mod_random(struct mod_args *args)
     {
         /*! We accept this packet */
         result = ACCEPT;
-        g_printerr("%s PACKET MATCH RULE for random(%d)\n",
+        printerr("%s PACKET MATCH RULE for random(%d)\n",
                 H(args->pkt->conn->id), *value);
     }
     else
     {
         /*! We reject this packet */
         result = REJECT;
-        g_printerr("%s PACKET DOES NOT MATCH RULE for random(%d)\n",
+        printerr("%s PACKET DOES NOT MATCH RULE for random(%d)\n",
                 H(args->pkt->conn->id), *value);
     }
 

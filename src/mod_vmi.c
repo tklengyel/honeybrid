@@ -99,7 +99,7 @@ gboolean build_vmi_vms2(gpointer key, gpointer value, __attribute__((unused)) gp
 	//printf("Sending on socket %i: %s", vmi_sock, vmi_buffer);
 
 	if (write(vmi_sock, vmi_buffer, strlen(vmi_buffer)) < 0) {
-		g_printerr("%s Couldn't send message to VMI server\n", H(22));
+		printerr("%s Couldn't send message to VMI server\n", H(22));
 	} else {
 		bzero(vmi_buffer, 100);
 
@@ -115,7 +115,7 @@ gboolean build_vmi_vms2(gpointer key, gpointer value, __attribute__((unused)) gp
 				*nl = '\0';
 
 			if (!strcmp(vmi_buffer, "active")) {
-				g_printerr("%s VM %s is active, pausing!\n", H(22), vm_name);
+				printerr("%s VM %s is active, pausing!\n", H(22), vm_name);
 
 				bzero(vmi_buffer, 100);
 				sprintf(vmi_buffer, "pause,%s\n", vm_name);
@@ -125,12 +125,12 @@ gboolean build_vmi_vms2(gpointer key, gpointer value, __attribute__((unused)) gp
 				if(read(vmi_sock, vmi_buffer, 100)==0)
 					return FALSE;
 				if (strcmp(vmi_buffer, "paused\n\r")) {
-					g_printerr(
+					printerr(
 							"%s VM was not paused on our request, skipping\n",
 							H(22));
 					return FALSE;
 				} else
-					g_printerr("%s VM was paused, enabling\n", H(22));
+					printerr("%s VM was paused, enabling\n", H(22));
 
 				struct vmi_vm *vm = g_malloc0(sizeof(struct vmi_vm));
 
@@ -145,7 +145,7 @@ gboolean build_vmi_vms2(gpointer key, gpointer value, __attribute__((unused)) gp
 
 			} else if (!strcmp(vmi_buffer, "paused")) {
 
-				g_printerr("%s VM %s is paused, enabling!\n", H(22), vm_name);
+				printerr("%s VM %s is paused, enabling!\n", H(22), vm_name);
 				struct vmi_vm *vm = g_malloc0(sizeof(struct vmi_vm));
 
 				vm->vmID = *(uint32_t*) key;
@@ -158,7 +158,7 @@ gboolean build_vmi_vms2(gpointer key, gpointer value, __attribute__((unused)) gp
 
 				g_tree_insert(vmi_vms, (gpointer) vm->name, (gpointer) vm);
 			} else
-				g_printerr("%s VM %s is inactive!\n", H(22), (char *) value);
+				printerr("%s VM %s is inactive!\n", H(22), (char *) value);
 		}
 	}
 
@@ -213,7 +213,7 @@ gboolean find_free_vm(__attribute__((unused)) gpointer unused, gpointer value, g
 		search->vm = vm;
 		found = 1;
 
-		g_printerr("%s Found free VM and activated it: %u!\n", H(22), vm->vmID);
+		printerr("%s Found free VM and activated it: %u!\n", H(22), vm->vmID);
 	}
 	g_rw_lock_writer_unlock(&(vm->lock));
 
@@ -311,7 +311,7 @@ gboolean find_if_banned(gpointer key, __attribute__((unused)) gpointer unused, g
 }
 
 mod_result_t mod_vmi_front(struct mod_args *args) {
-	g_printerr("%s VMI Front Module called\n", H(args->pkt->conn->id));
+	printerr("%s VMI Front Module called\n", H(args->pkt->conn->id));
 
 	gchar **values = g_strsplit(args->pkt->key_src, ":", 0);
 	/*struct attacker_search attacker;
@@ -343,7 +343,7 @@ mod_result_t mod_vmi_front(struct mod_args *args) {
 
 mod_result_t mod_vmi_pick(struct mod_args *args) {
 
-	g_printerr("%s VMI Backpick Module called\n", H(args->pkt->conn->id));
+	printerr("%s VMI Backpick Module called\n", H(args->pkt->conn->id));
 
 	mod_result_t result = REJECT;
 	struct vm_search search;
@@ -397,7 +397,7 @@ mod_result_t mod_vmi_pick(struct mod_args *args) {
 		g_rw_lock_writer_unlock(&(search.vm->lock));
 
 	} else {
-		g_printerr("%s No available backend found, rejecting!\n",
+		printerr("%s No available backend found, rejecting!\n",
 				H(args->pkt->conn->id));
 		result = REJECT;
 	}
@@ -407,7 +407,7 @@ mod_result_t mod_vmi_pick(struct mod_args *args) {
 }
 
 //void mod_vmi_back(struct mod_args *args) {
-	/*	g_printerr("%s VMI Back Module called\n", H(args->pkt->conn->id));
+	/*	printerr("%s VMI Back Module called\n", H(args->pkt->conn->id));
 
 	 GTimeVal t;
 	 g_get_current_time(&t);
@@ -501,7 +501,7 @@ mod_result_t mod_vmi_control(struct mod_args *args) {
 		return ACCEPT;
 	}
 
-	g_printerr("%s VMI Control Module called\n", H(args->pkt->conn->id));
+	printerr("%s VMI Control Module called\n", H(args->pkt->conn->id));
 
 	mod_result_t result = REJECT;
 	/*! get the IP address from the packet */
@@ -509,7 +509,7 @@ mod_result_t mod_vmi_control(struct mod_args *args) {
 	//key_src = g_strsplit( args->pkt->key_src, ":", 0);
 	key_dst = g_strsplit(args->pkt->key_dst, ":", 2);
 
-	//g_printerr("Control module is looking for an attack session from %s\n", key_dst[0]);
+	//printerr("Control module is looking for an attack session from %s\n", key_dst[0]);
 
 	struct attacker_search search;
 	search.found = 0;
@@ -533,7 +533,7 @@ mod_result_t mod_vmi_control(struct mod_args *args) {
 				args->pkt->conn->custom_data, log);
 
 		if (search.event) {
-			g_printerr("%s Cought network event, sending signal!\n",
+			printerr("%s Cought network event, sending signal!\n",
 					H(args->pkt->conn->id));
 
 			char *buf = g_malloc0(
@@ -542,7 +542,7 @@ mod_result_t mod_vmi_control(struct mod_args *args) {
 			sprintf(buf, "%s,%s,%s\n", search.vm->name, search.attacker,
 					search.outIP);
 			if(write(vmi_sock, buf, strlen(buf))<0)
-				g_printerr("%s Failed to write to socket!\n", H(args->pkt->conn->id));
+				printerr("%s Failed to write to socket!\n", H(args->pkt->conn->id));
 			free(buf);
 		} else
 			result = ACCEPT;
@@ -561,7 +561,7 @@ mod_result_t mod_vmi(struct mod_args *args) {
 	if (NULL
 			== (mode = (gchar *) g_hash_table_lookup(args->node->config, "mode"))) {
 		/*! We can't decide */
-		g_printerr("%s mandatory argument 'mode' undefined (back/control)!\n",
+		printerr("%s mandatory argument 'mode' undefined (back/control)!\n",
 				H(args->pkt->conn->id));
 		return DEFER;
 	}
@@ -630,7 +630,7 @@ void vm_status_updater_thread() {
 
 					if (vm->attacker != NULL) {
 
-						g_printerr(
+						printerr(
 								"%s Setting connections to DROP and banning %s\n",
 								H(62), vm->attacker);
 
@@ -689,7 +689,7 @@ int init_mod_vmi() {
 		errx(1, "%s: VMI Server port not defined!!\n", __func__);
 	}
 
-	g_printerr("%s Init mod vmi\n", H(22));
+	printerr("%s Init mod vmi\n", H(22));
 
 	/* socket: create the socket */
 	vmi_sock = socket(AF_INET, SOCK_STREAM, 0);
