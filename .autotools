@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configurations>
 <configuration id="org.eclipse.linuxtools.cdt.autotools.core.configuration.build.1865105837">
-<option id="configure" value="configure"/>
+<option id="configure" value="configure --enable-debug"/>
 <option id="configdir" value=""/>
 <option id="cache-file" value=""/>
 <option id="help" value="false"/>

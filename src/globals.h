@@ -36,8 +36,16 @@ const char *pidfile;
  \def threading
  * Init value: OK
  * Set to NOK when honeybrid stops, used to terminate threads
+ *
  */
 status_t threading;
+
+/*!
+ \def threading_cond_lock
+ \def thread_cond
+ *
+ * Conditional to signal threads that may be asleep that they need to exit.
+ */
 GMutex threading_cond_lock;
 GCond threading_cond;
 
@@ -46,6 +54,9 @@ uint64_t c_id;
 
 /*! \brief max number of packets to save for replay in an EXT<->LIH connection (negative value = save all) */
 uint64_t max_packet_buffer;
+
+int deny_hih_init;
+int reset_ext;
 
 /*! \brief global array of pointers to hold target structures */
 GPtrArray *targets;
@@ -97,8 +108,20 @@ status_t running;
 GThread *thread_clean;
 GThread *mod_backup;
 
-GThread *de_threads[DE_THREADS];
-GAsyncQueue *de_queues[DE_THREADS];
+/*!
+ \def decision_threads
+ \def de_threads
+ \def de_queues
+ *
+ * Asynchronous multi-threaded packet processing
+ * Each de_thread has it's own queue to which packet's are being pushed
+ * based on their source and destination address so that each attack session will
+ * be handled by the same thread.
+ * This ensures that packets belonging to the same connection are processed in FIFO order.
+ * */
+uint32_t decision_threads;
+GThread **de_threads;
+GAsyncQueue **de_queues;
 
 /*!
  \def log level
@@ -110,6 +133,15 @@ log_verbosity_t LOG_LEVEL;
  \Def file descriptor to log debug output
  */
 int fdebug;
+
+/*!
+ \def udp_rsd
+ \def tcp_rsd
+ *
+ \brief Raw socket descriptor for TCP and UDP raw sockets
+ *
+ */
+int udp_rsd, tcp_rsd;
 
 /* -------------------------------------------------- */
 

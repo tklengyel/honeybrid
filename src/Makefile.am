@@ -41,26 +41,39 @@ honeybrid_SOURCES += mod_random.c
 honeybrid_SOURCES += mod_source.c
 honeybrid_SOURCES += mod_source_time.c
 honeybrid_SOURCES += mod_yesno.c
-honeybrid_SOURCES += mod_dionaea.c mod_dionaea.h
 honeybrid_SOURCES += mod_backpick_random.c
 honeybrid_SOURCES += mod_vmi.c
+
+if DIONAEA
+honeybrid_SOURCES += mod_dionaea.c mod_dionaea.h
+endif
 
 # Compiler flags:
 AM_CFLAGS =  $(GLIB_CFLAGS)
 AM_CFLAGS += $(CRYPTO_CFLAGS)
 AM_CFLAGS += $(XML2_CFLAGS)
 AM_CFLAGS += $(MYSQL_CFLAGS)
-#AM_CFLAGS += $(HARDEN_CFLAGS)
 
-# Note that -pg is incompatable with $(HARDEN_LDFLAGS)
-AM_CFLAGS += -Wall -Wextra -Wno-override-init -Wno-strict-aliasing -g -ggdb3 -pg -DDEBUG
+if HARDENING
+AM_CFLAGS += $(HARDEN_CFLAGS) -DHARDENING
+endif
+
+# Note that -pg is incompatible with HARDENING
+if DEBUG
+AM_CFLAGS += -Wall -Wextra -Wno-override-init -Wno-strict-aliasing -g -ggdb3 -DDEBUG
+if !HARDENING
+AM_CFLAGS += -pg
+endif
+endif
 
 AM_LDFLAGS =  $(GLIB_LIBS)
 AM_LDFLAGS += $(CRYPTO_LIBS)
 AM_LDFLAGS += $(XML2_LIBS)
 AM_LDFLAGS += $(MYSQL_LIBS)
-AM_LDFLAGS += $(CORE_LIBS)
-#AM_LDFLAGS += $(HARDEN_LDFLAGS)
+
+if HARDENING
+AM_LDFLAGS += $(HARDEN_LDFLAGS)
+endif
 
 AM_YFLAGS= -tvy -d -v
 AM_LFLAGS= -o$(LEX_OUTPUT_ROOT).c

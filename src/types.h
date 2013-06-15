@@ -58,10 +58,6 @@
  */
 #define BUFSIZE 2048
 
-#ifndef DE_THREADS
-#define DE_THREADS 2
-#endif
-
 /*! \brief constants to define the origin of a packet
  */
 typedef enum {

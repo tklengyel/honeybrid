@@ -27,6 +27,7 @@
 /src/gmon.out
 /m4/Makefile
 /m4/Makefile.in
+/config.h.in
 /aclocal.m4
 /configure
 /Makefile

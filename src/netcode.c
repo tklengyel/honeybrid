@@ -39,21 +39,6 @@
 #include "log.h"
 #include "connections.h"
 
-/*!
- \def udp_rsd
- *
- \brief Raw socket descriptor for UDP/IP raw socket
- *
- */
-
-/*!
- \def tcp_rsd
- *
- \brief Raw socket descriptor for TCP/IP raw socket
- *
- */
-int udp_rsd, tcp_rsd; // generic sockets
-
 /*! ip_checksum
  \brief IP checksum using in_cksum
  */
@@ -631,7 +616,6 @@ status_t replay(struct conn_struct* conn, struct pkt_struct* pkt) {
 
  */
 void define_expected_data(struct pkt_struct* pkt) {
-	g_rw_lock_writer_lock(&pkt->conn->lock);
 	pkt->conn->expected_data.ip_proto = pkt->packet.ip->protocol;
 	pkt->conn->expected_data.payload = pkt->packet.payload;
 	if (pkt->packet.ip->protocol == IPPROTO_TCP) {
@@ -647,7 +631,6 @@ void define_expected_data(struct pkt_struct* pkt) {
 		}
 
 	}
-	g_rw_lock_writer_unlock(&pkt->conn->lock);
 }
 
 /*! test_expected

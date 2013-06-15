@@ -67,6 +67,15 @@ AC_ARG_ENABLE([hardening],
     [Enable compiler and linker options to frustrate memory corruption exploits @<:@yes@:>@])],
   [hardening="$enableval"],
   [hardening="yes"])
+  
+AC_ARG_ENABLE([debug],
+  [AS_HELP_STRING([--enable-debug],
+    [Enable verbose debug output to be compiled @<:@no@:>@])],
+  [debug="$enableval"],
+  [debug="no"])   
+
+AM_CONDITIONAL([DEBUG], [test x$debug = xyes])
+AM_CONDITIONAL([HARDENING], [test x$hardening = xyes])  
 
 HARDEN_CFLAGS=""
 HARDEN_LDFLAGS=""
@@ -98,7 +107,7 @@ AS_IF([test x"$hardening" != x"no"], [
   check_link_flag([-Wl,-z,relro],
    [HARDEN_LDFLAGS="$HARDEN_LDFLAGS -Wl,-z,relro"
     check_link_flag([-Wl,-z,now], [HARDEN_LDFLAGS="$HARDEN_LDFLAGS -Wl,-z,now"])])])
-
+    
 AC_SUBST([HARDEN_CFLAGS])
 AC_SUBST([HARDEN_LDFLAGS])
 
@@ -126,25 +135,14 @@ AC_FUNC_REALLOC
 AC_FUNC_VPRINTF
 AC_CHECK_FUNCS([dup2 gettimeofday inet_ntoa memset socket strdup strerror strstr])
 
-CORE_LIBS=""
-AC_ARG_ENABLE(libev,
- [  --enable-libev=yes    specify if you want to compile Honeybrid with libev (EXPERIMENTAL)],
- [ if   test "x$enableval" = "xyes" ; then
-	AC_CHECK_LIB(ev, ev_default_loop, [
-		AC_DEFINE([HAVE_LIBEV], [1], [libev enabled])
-		AC_MSG_NOTICE([Using libev for event handling])
-		CORE_LIBS="$CORE_LIBS -lev"
-	], [AC_MSG_NOTICE([Libev not found])])
-   fi
- ])
+AC_CHECK_LIB(ev, ev_default_loop, [], [AC_MSG_NOTICE([Libev not found])])
 
 AC_CHECK_LIB(nfnetlink, nfnl_fd, [], [AC_ERROR([libnfnetlink library is missing nfnl_fd, try to compile it from source!])])
 AC_CHECK_LIB(netfilter_queue, [nfq_set_verdict2], 
-	[CORE_LIBS="$CORE_LIBS -lnetfilter_queue"],
+	[],
 	[AC_ERROR([libnetfilter_queue is too old. Please upgrade it to 1.0.0 or later!])])
-AC_CHECK_LIB(pcap, pcap_compile_nopcap, [CORE_LIBS="$CORE_LIBS -lpcap"], [AC_ERROR(PCAP library missing)])
-AC_CHECK_LIB(dumbnet, addr_ntoa, [CORE_LIBS="$CORE_LIBS -ldumbnet"], [AC_ERROR(Dumbnet library missing)])
-AC_SUBST(CORE_LIBS)
+AC_CHECK_LIB(pcap, pcap_compile_nopcap, [], [AC_ERROR(PCAP library missing)])
+AC_CHECK_LIB(dumbnet, addr_ntoa, [], [AC_ERROR(Dumbnet library missing)])
 
 PKG_CHECK_MODULES([CRYPTO], [libcrypto], [
 	AC_DEFINE([HAVE_CRYPTO], [1], [Crypto library found])
@@ -154,6 +152,7 @@ PKG_CHECK_MODULES([GLIB], [glib-2.0 >= 2.32 gthread-2.0])
 AC_ARG_ENABLE(xmpp,
  [  --enable-xmpp=yes    specify if you want to compile Honeybrid with Dionaea-XMPP module],
  [ if   test "x$enableval" = "xyes" ; then
+ 	dionaea="yes"
 	PKG_CHECK_MODULES([XMPP], [gloox libxml++-2.6], [
 		PKG_CHECK_MODULES([XML2], [libxml-2.0], [
 			AC_MSG_NOTICE([Enabling XMPP listener and Dionaea module])
@@ -174,11 +173,13 @@ AC_ARG_ENABLE(xmpp,
 		
 		AC_SUBST(xmpp_listener)
 		AC_CONFIG_FILES(tools/dionaea_xmpp_listener/Makefile)
+	else
+		dionaea="no"
 	fi
  ])
+AM_CONDITIONAL([DIONAEA], [test x$dionaea = xyes])
 
 AC_PATH_PROG(MYSQL_CONFIG, mysql_config)
-	
 if test "x$MYSQL_CONFIG" != "x"; then
 	MYSQL_LIBS=$($MYSQL_CONFIG --libs)
 	MYSQL_CFLAGS=$($MYSQL_CONFIG --cflags)
@@ -187,8 +188,6 @@ if test "x$MYSQL_CONFIG" != "x"; then
 	AC_MSG_NOTICE([Enabling MySQL logging])
 	AC_SUBST(MYSQL_LIBS)
 	AC_SUBST(MYSQL_CFLAGS)
-else
-	AC_MSG_NOTICE([No working MySQL library found, disabling MySQL logging])
 fi
 	
 AC_ARG_ENABLE(doc,

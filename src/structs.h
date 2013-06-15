@@ -219,11 +219,17 @@ struct conn_struct {
 	char *key;
 	char *key_ext;
 	char *key_lih;
-	uint16_t protocol;
+	uint8_t protocol;
 	GString *start_timestamp;
 	gdouble start_microtime;
 	gint access_time;
+
 	int64_t tcp_ts_diff;
+	gboolean tcp_fin_in;  // TRUE if a incoming side of the TCP connection has received a FIN flag
+					      // The connection can still send ACKs after it sent a FIN
+					      // but nothing else. Anything else is part of a new TCP connection.
+	gboolean tcp_fin_out; // TRUE if a outgoing side of the TCP connection has sent a FIN flag
+
 	conn_status_t state;
 	uint32_t id;
 	uint32_t replay_id;
@@ -238,9 +244,9 @@ struct conn_struct {
 	struct target *target;
 
 	/* statistics */
-	gdouble stat_time[8]; // = {0,0,0,0,0,0,0};
-	int stat_packet[8]; // = {0,0,0,0,0,0,0};
-	int stat_byte[8]; // = {0,0,0,0,0,0,0};
+	gdouble stat_time[__MAX_CONN_STATUS];
+	int stat_packet[__MAX_CONN_STATUS];
+	int stat_byte[__MAX_CONN_STATUS];
 	uint32_t total_packet;
 	uint32_t total_byte;
 	int decision_packet_id;

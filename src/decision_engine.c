@@ -215,7 +215,7 @@ void decide(struct decision_holder *decision) {
 		run_module(node->module, &args, result);
 
 		g_printerr("%s >> Done, result is %s\n", H(decision->pkt->conn->id),
-				mod_result_string[result]);
+				lookup_result(result));
 
 		switch (result) {
 		case ACCEPT:
@@ -260,6 +260,7 @@ void decide(struct decision_holder *decision) {
 				decision->result = DE_REJECT;
 				/*! end of the tree, exit */
 				goto done;
+				break;
 			}
 
 			break;
@@ -269,6 +270,7 @@ void decide(struct decision_holder *decision) {
 	done: return;
 }
 
+static inline
 void get_decision(struct decision_holder *decision) {
 
 	if (decision->node == NULL) {
@@ -380,7 +382,7 @@ status_t DE_process_packet(struct pkt_struct *pkt) {
 			/*! we release the packet */
 			break;
 		case INIT:
-			if (g_tree_nnodes(pkt->conn->target->back_handlers) == 0) {
+			if (pkt->conn->target->back_handler_count == 0) {
 				/*! no backend defined, so we simply forward the packets to its destination */
 				switch_state(pkt->conn, PROXY);
 			} else {
@@ -415,7 +417,7 @@ status_t DE_process_packet(struct pkt_struct *pkt) {
 		g_printerr("%s Rule decides to accept\n", H(pkt->conn->id));
 		switch (pkt->conn->state) {
 		case INIT:
-			if (g_tree_nnodes(pkt->conn->target->back_handlers) == 0) {
+			if (pkt->conn->target->back_handler_count == 0) {
 				g_printerr("%s No back rules and back picker is null\n",
 						H(pkt->conn->id));
 				switch_state(pkt->conn, PROXY);

@@ -26,7 +26,7 @@
 
 #include "types.h"
 
-extern const char *banner;
+extern const char banner[];
 
 extern const char* protocol_string[IPPROTO_MAX];
 
@@ -36,10 +36,20 @@ extern const char* conn_status_string[__MAX_CONN_STATUS];
 
 extern const char* mod_result_string[];
 
-const char *lookup_proto(uint16_t protocol);
+static inline const char *lookup_proto(uint8_t proto) {
+	return protocol_string[proto];
+}
 
-const char *lookup_origin(origin_t origin);
+static inline const char *lookup_origin(origin_t origin) {
+	return packet_origin_string[origin];
+}
 
-const char *lookup_state(conn_status_t state);
+static inline const char *lookup_state(conn_status_t state) {
+	return conn_status_string[state];
+}
+
+static inline const char *lookup_result(mod_result_t result) {
+	return mod_result_string[result];
+}
 
 #endif /* __CONSTANTS_H_ */

@@ -31,7 +31,7 @@
 
 #include "constants.h"
 
-const char *banner =
+const char banner[] =
 	"    __  __                       __         _     __\n"
 	"   / / / /___  ____  ___  __  __/ /_  _____(_)___/ /\n"
 	"  / /_/ / __ \\/ __ \\/ _ \\/ / / / __ \\/ ___/ / __  /\n"
@@ -39,9 +39,12 @@ const char *banner =
 	"/_/ /_/\\____/_/ /_/\\___/\\__, /_.___/_/  /_/\\__,_/\n"
 	"                       /____/";
 
+const char unsupported_protocol[] = "Unsupported protocol";
+const char unknown[] = "UNKNOWN";
+
 const char* protocol_string[IPPROTO_MAX] = {
 
-	[0 ... IPPROTO_MAX-1] = "Unsupported protocol",
+	[0 ... IPPROTO_MAX-1] = unsupported_protocol,
 
 	[IPPROTO_TCP] 	= "TCP",
 	[IPPROTO_UDP] 	= "UDP"
@@ -49,7 +52,7 @@ const char* protocol_string[IPPROTO_MAX] = {
 
 const char *packet_origin_string[__MAX_ORIGIN] = {
 
-	[0 ... __MAX_ORIGIN-1] = "UNKNOWN",
+	[0 ... __MAX_ORIGIN-1] = unknown,
 
 	[EXT] = "[EXT] External",
 	[LIH] = "[LIH] Low-interaction honeypot",
@@ -58,7 +61,7 @@ const char *packet_origin_string[__MAX_ORIGIN] = {
 
 const char *conn_status_string[__MAX_CONN_STATUS] = {
 
-	[0 ... __MAX_CONN_STATUS-1] = "UNKNOWN",
+	[0 ... __MAX_CONN_STATUS-1] = unknown,
 
 	[INIT] 		= "INIT",
 	[DECISION] 	= "DECISION",
@@ -74,15 +77,3 @@ const char *mod_result_string[] = {
 	[ACCEPT] = "ACCEPT",
 	[REJECT] = "REJECT"
 };
-
-const char *lookup_proto(uint16_t proto) {
-	return protocol_string[proto];
-}
-
-const char *lookup_origin(origin_t origin) {
-	return packet_origin_string[origin];
-}
-
-const char *lookup_state(conn_status_t state) {
-	return conn_status_string[state];
-}
