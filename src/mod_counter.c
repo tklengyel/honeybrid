@@ -39,37 +39,37 @@
  \param[out] set result to 1 packet position match arg, 0 otherwise
  */
 mod_result_t mod_counter(struct mod_args *args) {
-	uint32_t pktval = 0;
-	gchar *param;
-	mod_result_t result = DEFER;
+    uint32_t pktval = 0;
+    gchar *param;
+    mod_result_t result = DEFER;
 
-	printerr("%s Module called\n", H(args->pkt->conn->id));
+    printdbg("%s Module called\n", H(args->pkt->conn->id));
 
-	if ((param = (char *) g_hash_table_lookup(args->node->config, "counter"))
-			== NULL) {
-		/*! We can't decide */
-		printerr("%s mandatory argument 'counter' undefined!\n",
-				H(args->pkt->conn->id));
-		return result;
-	} else {
-		pktval = (uint32_t)atoi(param);
-	}
+    if ((param = (char *) g_hash_table_lookup(args->node->config, "counter"))
+            == NULL) {
+        /*! We can't decide */
+        printdbg("%s mandatory argument 'counter' undefined!\n",
+                H(args->pkt->conn->id));
+        return result;
+    } else {
+        pktval = (uint32_t) atoi(param);
+    }
 
-	if (pktval <= args->pkt->conn->count_data_pkt_from_intruder) {
-		/*! We accept this packet */
-		result = ACCEPT;
-		printerr("%s PACKET MATCH RULE for counter(%d) with value %d\n",
-				H(args->pkt->conn->id), pktval,
-				args->pkt->conn->count_data_pkt_from_intruder);
-	} else {
-		/*! We reject this packet */
-		result = REJECT;
-		printerr(
-				"%s PACKET DOES NOT MATCH RULE for counter(%d) with value %d\n",
-				H(args->pkt->conn->id), pktval,
-				args->pkt->conn->count_data_pkt_from_intruder);
-	}
+    if (pktval <= args->pkt->conn->count_data_pkt_from_intruder) {
+        /*! We accept this packet */
+        result = ACCEPT;
+        printdbg("%s PACKET MATCH RULE for counter(%d) with value %d\n",
+                H(args->pkt->conn->id), pktval,
+                args->pkt->conn->count_data_pkt_from_intruder);
+    } else {
+        /*! We reject this packet */
+        result = REJECT;
+        printdbg(
+                "%s PACKET DOES NOT MATCH RULE for counter(%d) with value %d\n",
+                H(args->pkt->conn->id), pktval,
+                args->pkt->conn->count_data_pkt_from_intruder);
+    }
 
-	return result;
+    return result;
 }
 

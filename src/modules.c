@@ -36,60 +36,60 @@
 // Assign Module ID to each available module
 typedef enum {
 
-	MOD_INVALID,
+    MOD_INVALID,
 
-	MOD_SOURCE,
+    MOD_SOURCE,
 
-	MOD_SOURCE_TIME,
+    MOD_SOURCE_TIME,
 
-	MOD_RANDOM,
+    MOD_RANDOM,
 
-	MOD_YESNO,
+    MOD_YESNO,
 
-	MOD_VMI,
+    MOD_VMI,
 
-	MOD_CONTROL,
+    MOD_CONTROL,
 
-	MOD_BACKPICK_RANDOM,
+    MOD_BACKPICK_RANDOM,
 
 #ifdef HAVE_CRYPTO
-	MOD_HASH,
+    MOD_HASH,
 #endif
 
 #ifdef HAVE_XMPP
-	MOD_DIONAEA,
+    MOD_DIONAEA,
 #endif
 
-	__MAX_HONEYBRID_MODULE
+    __MAX_HONEYBRID_MODULE
 } honeybrid_modules_t;
 
 // Define each module's name and main function
 // The name can be used in the configuration of a module's function
 const struct mod_def module_definitions[__MAX_HONEYBRID_MODULE] = {
 
-	// Initialize all modules to invalid and NULL, to be overwritten by actual definitions
-	[0 ... __MAX_HONEYBRID_MODULE-1] = {.name = "invalid", .function = NULL},
+    // Initialize all modules to invalid and NULL, to be overwritten by actual definitions
+    [0 ... __MAX_HONEYBRID_MODULE-1] = {.name = "invalid", .function = NULL},
 
-	[MOD_SOURCE] = {.name = "source", .function = mod_source},
+    [MOD_SOURCE] = {.name = "source", .function = mod_source},
 
-	[MOD_SOURCE_TIME] = {.name = "source_time", .function = mod_source_time},
+    [MOD_SOURCE_TIME] = {.name = "source_time", .function = mod_source_time},
 
-	[MOD_RANDOM] = {.name = "random", .function = mod_random},
+    [MOD_RANDOM] = {.name = "random", .function = mod_random},
 
-	[MOD_YESNO] = {.name = "yesno", .function = mod_yesno},
+    [MOD_YESNO] = {.name = "yesno", .function = mod_yesno},
 
-	[MOD_VMI] = {.name = "vmi", .function = mod_vmi},
+    [MOD_VMI] = {.name = "vmi", .function = mod_vmi},
 
-	[MOD_CONTROL] = {.name = "control", .function = mod_control},
+    [MOD_CONTROL] = {.name = "control", .function = mod_control},
 
-	[MOD_BACKPICK_RANDOM] = {.name = "backpick_random", .function = mod_backpick_random},
+    [MOD_BACKPICK_RANDOM] = {.name = "backpick_random", .function = mod_backpick_random},
 
 #ifdef HAVE_CRYPTO
-	[MOD_HASH] = {.name = "hash", .function = mod_hash},
+    [MOD_HASH] = {.name = "hash", .function = mod_hash},
 #endif
 
 #ifdef HAVE_XMPP
-	[MOD_DIONAEA] = {.name = "hash", .function = mod_hash},
+    [MOD_DIONAEA] = {.name = "hash", .function = mod_hash},
 #endif
 };
 
@@ -104,23 +104,23 @@ const struct mod_def module_definitions[__MAX_HONEYBRID_MODULE] = {
 
 // TODO: Only init modules/threads here that are actually used by a target
 void init_modules() {
-	printerr("%s Initiate modules\n", H(6));
+    printdbg("%s Initiate modules\n", H(6));
 
 #ifdef HAVE_CRYPTO
-	init_mod_hash();
+    init_mod_hash();
 #endif
 
 #ifdef HAVE_XMPP
-	init_mod_dionaea();
+    init_mod_dionaea();
 #endif
 
-	init_mod_vmi();
+    init_mod_vmi();
 
-	/*! create a thread that will save module memory every minute */
-	if ((mod_backup = g_thread_new("module_backup_saver",
-			(void *) save_backup_handler, NULL)) == NULL) {
-		errx(1, "%s Cannot create a thread to save module memory", H(6));
-	}
+    /*! create a thread that will save module memory every minute */
+    if ((mod_backup = g_thread_new("module_backup_saver",
+            (void *) save_backup_handler, NULL)) == NULL) {
+        errx(1, "%s Cannot create a thread to save module memory", H(6));
+    }
 }
 
 /*! run_module
@@ -128,13 +128,12 @@ void init_modules() {
  */
 
 /*void run_module(const module_function module, struct mod_args *args)
-{
-    if (module && args)
-    {
-        module(args);
-    }
-}*/
-
+ {
+ if (module && args)
+ {
+ module(args);
+ }
+ }*/
 
 /*! get_module
  \brief return the module function pointer from name
@@ -143,34 +142,33 @@ void init_modules() {
  */
 module_function get_module(const char *modname) {
 
-	uint32_t i = 0;
-	for (; i < __MAX_HONEYBRID_MODULE; ++i) {
-		if (!strncmp(modname, module_definitions[i].name, strlen(module_definitions[i].name))) {
-			return module_definitions[i].function;
-		}
-	}
+    uint32_t i = 0;
+    for (; i < __MAX_HONEYBRID_MODULE; ++i) {
+        if (!strncmp(modname, module_definitions[i].name,
+                strlen(module_definitions[i].name))) {
+            return module_definitions[i].function;
+        }
+    }
 
-	errx(1, "%s No module could be found with the name: %s", H(6), modname);
+    errx(1, "%s No module could be found with the name: %s", H(6), modname);
 
-	return NULL;
+    return NULL;
 }
 
 /*! write_backup
  *  \brief This function write a module backup memory to a file
  */
 
-int write_backup(const char *filename, GKeyFile *data, __attribute__((unused)) void *unused)
-{
-    printerr("%s saving backup module %p to %s\n", H(6), data, filename);
+int write_backup(const char *filename, GKeyFile *data,
+        __attribute__((unused)) void *unused) {
+    printdbg("%s saving backup module %p to %s\n", H(6), data, filename);
     gchar *buf;
     buf = g_key_file_to_data(data, NULL, NULL);
 
     FILE *file_fd;
-    if (NULL == (file_fd = fopen(filename, (char *) "w+")))
-    {
-        printerr(
-                "%s Failed to save module backup \"%s\": can't open file for writing\n",
-                H(0), filename);
+    if (NULL == (file_fd = fopen(filename, (char *) "w+"))) {
+        printdbg(
+                "%s Failed to save module backup \"%s\": can't open file for writing\n", H(0), filename);
         return FALSE;
     }
     fprintf(file_fd, "%s", buf);
@@ -186,48 +184,44 @@ int write_backup(const char *filename, GKeyFile *data, __attribute__((unused)) v
  * This array is updated after each module run
  */
 void save_backup_handler() {
-	int removed;
+    int removed;
 
-	gint64 sleep_cycle;
+    gint64 sleep_cycle;
 
-	while (threading == OK) {
-		g_mutex_lock(&threading_cond_lock);
-		sleep_cycle = g_get_monotonic_time() + 60 * G_TIME_SPAN_SECOND;
-		g_cond_wait_until(&threading_cond, &threading_cond_lock, sleep_cycle);
-		g_mutex_unlock(&threading_cond_lock);
+    while (threading == OK) {
+        g_mutex_lock(&threading_cond_lock);
+        sleep_cycle = g_get_monotonic_time() + 60 * G_TIME_SPAN_SECOND;
+        g_cond_wait_until(&threading_cond, &threading_cond_lock, sleep_cycle);
+        g_mutex_unlock(&threading_cond_lock);
 
-		if (module_to_save != NULL) {
-			removed = g_hash_table_foreach_steal(module_to_save,
-					(GHRFunc) write_backup, NULL);
+        if (module_to_save != NULL) {
+            removed = g_hash_table_foreach_steal(module_to_save,
+                    (GHRFunc) write_backup, NULL);
 
-			if (removed)
-				printerr(
-						"%s %d entries saved and removed from module_to_save\n",
-						H(0), removed);
-		}
-	}
+            if (removed)
+                printdbg(
+                        "%s %d entries saved and removed from module_to_save\n",
+                        H(0), removed);
+        }
+    }
 
-	g_thread_exit(0);
+    g_thread_exit(0);
 }
 
 /*! save_backup
  *  \brief This function adds a module backup memory to a queue in order to be written to a file later
  */
-int save_backup(GKeyFile *data, char *filename)
-{
-    printerr("%s called for %p (%s)\n", H(0), data, filename);
+int save_backup(GKeyFile *data, char *filename) {
+    printdbg("%s called for %p (%s)\n", H(0), data, filename);
     if (FALSE
             == g_hash_table_lookup_extended(module_to_save, filename, NULL,
-                    NULL))
-    {
-        printerr("%s adding a new entry in module_to_save\n", H(0));
+                    NULL)) {
+        printdbg("%s adding a new entry in module_to_save\n", H(0));
         g_hash_table_insert(module_to_save, filename, data);
         return 1;
-    }
-    else
-    {
+    } else {
         g_hash_table_replace(module_to_save, filename, data);
-        printerr("%s module_to_save already had this entry, updated\n", H(0));
+        printdbg("%s module_to_save already had this entry, updated\n", H(0));
         return 0;
     }
 }

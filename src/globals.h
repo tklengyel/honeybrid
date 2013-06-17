@@ -137,6 +137,11 @@ GMutex log_header_lock;
 char log_header_string[200];
 
 /*!
+ \Def enable/disable debug output
+ */
+gboolean debug;
+
+/*!
  \Def file descriptor to log debug output
  */
 int fdebug;

@@ -33,25 +33,25 @@
  \param[in] args, struct that contain the node and the data to process
  */
 mod_result_t mod_backpick_random(struct mod_args *args) {
-	printerr("%s Random backpick module called\n", H(args->pkt->conn->id));
-	int n_backends = 0;
-	mod_result_t result = DE_DEFER;
+    printdbg("%s Random backpick module called\n", H(args->pkt->conn->id));
+    int n_backends = 0;
+    mod_result_t result = DE_DEFER;
 
-	if ((n_backends = g_tree_nnodes(args->pkt->conn->target->back_handlers))
-			<= 0) {
-		printerr("%s No backends are defined for this target, rejecting\n",
-				H(args->pkt->conn->id));
-		result = REJECT;
-	} else {
+    if ((n_backends = g_tree_nnodes(args->pkt->conn->target->back_handlers))
+            <= 0) {
+        printdbg("%s No backends are defined for this target, rejecting\n",
+                H(args->pkt->conn->id));
+        result = REJECT;
+    } else {
 
-		uint32_t pick = rand() % n_backends + 1;
+        uint32_t pick = rand() % n_backends + 1;
 
-		printerr("%s Picking %d out of %d backends\n", H(args->pkt->conn->id),
-				pick, n_backends);
-		args->backend_use = pick;
-		result = ACCEPT;
-	}
+        printdbg("%s Picking %d out of %d backends\n", H(args->pkt->conn->id),
+                pick, n_backends);
+        args->backend_use = pick;
+        result = ACCEPT;
+    }
 
-	return result;
+    return result;
 }
 

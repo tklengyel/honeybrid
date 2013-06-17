@@ -30,7 +30,6 @@
  \author Robin Berthier 2009
  */
 
-
 #include "modules.h"
 
 /*! mod_random requires the configuration of the following mandatory parameter:
@@ -40,9 +39,8 @@
 /*! mod_random
  \param[in] args, struct that contain the node and the data to process
  */
-mod_result_t mod_random(struct mod_args *args)
-{
-    printerr("%s Module called\n", H(args->pkt->conn->id));
+mod_result_t mod_random(struct mod_args *args) {
+    printdbg("%s Module called\n", H(args->pkt->conn->id));
 
     unsigned int proba;
     uint32_t selector = 1;
@@ -50,39 +48,35 @@ mod_result_t mod_random(struct mod_args *args)
     mod_result_t result = DEFER;
 
     /*! getting the value provided as parameter */
-    if ((value = (const uint32_t *)g_hash_table_lookup(args->node->config, "value")) == NULL)
-    {
+    if ((value = (const uint32_t *) g_hash_table_lookup(args->node->config,
+            "value")) == NULL) {
         /*! We can't decide */
-        printerr("%s Incorrect value parameter: %d\n", H(args->pkt->conn->id),
-                *value);
+        printdbg(
+                "%s Incorrect value parameter: %d\n", H(args->pkt->conn->id), *value);
         return result;
     }
 
-    if (*value < selector)
-    {
+    if (*value < selector) {
         /*! We can't decide */
         result = REJECT;
-        printerr("%s Incorrect value parameter: %d\n", H(args->pkt->conn->id),
-                *value);
+        printdbg(
+                "%s Incorrect value parameter: %d\n", H(args->pkt->conn->id), *value);
         return result;
     }
 
     /*! deciding based on a probability of 1 out of "value": */
     proba = (int) (((double) *value) * (rand() / (RAND_MAX + 1.0)));
 
-    if (proba == selector)
-    {
+    if (proba == selector) {
         /*! We accept this packet */
         result = ACCEPT;
-        printerr("%s PACKET MATCH RULE for random(%d)\n",
-                H(args->pkt->conn->id), *value);
-    }
-    else
-    {
+        printdbg(
+                "%s PACKET MATCH RULE for random(%d)\n", H(args->pkt->conn->id), *value);
+    } else {
         /*! We reject this packet */
         result = REJECT;
-        printerr("%s PACKET DOES NOT MATCH RULE for random(%d)\n",
-                H(args->pkt->conn->id), *value);
+        printdbg(
+                "%s PACKET DOES NOT MATCH RULE for random(%d)\n", H(args->pkt->conn->id), *value);
     }
 
     return result;

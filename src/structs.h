@@ -31,9 +31,9 @@
  \brief structure to hold backend information (id, decision rule and interface information)
  */
 struct backend {
-	const uint32_t id;
-	struct node *rule;
-	struct interface *iface;
+    const uint32_t id;
+    struct node *rule;
+    struct interface *iface;
 };
 
 void free_backend(struct backend *);
@@ -43,15 +43,15 @@ void free_backend(struct backend *);
  \brief structure to hold target information: PCAP filter and rules to accept/forward/redirect/control packets
  */
 struct target {
-	struct bpf_program *filter; /* PCAP compiled filter to select packets for this target */
-	struct addr *front_handler; /* Honeypot IP address(es) handling the first response (front end) */
-	struct node *front_rule; /* Rules of decision modules to accept packet to be handled by the frontend */
-	GTree *back_handlers; /* Honeypot backends handling the second response with key: hihID, value: struct backend */
-	uint32_t back_handler_count; /* Number of backends defined in the GTree */
-	GHashTable *unique_backend_ips; /* Unique backend IPs of back_handlers */
-	struct node *back_picker; /* Rule(s) to pick which backend to use (such as VM name, etc.) */
-	struct node *control_rule; /* Rules of decision modules to limit outbound packets from honeypots */
-	uint32_t backends; /* Number of backends specified */
+    struct bpf_program *filter; /* PCAP compiled filter to select packets for this target */
+    struct addr *front_handler; /* Honeypot IP address(es) handling the first response (front end) */
+    struct node *front_rule; /* Rules of decision modules to accept packet to be handled by the frontend */
+    GTree *back_handlers; /* Honeypot backends handling the second response with key: hihID, value: struct backend */
+    uint32_t back_handler_count; /* Number of backends defined in the GTree */
+    GHashTable *unique_backend_ips; /* Unique backend IPs of back_handlers */
+    struct node *back_picker; /* Rule(s) to pick which backend to use (such as VM name, etc.) */
+    struct node *control_rule; /* Rules of decision modules to limit outbound packets from honeypots */
+    uint32_t backends; /* Number of backends specified */
 };
 
 void free_target(gpointer data);
@@ -62,9 +62,9 @@ void free_target_gfunc(struct target *, gpointer user_data);
  \brief memory structure to hold ethernet header (14 bytes)
  */
 struct ethernet_hdr {
-	u_char ether_dhost[ETHER_ADDR_LEN]; /* Destination host address */
-	u_char ether_shost[ETHER_ADDR_LEN]; /* Source host address */
-	u_short ether_type; /* IP? ARP? RARP? etc */
+    u_char ether_dhost[ETHER_ADDR_LEN]; /* Destination host address */
+    u_char ether_shost[ETHER_ADDR_LEN]; /* Source host address */
+    u_short ether_type; /* IP? ARP? RARP? etc */
 };
 
 /*!
@@ -77,20 +77,20 @@ struct ethernet_hdr {
  *
  */
 struct packet {
-	union {
-		const struct ether_header *eth;
-		const struct iphdr *ip;
-		const struct tcp_packet *tcppacket;
-		const struct udp_packet *udppacket;
-	};
-	union {
-		const struct tcphdr *tcp;
-		const struct udphdr *udp;
-	};
+    union {
+        const struct ether_header *eth;
+        const struct iphdr *ip;
+        const struct tcp_packet *tcppacket;
+        const struct udp_packet *udppacket;
+    };
+    union {
+        const struct tcphdr *tcp;
+        const struct udphdr *udp;
+    };
 
-	const char *payload;
+    const char *payload;
 
-	char *FRAME; // This holds all the packet data
+    char *FRAME; // This holds all the packet data
 };
 
 /*!
@@ -104,23 +104,23 @@ struct packet {
  *
  */
 struct tcp_packet {
-	struct iphdr ip;
-	struct tcphdr tcp;
-	char *payload;
+    struct iphdr ip;
+    struct tcphdr tcp;
+    char *payload;
 };
 
 struct pseudotcphdr {
-	uint32_t saddr;
-	uint32_t daddr;
-	uint8_t res1;
-	uint8_t proto;
-	uint16_t tcp_len;
+    uint32_t saddr;
+    uint32_t daddr;
+    uint8_t res1;
+    uint8_t proto;
+    uint16_t tcp_len;
 };
 
 struct tcp_chk_packet {
-	struct pseudotcphdr pseudohdr;
-	struct tcphdr tcp;
-	char payload[BUFSIZE];
+    struct pseudotcphdr pseudohdr;
+    struct tcphdr tcp;
+    char payload[BUFSIZE];
 };
 
 /*!
@@ -134,21 +134,21 @@ struct tcp_chk_packet {
  *
  */
 struct udp_packet {
-	struct iphdr ip;
-	struct udphdr udp;
-	char *payload;
+    struct iphdr ip;
+    struct udphdr udp;
+    char *payload;
 };
 
 /*! \brief Structure to hold network interface information
  */
 struct interface {
-	char *name; // like "eth0"
-	struct addr *ip;
-	char *ip_str;
-	char *tag; // like "main"
-	int tcp_socket;
-	int udp_socket;
-	int mark;
+    char *name; // like "eth0"
+    struct addr *ip;
+    char *ip_str;
+    char *tag; // like "main"
+    int tcp_socket;
+    int udp_socket;
+    int mark;
 };
 
 void free_interface(struct interface *iface);
@@ -160,14 +160,14 @@ void free_interface(struct interface *iface);
  \param port, port
  */
 struct hih_struct {
-	int hihID;
-	uint32_t addr;
-	struct interface *iface;
-	uint16_t port;
-	unsigned lih_syn_seq;
-	unsigned delta;
-	uint32_t lih_addr;
-	char *redirect_key;
+    int hihID;
+    uint32_t addr;
+    struct interface *iface;
+    uint16_t port;
+    unsigned lih_syn_seq;
+    unsigned delta;
+    uint32_t lih_addr;
+    char *redirect_key;
 };
 
 /*! expected_data_struct
@@ -179,11 +179,11 @@ struct hih_struct {
  \param payload, expected payload
  */
 struct expected_data_struct {
-	unsigned short ip_proto;
-	unsigned tcp_seq;
-	unsigned tcp_ack_seq;
-	int64_t tcp_ts;
-	const char* payload;
+    unsigned short ip_proto;
+    unsigned tcp_seq;
+    unsigned tcp_ack_seq;
+    int64_t tcp_ts;
+    const char* payload;
 };
 
 /*! custom_conn_data
@@ -194,9 +194,9 @@ struct expected_data_struct {
  \param data_print, function pointer to convert the data to a string
  */
 struct custom_conn_data {
-	gpointer data; // the actual data
-	gpointer (*data_free)(gpointer data); // define function to free data (if any)
-	const char* (*data_print)(gpointer data); // define function to print data in log (if any)
+    gpointer data; // the actual data
+    gpointer (*data_free)(gpointer data); // define function to free data (if any)
+    const char* (*data_print)(gpointer data); // define function to print data in log (if any)
 };
 
 /*! conn_struct
@@ -216,55 +216,55 @@ struct custom_conn_data {
  \param hih, hih info
  */
 struct conn_struct {
-	char *key;
-	char *key_ext;
-	char *key_lih;
-	uint8_t protocol;
-	GString *start_timestamp;
-	gdouble start_microtime;
-	gint access_time;
+    char *key;
+    char *key_ext;
+    char *key_lih;
+    uint8_t protocol;
+    GString *start_timestamp;
+    gdouble start_microtime;
+    gint access_time;
 
-	int64_t tcp_ts_diff;
-	gboolean tcp_fin_in;  // TRUE if a incoming side of the TCP connection has received a FIN flag
-					      // The connection can still send ACKs after it sent a FIN
-					      // but nothing else. Anything else is part of a new TCP connection.
-	gboolean tcp_fin_out; // TRUE if a outgoing side of the TCP connection has sent a FIN flag
+    int64_t tcp_ts_diff;
+    gboolean tcp_fin_in; // TRUE if a incoming side of the TCP connection has received a FIN flag
+                         // The connection can still send ACKs after it sent a FIN
+                         // but nothing else. Anything else is part of a new TCP connection.
+    gboolean tcp_fin_out; // TRUE if a outgoing side of the TCP connection has sent a FIN flag
 
-	conn_status_t state;
-	uint32_t id;
-	uint32_t replay_id;
-	uint32_t count_data_pkt_from_lih;
-	uint32_t count_data_pkt_from_intruder;
-	GSList *BUFFER;
-	struct expected_data_struct expected_data;
-	GRWLock lock;
-	struct hih_struct hih;
-	origin_t initiator; // who initiated the conn? EXT/LIH/HIH
+    conn_status_t state;
+    uint32_t id;
+    uint32_t replay_id;
+    uint32_t count_data_pkt_from_lih;
+    uint32_t count_data_pkt_from_intruder;
+    GSList *BUFFER;
+    struct expected_data_struct expected_data;
+    GRWLock lock;
+    struct hih_struct hih;
+    origin_t initiator; // who initiated the conn? EXT/LIH/HIH
 
-	struct target *target;
+    struct target *target;
 
-	/* statistics */
-	gdouble stat_time[__MAX_CONN_STATUS];
-	int stat_packet[__MAX_CONN_STATUS];
-	int stat_byte[__MAX_CONN_STATUS];
-	uint32_t total_packet;
-	uint32_t total_byte;
-	int decision_packet_id;
-	GString *decision_rule;
-	replay_problem_t replay_problem;
-	int invalid_problem; //unused
+    /* statistics */
+    gdouble stat_time[__MAX_CONN_STATUS ];
+    int stat_packet[__MAX_CONN_STATUS ];
+    int stat_byte[__MAX_CONN_STATUS ];
+    uint32_t total_packet;
+    uint32_t total_byte;
+    int decision_packet_id;
+    GString *decision_rule;
+    replay_problem_t replay_problem;
+    int invalid_problem; //unused
 
-	uint32_t uplink_mark; // adding support for multiple uplinks
-	uint32_t downlink_mark; // adding support for multiple backends on separate bridges
+    uint32_t uplink_mark; // adding support for multiple uplinks
+    uint32_t downlink_mark; // adding support for multiple backends on separate bridges
 
-	GSList *custom_data; // allow custom data to be assigned to the connection by modules
-						 // the list elements have to point to struct custom_conn_data
+    GSList *custom_data; // allow custom data to be assigned to the connection by modules
+                         // the list elements have to point to struct custom_conn_data
 
 #ifdef HAVE_XMPP
-	uint8_t dionaeaDownload;
-	unsigned int dionaeaDownloadTime;
+uint8_t dionaeaDownload;
+unsigned int dionaeaDownloadTime;
 #endif
-} __attribute__ ((packed));
+}__attribute__ ((packed));
 
 /*! pkt_struct
  \brief The meta information of a packet stored in the conn_struct connection structure
@@ -275,20 +275,20 @@ struct conn_struct {
  \param DE, (0) if the packet was received before the decision to redirect, (1) otherwise
  */
 struct pkt_struct {
-	struct packet packet;
-	origin_t origin;
-	int data;
-	int size;
-	int DE;
-	struct conn_struct * conn;
-	char *key_src;
-	char *key_dst;
-	char *key;
-	int position; // position in the connection queue
+    struct packet packet;
+    origin_t origin;
+    int data;
+    int size;
+    int DE;
+    struct conn_struct * conn;
+    char *key_src;
+    char *key_dst;
+    char *key;
+    int position; // position in the connection queue
 
-	gboolean last; // last packet to be pushed in the queue
-	uint32_t nfq_packet_id; // the nfq packet id of this packet
-	uint32_t mark; // ip mark (can be used for custom routing/tagging)
+    gboolean last; // last packet to be pushed in the queue
+    uint32_t nfq_packet_id; // the nfq packet id of this packet
+    uint32_t mark; // ip mark (can be used for custom routing/tagging)
 }__attribute__ ((packed));
 
 /*! \brief Structure to pass arguments to the Decision Engine
@@ -296,8 +296,8 @@ struct pkt_struct {
  \param packetposition, position of the packet to process in the Singly Linked List
  */
 struct DE_submit_args {
-	struct conn_struct *conn;
-	int packetposition;
+    struct conn_struct *conn;
+    int packetposition;
 };
 
 /*! \brief Structure to receive verdict from process_packet in nfq_cb
@@ -306,8 +306,8 @@ struct DE_submit_args {
  */
 
 struct verdict {
-	status_t statement;
-	u_int32_t mark;
+    status_t statement;
+    u_int32_t mark;
 };
 
 /*!
@@ -316,15 +316,15 @@ struct verdict {
  \brief arguments sent to a module while processing the tree
  */
 struct mod_args {
-	const struct node *node;
-	const struct pkt_struct *pkt;
-	const uint32_t backend_test;
-	uint32_t backend_use;
+    const struct node *node;
+    const struct pkt_struct *pkt;
+    const uint32_t backend_test;
+    uint32_t backend_use;
 };
 
 struct mod_def {
-	const char *name;
-	const module_function function;
+    const char *name;
+    const module_function function;
 };
 
 /*!
@@ -333,12 +333,12 @@ struct mod_def {
  \brief node of an execution tree, composed of a module and a argument, called by processing the tree
  */
 struct node {
-	module_function module;
-	GHashTable *config;
-	GString *module_name;
-	GString *function;
-	struct node *true_branch;
-	struct node *false_branch;
+    module_function module;
+    GHashTable *config;
+    GString *module_name;
+    GString *function;
+    struct node *true_branch;
+    struct node *false_branch;
 };
 
 /*!
@@ -347,19 +347,19 @@ struct node {
  \brief structure to hold decision input/output of the DE engine
  */
 struct decision_holder {
-	const struct pkt_struct *pkt;
-	struct node *node;
-	uint32_t backend_test;
-	uint32_t backend_use;
-	decision_t result;
+    const struct pkt_struct *pkt;
+    struct node *node;
+    uint32_t backend_test;
+    uint32_t backend_use;
+    decision_t result;
 };
 
 struct log_event {
-	char *sdata;
-	char *ddata;
-	int level;
-	unsigned id;
-	char *curtime;
+    char *sdata;
+    char *ddata;
+    int level;
+    unsigned id;
+    char *curtime;
 };
 
 #endif /* __STRUCTS_H_ */

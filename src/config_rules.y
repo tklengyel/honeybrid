@@ -262,10 +262,10 @@ target: TARGET OPEN rule END {
                 	yyerror("bad pcap filter");
 		}
 		*/
-		printerr("\tGoing to add new element to target array...\n");
+		printdbg("\tGoing to add new element to target array...\n");
 		$3->back_handler_count = g_tree_nnodes($3->back_handlers);
 		g_ptr_array_add(targets, $3);
-		printerr("\t...done\n");
+		printdbg("\t...done\n");
 		/*g_printerr("\tAdded a new target with the following values:\n\tfront_handler: %s\n\tfront_rule: %s\n\tback_handler: %s\n\tback_rule: %s\n\tcontrol: %s\n",
 				//addr_ntoa($3->front_handler), "-", //$3->front_rule->module_name->str,
 				//addr_ntoa($3->back_handler), "-"); //$3->back_rule->module_name->str);
@@ -277,7 +277,7 @@ target: TARGET OPEN rule END {
 	;
 
 rule: 	{
-		printerr("\tAllocating memory for new structure 'target'\n");
+		printdbg("\tAllocating memory for new structure 'target'\n");
 		$$ = (struct target *)g_malloc0(sizeof(struct target));
 		
 		// This tree holds the main backend structures

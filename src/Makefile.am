@@ -60,7 +60,7 @@ endif
 
 # Note that -pg is incompatible with HARDENING
 if DEBUG
-AM_CFLAGS += -Wall -Wextra -Wno-override-init -Wno-strict-aliasing -g -ggdb3 -DDEBUG
+AM_CFLAGS += -Wall -Wextra -Wno-override-init -Wno-strict-aliasing -g -ggdb3
 if !HARDENING
 AM_CFLAGS += -pg
 endif

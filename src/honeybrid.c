@@ -59,7 +59,7 @@
 /* \todo to include in programmer documentation:
  //What we should use to log messages:
  //For debugging:
- printerr("%smessage\n", H(30));
+ printdbg("%smessage\n", H(30));
 
  //For processing information:
  syslog(LOG_INFO,"message");
@@ -147,36 +147,37 @@ void usage(char **argv) {
  \param[in] siginfo: informations regarding to the signal
  \param[in] context: NULL */
 #ifdef HAVE_LIBEV
-static void term_signal_handler (struct ev_loop *loop, __attribute__((unused))     struct ev_signal *w,
+static void term_signal_handler(struct ev_loop *loop,
+        __attribute__((unused))      struct ev_signal *w,
         __attribute__ ((unused)) int revents) {
 
     running = NOK; /*! this will cause the queue loop to stop */
 
     ev_unloop(loop, EVUNLOOP_ALL);
 
-    printerr("%s Signal number:\t%d\n", H(0), w->signum);
+    printdbg("%s Signal number:\t%d\n", H(0), w->signum);
 
-    if(fdebug!=-1) g_printerr("\n");
+    if (fdebug != -1)
+        g_printerr("\n");
 
 }
 #else
 static void term_signal_handler(int signal_nb, siginfo_t * siginfo, __attribute__((unused)) void *unused) {
-        printerr("%s: Signal %d received, halting engine\n", __func__, signal_nb);
-        printerr("* Signal number:\t%d\n", siginfo->si_signo);
-        printerr("* Signal code:  \t%d\n", siginfo->si_code);
-        printerr("* Signal error: \t%d '%s'\n", siginfo->si_errno,
-                strerror(siginfo->si_errno));
-        printerr("* Sending pid:  \t%d\n", siginfo->si_pid);
-        printerr("* Sending uid:  \t%d\n", siginfo->si_uid);
-        printerr("* Fault address:\t%p\n", siginfo->si_addr);
-        printerr("* Exit value:   \t%d\n", siginfo->si_status);
+    printdbg("%s: Signal %d received, halting engine\n", __func__, signal_nb);
+    printdbg("* Signal number:\t%d\n", siginfo->si_signo);
+    printdbg("* Signal code:  \t%d\n", siginfo->si_code);
+    printdbg("* Signal error: \t%d '%s'\n", siginfo->si_errno,
+            strerror(siginfo->si_errno));
+    printdbg("* Sending pid:  \t%d\n", siginfo->si_pid);
+    printdbg("* Sending uid:  \t%d\n", siginfo->si_uid);
+    printdbg("* Fault address:\t%p\n", siginfo->si_addr);
+    printdbg("* Exit value:   \t%d\n", siginfo->si_status);
 
     /*! this will cause the queue loop to stop */
     running = NOK;
     g_printerr("\n");
 }
 #endif //HAVE_LIBEV
-
 /*! init_signal
  \brief installs signal handlers
  \return 0 if exit with success, anything else if not */
@@ -430,8 +431,7 @@ static int init_nfqueue(unsigned short int queuenum) {
 }
 
 static void close_nfqueue(unsigned short int queuenum) {
-    syslog(LOG_INFO, "NFQUEUE: unbinding from queue '%hd'\n",
-            queuenum);
+    syslog(LOG_INFO, "NFQUEUE: unbinding from queue '%hd'\n", queuenum);
     nfq_destroy_queue(qh);
     nfq_close(h);
 }
@@ -445,7 +445,7 @@ int close_thread() {
     struct pkt_struct pkt = { .last = TRUE };
     for (i = 0; i < decision_threads; i++) {
         g_async_queue_push(de_queues[i], &pkt);
-        printerr("%s: Waiting for de_thread %i to terminate\n", H(0), i);
+        printdbg("%s: Waiting for de_thread %i to terminate\n", H(0), i);
         g_thread_join(de_threads[i]);
         g_async_queue_unref(de_queues[i]);
     }
@@ -467,31 +467,31 @@ int close_hash() {
      */
 
     if (high_redirection_table != NULL) {
-        printerr("%s: Destroying table high_redirection_table\n", H(0));
+        printdbg("%s: Destroying table high_redirection_table\n", H(0));
         g_rw_lock_writer_lock(&hihredirlock);
         g_hash_table_destroy(high_redirection_table);
         high_redirection_table = NULL;
     }
 
     if (config != NULL) {
-        printerr("%s: Destroying table config\n", H(0));
+        printdbg("%s: Destroying table config\n", H(0));
         g_hash_table_destroy(config);
         config = NULL;
     }
 
     if (module != NULL) {
-        printerr("%s: Destroying table module\n", H(0));
+        printdbg("%s: Destroying table module\n", H(0));
         g_hash_table_destroy(module);
     }
 
     if (uplink != NULL) {
-        printerr("%s: Destroying table uplink\n", H(0));
+        printdbg("%s: Destroying table uplink\n", H(0));
         g_hash_table_destroy(uplink);
         uplink = NULL;
     }
 
     if (module_to_save != NULL) {
-        printerr("%s: Destroying table module_to_save\n", H(0));
+        printdbg("%s: Destroying table module_to_save\n", H(0));
         g_hash_table_destroy(module_to_save);
         module_to_save = NULL;
     }
@@ -503,7 +503,7 @@ int close_hash() {
  \brief Function to free memory taken by conn_tree */
 int close_conn_tree() {
 
-    printerr("%s: Destroying connection tree\n", H(0));
+    printdbg("%s: Destroying connection tree\n", H(0));
 
     /*! clean the memory
      * traverse the B-Tree to remove the singly linked lists and then destroy the B-Tree
@@ -530,7 +530,7 @@ int close_conn_tree() {
 /*! close_target
  \brief destroy global structure "targets" when the program has to quit */
 int close_target(void) {
-    printerr("%s: Destroying targets\n", H(0));
+    printdbg("%s: Destroying targets\n", H(0));
     g_ptr_array_foreach(targets, (GFunc) free_target_gfunc, NULL);
     g_ptr_array_free(targets, TRUE);
     return OK;
@@ -549,7 +549,7 @@ void close_all(void) {
 
     /*! delete lock file */
     if (unlink(pidfile) < 0)
-            g_printerr("%s: Error when removing lock file\n", H(0));
+        g_printerr("%s: Error when removing lock file\n", H(0));
 
     /*! close log file */
     if (OUTPUT_LOGFILES == ICONFIG_REQUIRED("output")) {
@@ -557,16 +557,16 @@ void close_all(void) {
     }
 
     /*! close debug log file */
-    if(fdebug!=-1) {
+    if (fdebug != -1) {
         close_debug_log();
     }
 
     /*! delete hashes */
     if (close_hash() < 0)
-        printerr("%s: Error when closing hashes\n", H(0));
+        printdbg("%s: Error when closing hashes\n", H(0));
 
     if (close_target() < 0)
-        printerr("%s: Error when closing targets\n", H(0));
+        printdbg("%s: Error when closing targets\n", H(0));
 
 }
 
@@ -595,8 +595,8 @@ process_packet(struct nfq_data *tb, uint32_t nfq_packet_id) {
     if ((((struct iphdr*) nf_packet)->protocol != IPPROTO_TCP)
             && (((struct iphdr*) nf_packet)->protocol != IPPROTO_UDP)) {
 
-        printerr("%s Incorrect protocol: %d, packet dropped\n", H(0),
-                (((struct iphdr*) nf_packet)->protocol));
+        printdbg(
+                "%s Incorrect protocol: %d, packet dropped\n", H(0), (((struct iphdr*) nf_packet)->protocol));
 
         goto done;
     }
@@ -605,17 +605,15 @@ process_packet(struct nfq_data *tb, uint32_t nfq_packet_id) {
 
     /*! Initialize the packet structure (into pkt) and find the origin of the packet */
     if (init_pkt(nf_packet, &pkt, mark, nfq_packet_id) == NOK) {
-        printerr("%s Packet structure couldn't be initialized\n", H(0));
+        printdbg("%s Packet structure couldn't be initialized\n", H(0));
 
         pkt = NULL;
         goto done;
 
     }
 
-    printerr("%s** NEW packet from %s %s, %d bytes. Mark %u, NFQID %u **\n",
-            H(0), inet_ntoa(in),
-            lookup_proto(((struct iphdr*) nf_packet)->protocol), size, mark,
-            nfq_packet_id);
+    printdbg(
+            "%s** NEW packet from %s %s, %d bytes. Mark %u, NFQID %u **\n", H(0), inet_ntoa(in), lookup_proto(((struct iphdr*) nf_packet)->protocol), size, mark, nfq_packet_id);
 
     done: return pkt;
 }
@@ -625,13 +623,13 @@ void de_thread(gpointer data) {
     uint32_t thread_id = GPOINTER_TO_UINT(data);
     struct pkt_struct *pkt = NULL;
 
-    printerr("%s: Decision engine thread %i started\n", H(0), thread_id);
+    printdbg("%s: Decision engine thread %i started\n", H(0), thread_id);
 
     while ((pkt = (struct pkt_struct *) g_async_queue_pop(de_queues[thread_id]))) {
 
         // Exit the thread
         if (pkt->last) {
-            printerr("%s Shutting down thread %u\n", H(1), thread_id);
+            printdbg("%s Shutting down thread %u\n", H(1), thread_id);
             return;
         }
 
@@ -643,23 +641,21 @@ void de_thread(gpointer data) {
         /*! Initialize the connection structure (into conn) and get the state of the connection */
         if (init_conn(pkt, &conn) == NOK) {
             conn = NULL;
-            printerr(
-                    "%s Connection structure couldn't be initialized, packet dropped\n",
-                    H(0));
+            printdbg(
+                    "%s Connection structure couldn't be initialized, packet dropped\n", H(0));
             free_pkt(pkt);
             goto done;
         }
 
-        printerr("%s Origin: %s %s, %i bytes\n", H(conn->id),
-                lookup_origin(pkt->origin), lookup_state(conn->state),
-                pkt->data);
+        printdbg(
+                "%s Origin: %s %s, %i bytes\n", H(conn->id), lookup_origin(pkt->origin), lookup_state(conn->state), pkt->data);
 
         /*! Check that there was no problem getting the current connection structure
          *  and make sure the STATE is valid */
         if (((conn->state < INIT) && (pkt->origin == EXT))
                 || (conn->state == INVALID)) {
 
-            printerr("%s Packet not from a valid connection\n", H(conn->id));
+            printdbg("%s Packet not from a valid connection\n", H(conn->id));
             if (pkt->packet.ip->protocol == IPPROTO_TCP && reset_ext == 1)
                 reply_reset(&(pkt->packet));
 
@@ -668,8 +664,7 @@ void de_thread(gpointer data) {
         }
 
         if (conn->state == DROP) {
-            printerr("%s This connection is marked as DROPPED\n",
-                    H(conn->id));
+            printdbg("%s This connection is marked as DROPPED\n", H(conn->id));
 
             if (pkt->packet.ip->protocol == IPPROTO_TCP && reset_ext == 1)
                 reply_reset(&(pkt->packet));
@@ -717,9 +712,8 @@ void de_thread(gpointer data) {
                         statement = OK;
                         break;
                     case PROXY:
-                        printerr(
-                                "%s Packet from LIH proxied directly to its destination\n",
-                                H(conn->id));
+                        printdbg(
+                                "%s Packet from LIH proxied directly to its destination\n", H(conn->id));
                         statement = OK;
                         free_pkt(pkt);
                         break;
@@ -739,9 +733,8 @@ void de_thread(gpointer data) {
                         }
                         break;
                     default:
-                        printerr(
-                                "%s Packet from LIH at wrong state => reset\n",
-                                H(conn->id));
+                        printdbg(
+                                "%s Packet from LIH at wrong state => reset\n", H(conn->id));
                         if (pkt->packet.ip->protocol == IPPROTO_TCP)
                             reply_reset(&(pkt->packet));
                         free_pkt(pkt);
@@ -768,9 +761,8 @@ void de_thread(gpointer data) {
                         break;
                         /*! This one should never occur because PROXY are only between EXT and LIH... but we never know! */
                     case PROXY:
-                        printerr(
-                                "%s Packet from HIH proxied directly to its destination\n",
-                                H(conn->id));
+                        printdbg(
+                                "%s Packet from HIH proxied directly to its destination\n", H(conn->id));
                         statement = OK;
                         free_pkt(pkt);
                         break;
@@ -781,9 +773,8 @@ void de_thread(gpointer data) {
                     default:
                         /*! We are surely in the INIT state, so the HIH is initiating a connection to outside. We reset or control it */
                         if (deny_hih_init == 1) {
-                            printerr(
-                                    "%s Packet from HIH at wrong state, so we reset\n",
-                                    H(conn->id));
+                            printdbg(
+                                    "%s Packet from HIH at wrong state, so we reset\n", H(conn->id));
                             if (pkt->packet.ip->protocol == IPPROTO_TCP) {
                                 reply_reset(&(pkt->packet));
                             }
@@ -791,9 +782,8 @@ void de_thread(gpointer data) {
                             switch_state(conn, DROP);
                             free_pkt(pkt);
                         } else {
-                            printerr(
-                                    "%s Packet from HIH in a new connection, so we control it\n",
-                                    H(conn->id));
+                            printdbg(
+                                    "%s Packet from HIH in a new connection, so we control it\n", H(conn->id));
                             switch_state(conn, CONTROL);
                             statement = DE_process_packet(pkt);
                             free_pkt(pkt);
@@ -830,16 +820,14 @@ void de_thread(gpointer data) {
                         free_pkt(pkt);
                         break;
                     case PROXY:
-                        printerr(
-                                "%s Packet from EXT proxied directly to its destination (PROXY)\n",
-                                H(conn->id));
+                        printdbg(
+                                "%s Packet from EXT proxied directly to its destination (PROXY)\n", H(conn->id));
                         statement = OK;
                         free_pkt(pkt);
                         break;
                     case CONTROL:
-                        printerr(
-                                "%s Packet from EXT proxied directly to its destination (CONTROL)\n",
-                                H(conn->id));
+                        printdbg(
+                                "%s Packet from EXT proxied directly to its destination (CONTROL)\n", H(conn->id));
                         statement = OK;
                         free_pkt(pkt);
                         break;
@@ -852,13 +840,12 @@ void de_thread(gpointer data) {
 
         done:
 
-        if(conn) {
+        if (conn) {
             g_rw_lock_writer_unlock(&conn->lock);
         }
 
         if (statement == OK) {
-            nfq_set_verdict2(qh, nfq_packet_id, NF_ACCEPT, mark, 0,
-                    NULL);
+            nfq_set_verdict2(qh, nfq_packet_id, NF_ACCEPT, mark, 0, NULL);
         } else {
             nfq_set_verdict(qh, nfq_packet_id, NF_DROP, 0, NULL);
         }
@@ -903,11 +890,11 @@ short int netlink_loop(unsigned short int queuenum) {
         memset(buf, 0, BUFSIZE);
         rv = recv(fd, buf, BUFSIZE, 0);
         if (rv < 0) {
-            printerr("%s Error %d: recv() returned %d '%s'\n", H(0), errno,
+            printdbg("%s Error %d: recv() returned %d '%s'\n", H(0), errno,
                     rv, strerror(errno));
             watchdog++;
             if (watchdog > 100) {
-                printerr(
+                printdbg(
                         "%s Error: too many consecutive failures, giving up\n",
                         H(0));
                 running = NOK;
@@ -926,7 +913,7 @@ short int netlink_loop(unsigned short int queuenum) {
 
 #else
 
-static void nfqueue_ev_cb(__attribute__((unused))      struct ev_loop *loop,
+static void nfqueue_ev_cb(__attribute__((unused))       struct ev_loop *loop,
         struct ev_io *w, __attribute__ ((unused)) int revents) {
     int rv;
     char buf[BUFSIZE];
@@ -958,6 +945,7 @@ int main(int argc, char *argv[]) {
     char *config_file_name = "";
     unsigned short int nfqueuenum = 0;
     gboolean daemonize = FALSE;
+    debug = FALSE;
 
     while ((argument = getopt(argc, argv, "sc:x:V:q:h:d?")) != -1) {
         switch (argument) {
@@ -1089,18 +1077,22 @@ int main(int argc, char *argv[]) {
     fclose(fp);
     chmod(pidfile, 0644);
 
-    /* Setting debug file */
-    if (output != OUTPUT_STDOUT) {
-        setlogmask(LOG_UPTO(LOG_INFO));
+    setlogmask(LOG_UPTO(LOG_INFO));
 
-        // Only redirect to debug log if we are not compiled _with_ debug
-#ifndef DEBUG
-        if (ICONFIG("debug") > 0) {
+    /* Setting debug file */
+    if (ICONFIG("debug") > 0) {
+
+        debug = TRUE;
+
+        if (CONFIG("debug_file")) {
             if ((fdebug = open_debug_log()) != -1) {
 
-                if(!daemonize) {
-                    g_printerr("Redirecting output to %s/%s.\n", CONFIG_REQUIRED("log_directory"), CONFIG_REQUIRED("debug_file"));
-                    g_printerr("You should start with -d to daemonize Honeybrid!\n");
+                if (!daemonize) {
+                    g_printerr("Redirecting output to %s/%s.\n",
+                            CONFIG_REQUIRED("log_directory"),
+                            CONFIG_REQUIRED("debug_file"));
+                    g_printerr(
+                            "You should start with -d to daemonize Honeybrid!\n");
                 }
 
                 (void) dup2(fdebug, STDIN_FILENO);
@@ -1114,7 +1106,6 @@ int main(int argc, char *argv[]) {
                 syslog(LOG_INFO, "file: %s", strerror(errno));
             }
         }
-#endif
     }
 
     if (output == OUTPUT_MYSQL) {
@@ -1130,11 +1121,10 @@ int main(int argc, char *argv[]) {
     }
 
     decision_threads = ICONFIG_REQUIRED("decision_threads");
-    printerr("%s Starting with %u decision threads.\n", H(0),
-            decision_threads);
+    printdbg("%s Starting with %u decision threads.\n", H(0), decision_threads);
 
-    de_threads = malloc(sizeof(GThread*)*decision_threads);
-    de_queues = malloc(sizeof(GAsyncQueue*)*decision_threads);
+    de_threads = malloc(sizeof(GThread*) * decision_threads);
+    de_queues = malloc(sizeof(GAsyncQueue*) * decision_threads);
 
     uint32_t i;
     for (i = 0; i < decision_threads; i++) {
@@ -1154,14 +1144,15 @@ int main(int argc, char *argv[]) {
     init_modules();
 
     /*! create the raw sockets for UDP/IP and TCP/IP */
-    if (NOK == init_raw_sockets())
+    if (NOK == init_raw_sockets()) {
         errx(1, "%s: failed to create the raw sockets", __func__);
+    }
 
     /*! create a thread for the management, cleaning stuffs and so on */
     if ((thread_clean = g_thread_new("cleaner", (void *) clean, NULL)) == NULL) {
-        errx(1, "%s Unable to start the cleaning thread", H(0));
+        errx(1, "%s Unable to start the cleaning thread", __func__);
     } else {
-        printerr("%s Cleaning thread started\n", H(0));
+        printdbg("%s Cleaning thread started\n", H(0));
     }
 
 #ifdef HAVE_LIBEV
@@ -1175,14 +1166,14 @@ int main(int argc, char *argv[]) {
     ev_io_init(&queue_watcher, nfqueue_ev_cb, my_nfq_fd, EV_READ);
     ev_io_start(loop, &queue_watcher);
 
-    printerr("%s Starting ev_loop\n", H(0));
+    printdbg("%s Starting ev_loop\n", H(0));
 
     ev_loop(loop, 0);
 
     close_nfqueue(nfqueuenum);
 #else
     /*! Starting the nfqueue loop to start processing packets */
-    printerr("%s Starting netlink_loop\n", H(0));
+    printdbg("%s Starting netlink_loop\n", H(0));
     netlink_loop(queuenum);
 #endif
 

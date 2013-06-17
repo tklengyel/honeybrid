@@ -108,8 +108,8 @@ void tcp_checksum(struct tcp_packet* pkt) {
     unsigned short len_tcp = TCPHDRDATA_SIZE;
 
     if (len_tcp - sizeof(struct tcphdr) >= BUFSIZE)
-        printerr(
-                "%s TCP data is greater then our buffer size! %lu > %i!\n", H(0), len_tcp - sizeof(struct tcphdr), BUFSIZE);
+        printdbg("%s TCP data is greater then our buffer size! %lu > %i!\n",
+                H(0), len_tcp - sizeof(struct tcphdr), BUFSIZE);
 
     chk_p.pseudohdr.saddr = pkt->ip.saddr;
     chk_p.pseudohdr.daddr = pkt->ip.daddr;
@@ -122,7 +122,7 @@ void tcp_checksum(struct tcp_packet* pkt) {
 
     pkt->tcp.check = in_cksum(&chk_p, sizeof(struct pseudotcphdr) + len_tcp);
 
-    printerr("%s TCP checksum set to 0x%x\n", H(21), pkt->tcp.check);
+    printdbg("%s TCP checksum set to 0x%x\n", H(21), pkt->tcp.check);
 }
 
 /*
@@ -191,8 +191,8 @@ static inline status_t get_tcp_timestamps(const struct tcphdr* th,
             if (tsecho)
                 *tsecho = ntohl(ptr[1]);
 
-            printerr(
-                    "%s TCP timestamps found. TSVal: %u TSEcho: %u \n", H(31), ntohl(ptr[0]), ntohl(ptr[1]));
+            printdbg("%s TCP timestamps found. TSVal: %u TSEcho: %u \n", H(31),
+                    ntohl(ptr[0]), ntohl(ptr[1]));
 
             return OK;
         }
@@ -222,8 +222,8 @@ static inline status_t get_tcp_timestamps(const struct tcphdr* th,
                     if (tsecho)
                         *tsecho = ntohl(ts[1]);
 
-                    printerr(
-                            "%s TCP timestamps found. TSVal: %u. TSEcho: %u\n", H(31), ntohl(ts[0]), ntohl(ts[1]));
+                    printdbg("%s TCP timestamps found. TSVal: %u. TSEcho: %u\n",
+                            H(31), ntohl(ts[0]), ntohl(ts[1]));
 
                     return OK;
                 }
@@ -298,7 +298,7 @@ static inline status_t fix_tcp_timestamps(struct tcphdr* th,
     if (conn->replay_problem & REPLAY_UNEXPECTED_TCP_TS) {
         strip_tcp_timestamps(th);
 
-        printerr("%s TCP timestamps stripped. This is detectable!\n", H(21));
+        printdbg("%s TCP timestamps stripped. This is detectable!\n", H(21));
 
         return OK;
     }
@@ -309,15 +309,16 @@ static inline status_t fix_tcp_timestamps(struct tcphdr* th,
             tcp_ts = (int) tcp_ts + (int) conn->tcp_ts_diff;
             set_tcp_timestamps(th, &tcp_ts, NULL);
 
-            printerr("%s Updated TCP timestamp to %u!\n", H(21), tcp_ts);
+            printdbg("%s Updated TCP timestamp to %u!\n", H(21), tcp_ts);
 
             return OK;
         }
     }
     if (conn->replay_problem & REPLAY_EXPECTED_TCP_TS) {
         //TODO
-        printerr(
-                "%s Was expecting TCP timestamps but didn't find them. This is detectable!\n", H(21));
+        printdbg(
+                "%s Was expecting TCP timestamps but didn't find them. This is detectable!\n",
+                H(21));
     }
 
     return NOK;
@@ -333,10 +334,10 @@ status_t send_raw(const struct iphdr *p, const struct interface *iface) {
 
 #ifdef DEBUG
     struct tcphdr *test = (struct tcphdr*) (((char *) p) + (p->ihl << 2));
-    printerr(
-            "%s sending packet in raw socket: %s:%d -> ", H(4), inet_ntoa(*(struct in_addr *) &p->saddr), ntohs(test->source));
-    printerr(
-            "%s:%d\n", inet_ntoa(*(struct in_addr *) &p->daddr), ntohs(test->dest));
+    printdbg("%s sending packet in raw socket: %s:%d -> ", H(4),
+            inet_ntoa(*(struct in_addr *) &p->saddr), ntohs(test->source));
+    printdbg("%s:%d\n", inet_ntoa(*(struct in_addr *) &p->daddr),
+            ntohs(test->dest));
 #endif
 
     struct sockaddr_in dst;
@@ -366,11 +367,13 @@ status_t send_raw(const struct iphdr *p, const struct interface *iface) {
             (__CONST_SOCKADDR_ARG) &dst, sizeof(struct sockaddr_in));
 
     if (bytes_sent < 0) {
-        printerr("%s Packet not sent\n", H(4));
+        printdbg("%s Packet not sent\n", H(4));
         return NOK;
     } else {
-        printerr(
-                "%s Packet of size %u sent on socket %i to %s, total of %u bytes\n", H(4), ntohs(p->tot_len), sockettouse, inet_ntoa(dst.sin_addr), bytes_sent);
+        printdbg(
+                "%s Packet of size %u sent on socket %i to %s, total of %u bytes\n",
+                H(4), ntohs(p->tot_len), sockettouse,
+                inet_ntoa(dst.sin_addr), bytes_sent);
         return OK;
     }
 }
@@ -389,7 +392,7 @@ status_t forward(struct pkt_struct* pkt) {
 
     /*!If packet from HIH, we forward it to EXT with LIH source*/
     if (pkt->origin == HIH) {
-        printerr("%s forwarding packet to EXT\n", H(pkt->conn->id));
+        printdbg("%s forwarding packet to EXT\n", H(pkt->conn->id));
         /*!We set LIH source IP*/
         fwd->saddr = pkt->conn->hih.lih_addr;
         /*!If TCP, we update the source port, the sequence number, and the checksum*/
@@ -419,8 +422,8 @@ status_t forward(struct pkt_struct* pkt) {
     /*!If packet from EXT, we forward it to HIH*/
     else if (pkt->origin == EXT) {
 
-        printerr(
-                "%s forwarding packet to HIH %u\n", H(pkt->conn->id), pkt->conn->hih.hihID);
+        printdbg("%s forwarding packet to HIH %u\n", H(pkt->conn->id),
+                pkt->conn->hih.hihID);
 
         fwd->daddr = pkt->conn->hih.addr;
 
@@ -513,7 +516,7 @@ status_t reset_lih(struct conn_struct* conn) {
     status_t res = NOK;
     struct packet *p = NULL;
     struct pkt_struct* tmp;
-    printerr("%s Reseting LIH\n", H(conn->id));
+    printdbg("%s Reseting LIH\n", H(conn->id));
 
     GSList * current = (GSList *) conn->BUFFER;
     do {
@@ -523,7 +526,7 @@ status_t reset_lih(struct conn_struct* conn) {
     } while ((current = g_slist_next(current)) != NULL);
 
     if (p == NULL || p->ip == NULL) {
-        printerr("%s no packet found from LIH\n", H(conn->id));
+        printdbg("%s no packet found from LIH\n", H(conn->id));
     } else {
         res = reply_reset(p);
     }
@@ -544,7 +547,7 @@ status_t replay(struct conn_struct* conn, struct pkt_struct* pkt) {
     int de = 0;
     struct pkt_struct* current = NULL;
 
-    printerr("%s Replay called\n", H(conn->id));
+    printdbg("%s Replay called\n", H(conn->id));
 
     if (pkt->origin != HIH)
         goto done;
@@ -556,12 +559,12 @@ status_t replay(struct conn_struct* conn, struct pkt_struct* pkt) {
      */
     if (test_expected(conn, pkt) == OK) {
 
-        printerr("%s Looping over BUFFER\n", H(conn->id));
+        printdbg("%s Looping over BUFFER\n", H(conn->id));
         current = (struct pkt_struct*) g_slist_nth_data(conn->BUFFER,
                 conn->replay_id);
         de = current->DE;
         while (current->origin == EXT || de == 1) {
-            printerr("%s --(Origin: %d)\n", H(conn->id), current->origin);
+            printdbg("%s --(Origin: %d)\n", H(conn->id), current->origin);
 
             if (current->origin == EXT)
                 forward(current);
@@ -583,7 +586,7 @@ status_t replay(struct conn_struct* conn, struct pkt_struct* pkt) {
                 de = current->DE;
             }
         }
-        printerr("%s Defining expected data\n", H(conn->id));
+        printdbg("%s Defining expected data\n", H(conn->id));
         /*!Then we define expected data according to that packet*/
         define_expected_data(current);
         //g_rw_lock_writer_lock( &conn->lock );
@@ -628,8 +631,8 @@ status_t test_expected(struct conn_struct* conn, struct pkt_struct* pkt) {
     status_t flag = OK;
 
     if (pkt->packet.ip->protocol != conn->expected_data.ip_proto) {
-        printerr(
-                "%s Unexpected protocol: %d\n", H(conn->id), pkt->packet.ip->protocol);
+        printdbg("%s Unexpected protocol: %d\n", H(conn->id),
+                pkt->packet.ip->protocol);
 
         conn->replay_problem |= REPLAY_UNEXPECTED_PROTOCOL;
 
@@ -641,8 +644,9 @@ status_t test_expected(struct conn_struct* conn, struct pkt_struct* pkt) {
         if (pkt->packet.tcp->syn == 0
                 && (ntohl(pkt->packet.tcp->seq) != conn->expected_data.tcp_seq)) {
 
-            printerr(
-                    "%s Unexpected TCP seq. number: %u. Expected: %u\n", H(conn->id), ntohl(pkt->packet.tcp->seq), conn->expected_data.tcp_seq);
+            printdbg("%s Unexpected TCP seq. number: %u. Expected: %u\n",
+                    H(conn->id), ntohl(pkt->packet.tcp->seq),
+                    conn->expected_data.tcp_seq);
 
             conn->replay_problem |= REPLAY_UNEXPECTED_TCP_SEQ;
 
@@ -653,7 +657,7 @@ status_t test_expected(struct conn_struct* conn, struct pkt_struct* pkt) {
         if (ntohl(pkt->packet.tcp->ack_seq)
                 != conn->expected_data.tcp_ack_seq) {
 
-            printerr("%s Unexpected TCP ack. number\n", H(conn->id));
+            printdbg("%s Unexpected TCP ack. number\n", H(conn->id));
 
             conn->replay_problem |= REPLAY_UNEXPECTED_TCP_ACK;
 
@@ -671,8 +675,8 @@ status_t test_expected(struct conn_struct* conn, struct pkt_struct* pkt) {
         }
 
         if (conn->expected_data.tcp_ts == -1 && tcp_ts != -1) {
-            printerr(
-                    "%s Unexpected TCP Timestamp (will be stripped)\n", H(conn->id));
+            printdbg("%s Unexpected TCP Timestamp (will be stripped)\n",
+                    H(conn->id));
 
             conn->replay_problem |= REPLAY_UNEXPECTED_TCP_TS;
 
@@ -682,12 +686,13 @@ status_t test_expected(struct conn_struct* conn, struct pkt_struct* pkt) {
             conn->tcp_ts_diff = conn->expected_data.tcp_ts - tcp_ts;
             conn->replay_problem |= REPLAY_TCP_TS_OUTOFSYNC;
 
-            printerr(
-                    "%s TCP Timestamp is smaller then expected (will be updated). Skew: %li.\n", H(conn->id), conn->tcp_ts_diff);
+            printdbg(
+                    "%s TCP Timestamp is smaller then expected (will be updated). Skew: %li.\n",
+                    H(conn->id), conn->tcp_ts_diff);
 
         } else if (conn->expected_data.tcp_ts > -1 && tcp_ts == -1) {
-            printerr(
-                    "%s TCP Timestamp was expected (should be added)\n", H(conn->id));
+            printdbg("%s TCP Timestamp was expected (should be added)\n",
+                    H(conn->id));
 
             conn->replay_problem |= REPLAY_EXPECTED_TCP_TS;
         }
@@ -695,12 +700,12 @@ status_t test_expected(struct conn_struct* conn, struct pkt_struct* pkt) {
 
     if (!strncmp(pkt->packet.payload, conn->expected_data.payload, pkt->data)
             == 0) {
-        printerr("%s Unexpected payload\n", H(conn->id));
+        printdbg("%s Unexpected payload\n", H(conn->id));
         conn->replay_problem = conn->replay_problem | REPLAY_UNEXPECTED_PAYLOAD;
     }
 
     if (flag == OK)
-        printerr("%s Expected data OK\n", H(conn->id));
+        printdbg("%s Expected data OK\n", H(conn->id));
 
     test_done: return flag;
 }
@@ -721,16 +726,16 @@ status_t init_raw_sockets() {
     setsockopt(tcp_rsd, IPPROTO_IP, IP_HDRINCL, &opt, sizeof(opt));
     setsockopt(udp_rsd, IPPROTO_IP, IP_HDRINCL, &opt, sizeof(opt));
 
-    printerr(
-            "%s Opening default sockets @ TCP:%u UDP:%u\n", H(0), tcp_rsd, udp_rsd);
+    printdbg("%s Opening default sockets @ TCP:%u UDP:%u\n", H(0), tcp_rsd,
+            udp_rsd);
 
     /* Configure multi-uplink sockets */
     int *mark = NULL;
     struct interface *iface = NULL;
     GHashTableIter i;
     ghashtable_foreach(uplink, &i, &mark, &iface) {
-        printerr(
-                "%s Opening sockets on interface %s (routing with mark %i)\n", H(0), iface->name, iface->mark);
+        printdbg("%s Opening sockets on interface %s (routing with mark %i)\n",
+                H(0), iface->name, iface->mark);
         iface->tcp_socket = socket(PF_INET, SOCK_RAW, IPPROTO_TCP);
         iface->udp_socket = socket(PF_INET, SOCK_RAW, IPPROTO_UDP);
 
@@ -741,21 +746,21 @@ status_t init_raw_sockets() {
 
         if (setsockopt(iface->tcp_socket, SOL_SOCKET, SO_BINDTODEVICE,
                 iface->name, strlen(iface->name)) == 0) {
-            printerr(
-                    "%s TCP socket binding on %s with ID %i successfull\n", H(0), iface->name, iface->tcp_socket);
+            printdbg("%s TCP socket binding on %s with ID %i successfull\n",
+                    H(0), iface->name, iface->tcp_socket);
         } else {
-            printerr(
-                    "%s TCP socket binding failed on %s with ID %i\n", H(0), iface->name, iface->tcp_socket);
+            printdbg("%s TCP socket binding failed on %s with ID %i\n", H(0),
+                    iface->name, iface->tcp_socket);
             return NOK;
         }
 
         if (setsockopt(iface->udp_socket, SOL_SOCKET, SO_BINDTODEVICE,
                 iface->name, strlen(iface->name)) == 0) {
-            printerr(
-                    "%s UDP socket binding on %s with ID %i successfull\n", H(0), iface->name, iface->udp_socket);
+            printdbg("%s UDP socket binding on %s with ID %i successfull\n",
+                    H(0), iface->name, iface->udp_socket);
         } else {
-            printerr(
-                    "%s UDP socket binding failed on %s with ID %i\n", H(0), iface->name, iface->udp_socket);
+            printdbg("%s UDP socket binding failed on %s with ID %i\n", H(0),
+                    iface->name, iface->udp_socket);
             return NOK;
         }
     }
@@ -777,7 +782,7 @@ void init_raw_sockets_backends(gpointer target, gpointer opt) {
 }
 
 /* Loop through each backend interface*/
-gboolean init_raw_sockets_backends2(__attribute__((unused))  gpointer unused,
+gboolean init_raw_sockets_backends2(__attribute__((unused))    gpointer unused,
         gpointer value, gpointer opt) {
 
     struct backend *back_handler = (struct backend *) value;
@@ -786,7 +791,7 @@ gboolean init_raw_sockets_backends2(__attribute__((unused))  gpointer unused,
     if (!iface->name)
         return FALSE;
 
-    printerr("%s Opening backend sockets on interface %s\n", H(0), iface->name);
+    printdbg("%s Opening backend sockets on interface %s\n", H(0), iface->name);
     iface->tcp_socket = socket(PF_INET, SOCK_RAW, IPPROTO_TCP);
     iface->udp_socket = socket(PF_INET, SOCK_RAW, IPPROTO_UDP);
 
@@ -797,20 +802,20 @@ gboolean init_raw_sockets_backends2(__attribute__((unused))  gpointer unused,
 
     if (setsockopt(iface->tcp_socket, SOL_SOCKET, SO_BINDTODEVICE, iface->name,
             strlen(iface->name)) == 0) {
-        printerr(
-                "%s TCP socket binding on %s with ID %i successfull\n", H(0), iface->name, iface->tcp_socket);
+        printdbg("%s TCP socket binding on %s with ID %i successfull\n", H(0),
+                iface->name, iface->tcp_socket);
     } else {
-        printerr(
-                "%s TCP socket binding failed on %s with ID %i\n", H(0), iface->name, iface->tcp_socket);
+        printdbg("%s TCP socket binding failed on %s with ID %i\n", H(0),
+                iface->name, iface->tcp_socket);
     }
 
     if (setsockopt(iface->udp_socket, SOL_SOCKET, SO_BINDTODEVICE, iface->name,
             strlen(iface->name)) == 0) {
-        printerr(
-                "%s UDP socket binding on %s with ID %i successfull\n", H(0), iface->name, iface->udp_socket);
+        printdbg("%s UDP socket binding on %s with ID %i successfull\n", H(0),
+                iface->name, iface->udp_socket);
     } else {
-        printerr(
-                "%s UDP socket binding failed on %s with ID %i\n", H(0), iface->name, iface->udp_socket);
+        printdbg("%s UDP socket binding failed on %s with ID %i\n", H(0),
+                iface->name, iface->udp_socket);
     }
 
     return FALSE;

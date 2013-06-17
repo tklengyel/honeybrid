@@ -32,19 +32,12 @@
 	if (0 != honeylog(sdata,ddata,level,id)) \
 	{g_printerr("******LOG ENGINE ERROR******\n");}
 
-#ifdef DEBUG
-#define printerr(...)  \
-        g_mutex_lock(&log_header_lock); \
-        g_printerr (__VA_ARGS__); \
-        g_mutex_unlock(&log_header_lock);
-#else
-#define printerr(...) \
-    if(fdebug!=-1) { \
+#define printdbg(...) \
+    if(debug) { \
     	g_mutex_lock(&log_header_lock); \
     	g_printerr (__VA_ARGS__); \
     	g_mutex_unlock(&log_header_lock); \
     }
-#endif
 
 // Should only be used with printerr()
 #define H(id) log_header(__func__, id)
@@ -58,9 +51,9 @@ static inline const char* log_header(const char* function_name, int id) {
         perror("localtime");
         return '\0';
     }
-    snprintf(log_header_string, 200, "%d-%02d-%02d %02d:%02d:%02d.%.6d;%6u;%s:\t",
-            (1900 + tm->tm_year), (1 + tm->tm_mon), tm->tm_mday,
-            tm->tm_hour, tm->tm_min, tm->tm_sec,
+    snprintf(log_header_string, 200,
+            "%d-%02d-%02d %02d:%02d:%02d.%.6d;%6u;%s:\t", (1900 + tm->tm_year),
+            (1 + tm->tm_mon), tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec,
             (int) tv.tv_usec, id, function_name);
     return log_header_string;
 }
@@ -82,15 +75,15 @@ void rotate_connection_log(int signal_nb);
 void connection_log();
 
 status_t log_mysql(const struct conn_struct *conn, const GString *proto,
-		const GString *status, GString **status_info, gdouble duration);
+        const GString *status, GString **status_info, gdouble duration);
 
 status_t log_csv(const struct conn_struct *conn, const GString *proto,
-		const GString *status, GString **status_info, gdouble duration,
-		output_t output);
+        const GString *status, GString **status_info, gdouble duration,
+        output_t output);
 
 status_t log_std(const struct conn_struct *conn, const GString *proto,
-		const GString *status, GString **status_info, gdouble duration,
-		output_t output);
+        const GString *status, GString **status_info, gdouble duration,
+        output_t output);
 
 status_t init_mysql_log();
 

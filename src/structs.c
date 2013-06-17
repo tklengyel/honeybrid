@@ -34,29 +34,29 @@
  */
 
 void free_interface(struct interface *iface) {
-	if (iface) {
-		g_free(iface->ip);
-		g_free(iface->ip_str);
-		g_free(iface->name);
-		g_free(iface->tag);
-		g_free(iface);
-	}
+    if (iface) {
+        g_free(iface->ip);
+        g_free(iface->ip_str);
+        g_free(iface->name);
+        g_free(iface->tag);
+        g_free(iface);
+    }
 }
 
 void free_backend(struct backend *backend) {
-	if (backend) {
-		DE_destroy_tree(backend->rule);
-		free_interface(backend->iface);
-		g_free(backend);
-	}
+    if (backend) {
+        DE_destroy_tree(backend->rule);
+        free_interface(backend->iface);
+        g_free(backend);
+    }
 }
 
-void free_target_gfunc(struct target *t, __attribute__((unused)) gpointer unused) {
-	g_free(t->filter);
-	g_free(t->front_handler);
-	g_tree_destroy(t->back_handlers);
-	g_hash_table_destroy(t->unique_backend_ips);
-	DE_destroy_tree(t->front_rule);
-	DE_destroy_tree(t->control_rule);
-	g_free(t);
+void free_target_gfunc(struct target *t, __attribute__((unused))  gpointer unused) {
+    g_free(t->filter);
+    g_free(t->front_handler);
+    g_tree_destroy(t->back_handlers);
+    g_hash_table_destroy(t->unique_backend_ips);
+    DE_destroy_tree(t->front_rule);
+    DE_destroy_tree(t->control_rule);
+    g_free(t);
 }

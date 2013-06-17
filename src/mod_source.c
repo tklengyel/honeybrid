@@ -42,95 +42,95 @@
  \param[out] set result to 0 if attacker ip is found in search table, 1 if not
  */
 mod_result_t mod_source(struct mod_args *args) {
-	printerr("%s Module called\n", H(args->pkt->conn->id));
+    printdbg("%s Module called\n", H(args->pkt->conn->id));
 
-	mod_result_t result = DEFER;
-	int expiration = 24 * 3600;
-	gchar *backup_file;
-	gchar **key_src;
-	gchar **info;
-	GKeyFile *backup;
+    mod_result_t result = DEFER;
+    int expiration = 24 * 3600;
+    gchar *backup_file;
+    gchar **key_src;
+    gchar **info;
+    GKeyFile *backup;
 
-	GTimeVal t;
-	g_get_current_time(&t);
-	gint now = (t.tv_sec);
+    GTimeVal t;
+    g_get_current_time(&t);
+    gint now = (t.tv_sec);
 
-	/*! get the IP address from the packet */
-	key_src = g_strsplit(args->pkt->key_src, ":", 0);
+    /*! get the IP address from the packet */
+    key_src = g_strsplit(args->pkt->key_src, ":", 0);
 
-	printerr("%s source IP is %s\n", H(args->pkt->conn->id), key_src[0]);
+    printdbg("%s source IP is %s\n", H(args->pkt->conn->id), key_src[0]);
 
-	/*! get the backup file for this module */
-	if (NULL
-			== (backup = (GKeyFile *) g_hash_table_lookup(args->node->config,
-					"backup"))) {
-		/*! We can't decide */
-		printerr("%s mandatory argument 'backup' undefined!\n",
-				H(args->pkt->conn->id));
-		return result;
-	}
-	/*! get the backup file path for this module */
-	if (NULL
-			== (backup_file = (gchar *) g_hash_table_lookup(args->node->config,
-					"backup_file"))) {
-		/*! We can't decide */
-		printerr("%s error, backup file path missing\n",
-				H(args->pkt->conn->id));
-		return result;
-	}
+    /*! get the backup file for this module */
+    if (NULL
+            == (backup = (GKeyFile *) g_hash_table_lookup(args->node->config,
+                    "backup"))) {
+        /*! We can't decide */
+        printdbg("%s mandatory argument 'backup' undefined!\n",
+                H(args->pkt->conn->id));
+        return result;
+    }
+    /*! get the backup file path for this module */
+    if (NULL
+            == (backup_file = (gchar *) g_hash_table_lookup(args->node->config,
+                    "backup_file"))) {
+        /*! We can't decide */
+        printdbg("%s error, backup file path missing\n",
+                H(args->pkt->conn->id));
+        return result;
+    }
 
-	printerr("%s searching for this IP in the database...\n",
-			H(args->pkt->conn->id));
+    printdbg("%s searching for this IP in the database...\n",
+            H(args->pkt->conn->id));
 
-	if (NULL == (info = g_key_file_get_string_list(backup, "source", /* generic group name \todo: group by port number? */
-	key_src[0], NULL, NULL))) {
-		/*! Unknown IP, so we accept the packet */
-		result = ACCEPT;
-		printerr("%s IP not found... packet accepted and new entry created\n",
-				H(args->pkt->conn->id));
+    if (NULL == (info = g_key_file_get_string_list(backup, "source", /* generic group name \todo: group by port number? */
+    key_src[0], NULL, NULL))) {
+        /*! Unknown IP, so we accept the packet */
+        result = ACCEPT;
+        printdbg("%s IP not found... packet accepted and new entry created\n",
+                H(args->pkt->conn->id));
 
-		info = malloc(3 * sizeof(char *));
+        info = malloc(3 * sizeof(char *));
 
-		/*! 20 characters should be enough to hold even very large numbers */
-		info[0] = malloc(20 * sizeof(gchar));
-		info[1] = malloc(20 * sizeof(gchar));
-		info[2] = malloc(20 * sizeof(gchar));
-		g_snprintf(info[0], 20, "1"); /*! counter */
-		g_snprintf(info[1], 20, "%d", now); /*! first seen */
-		g_snprintf(info[2], 20, "0"); /*! duration */
+        /*! 20 characters should be enough to hold even very large numbers */
+        info[0] = malloc(20 * sizeof(gchar));
+        info[1] = malloc(20 * sizeof(gchar));
+        info[2] = malloc(20 * sizeof(gchar));
+        g_snprintf(info[0], 20, "1"); /*! counter */
+        g_snprintf(info[1], 20, "%d", now); /*! first seen */
+        g_snprintf(info[2], 20, "0"); /*! duration */
 
-	} else {
-		/*! We check if we need to expire this entry */
-		int age = atoi(info[2]);
-		if (age > expiration) {
-			/*! Known IP but entry expired, so we accept the packet */
-			result = ACCEPT;
-			printerr(
-					"%s IP found but expired... packet accepted and entry renewed\n",
-					H(args->pkt->conn->id));
+    } else {
+        /*! We check if we need to expire this entry */
+        int age = atoi(info[2]);
+        if (age > expiration) {
+            /*! Known IP but entry expired, so we accept the packet */
+            result = ACCEPT;
+            printdbg(
+                    "%s IP found but expired... packet accepted and entry renewed\n",
+                    H(args->pkt->conn->id));
 
-			g_snprintf(info[0], 20, "1"); /*! counter */
-			g_snprintf(info[1], 20, "%d", now); /*! first seen */
-			g_snprintf(info[2], 20, "0"); /*! duration */
-		} else {
-			/*! Known IP, so we reject the packet */
-			result = REJECT;
-			printerr("%s IP found... packet rejected and entry updated\n",
-					H(args->pkt->conn->id));
+            g_snprintf(info[0], 20, "1"); /*! counter */
+            g_snprintf(info[1], 20, "%d", now); /*! first seen */
+            g_snprintf(info[2], 20, "0"); /*! duration */
+        } else {
+            /*! Known IP, so we reject the packet */
+            result = REJECT;
+            printdbg("%s IP found... packet rejected and entry updated\n",
+                    H(args->pkt->conn->id));
 
-			g_snprintf(info[0], 20, "%d", atoi(info[0]) + 1); /*! counter */
-			g_snprintf(info[2], 20, "%d", now - atoi(info[1])); /*! duration */
-		}
+            g_snprintf(info[0], 20, "%d", atoi(info[0]) + 1); /*! counter */
+            g_snprintf(info[2], 20, "%d", now - atoi(info[1])); /*! duration */
+        }
 
-	}
+    }
 
-	g_key_file_set_string_list(backup, "source", key_src[0],
-			(const gchar * const *) info, 3);
+    g_key_file_set_string_list(backup, "source", key_src[0],
+            (const gchar * const *) info, 3);
 
-	save_backup(backup, backup_file);
+    save_backup(backup, backup_file);
 
-	/*! clean and exit */
-	//g_strfreev(key_src);
-	return result;
+    /*! clean and exit */
+    //g_strfreev(key_src);
+    return result;
 }
 
