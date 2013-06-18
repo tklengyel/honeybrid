@@ -31,8 +31,8 @@ gpointer config_lookup(const char * parameter, gboolean required);
 gint intcmp(gconstpointer a, gconstpointer b, gconstpointer c);
 
 #define ghashtable_foreach(table, i, key, val) \
-        g_hash_table_iter_init(i, table); \
-        while(g_hash_table_iter_next(i,(void**)key,(void**)val))
+        g_hash_table_iter_init(&i, table); \
+        while(g_hash_table_iter_next(&i,(void**)&key,(void**)&val))
 
 #define CONFIG(parameter) \
 	(const char *)(config_lookup(parameter, FALSE))

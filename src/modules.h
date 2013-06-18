@@ -29,6 +29,7 @@
 #include "log.h"
 #include "globals.h"
 #include "structs.h"
+#include "convenience.h"
 
 void init_modules();
 

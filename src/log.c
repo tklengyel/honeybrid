@@ -56,6 +56,40 @@ unsigned long last_rotation;
 
 FILE *logfd;
 
+/*! log_header
+ *
+ *\brief return a header for debug log messages, including
+ * the timestamp and the name of the function
+ */
+const char*
+log_header(const char* function_name, int id) {
+    static char log_header[200];
+    snprintf(log_header, 200, "%s;%6u;%s:\t", now(), id, function_name);
+    return log_header;
+}
+
+/*! now
+ *
+ *\brief return the current timestamp as a string
+ */
+const char*
+now(void) {
+    static char now[30];
+    struct tm *tm;
+    struct timeval tv;
+    struct timezone tz;
+    gettimeofday(&tv, &tz);
+    tm = localtime(&tv.tv_sec);
+    if (tm == NULL) {
+        perror("localtime");
+        return '\0';
+    }
+    snprintf(now, 30, "%d-%02d-%02d %02d:%02d:%02d.%.6d", (1900 + tm->tm_year),
+            (1 + tm->tm_mon), tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec,
+            (int) tv.tv_usec);
+    return now;
+}
+
 /*! honeylog
  *
  \brief add a log entry in the singly linked list
@@ -408,7 +442,7 @@ status_t log_csv(const struct conn_struct *conn, const GString *proto,
 #else
             "%s,%.3f,%d,%s,%s,%s,%s,%s,%d,%d,%s,%d,%s,%s,%s,%s,%s,%s\n",
 #endif
-            conn->start_timestamp->str, duration, conn->uplink_mark, proto->str,
+            conn->start_timestamp->str, duration, conn->uplink_vlan, proto->str,
             tuple[0], tuple[1], tuple[2], tuple[3], conn->total_packet,
             conn->total_byte, status->str, conn->id,
             //status_info[INVALID]->str,
@@ -431,7 +465,7 @@ status_t log_csv(const struct conn_struct *conn, const GString *proto,
 #else
             "%s,%.3f,%d,%s,%s,%s,%s,%s,%d,%d,%s,%d,%s,%s,%s,%s,%s,%s\n",
 #endif
-            conn->start_timestamp->str, duration, conn->uplink_mark, proto->str,
+            conn->start_timestamp->str, duration, conn->uplink_vlan, proto->str,
             tuple[0], tuple[1], tuple[2], tuple[3], conn->total_packet,
             conn->total_byte, status->str, conn->id,
             //status_info[INVALID]->str,
@@ -471,7 +505,7 @@ status_t log_std(const struct conn_struct *conn, const GString *proto,
 #else
                     "%s %.3f %d %s %s:%s -> %s:%s %d %d %s ** %d %s %s %s %s %s [%s]\n",
 #endif
-                    conn->start_timestamp->str, duration, conn->uplink_mark,
+                    conn->start_timestamp->str, duration, conn->uplink_vlan,
                     proto->str, tuple[0], tuple[1], tuple[2], tuple[3],
                     conn->total_packet, conn->total_byte, status->str, conn->id,
                     //status_info[INVALID]->str,
@@ -495,7 +529,7 @@ status_t log_std(const struct conn_struct *conn, const GString *proto,
 #else
             "%s %.3f %d %s %s:%s -> %s:%s %d %d %s ** %d %s %s %s %s %s [%s]\n",
 #endif
-            conn->start_timestamp->str, duration, conn->uplink_mark, proto->str,
+            conn->start_timestamp->str, duration, conn->uplink_vlan, proto->str,
             tuple[0], tuple[1], tuple[2], tuple[3], conn->total_packet,
             conn->total_byte, status->str, conn->id,
             //status_info[INVALID]->str,
@@ -579,7 +613,7 @@ status_t log_mysql(const struct conn_struct *conn, const GString *proto,
 #ifdef HAVE_XMPP
                 ",%i,%i"
 #endif
-                ");", conn->start_microtime, duration, (int) conn->uplink_mark,
+                ");", conn->start_microtime, duration, (int) conn->uplink_vlan,
                 proto->str, tuple[0], tuple[1], tuple[2], tuple[3],
                 conn->total_packet, conn->total_byte, status->str, conn->id,
                 status_info[INIT]->str, status_info[DECISION]->str,
@@ -605,7 +639,7 @@ status_t log_mysql(const struct conn_struct *conn, const GString *proto,
 #ifdef HAVE_XMPP
                 ",%i,%i"
 #endif
-                ");", conn->start_microtime, duration, (int) conn->uplink_mark,
+                ");", conn->start_microtime, duration, (int) conn->uplink_vlan,
                 proto->str, tuple[0], tuple[1], tuple[2], tuple[3],
                 conn->total_packet, conn->total_byte, status->str, conn->id,
                 status_info[INIT]->str, status_info[DECISION]->str,

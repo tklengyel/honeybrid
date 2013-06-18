@@ -91,7 +91,7 @@ gboolean build_vmi_vms2(gpointer key, gpointer value,
         __attribute__((unused))  gpointer unused) {
 
     //int *vmi_sock=(int *)data;
-    struct backend *back_handler = (struct backend *) value;
+    struct handler *back_handler = (struct handler *) value;
     char *vm_name = back_handler->iface->tag;
     char vmi_buffer[100];
     bzero(vmi_buffer, 100);
@@ -500,7 +500,7 @@ printf            ("%s Attack session found on clone %s!\n", H(67), vm->name);
 
 mod_result_t mod_vmi_control(struct mod_args *args) {
     // Only control packets coming from the clones
-    if (args->pkt->mark == 0) {
+    if (args->pkt->vlan == 0) {
         return ACCEPT;
     }
 
@@ -519,7 +519,7 @@ mod_result_t mod_vmi_control(struct mod_args *args) {
     search.event = 0;
     search.outIP = key_dst[0];
     search.attacker = NULL;
-    search.mark = args->pkt->mark;
+    search.mark = args->pkt->vlan;
     search.vm = NULL;
 
     g_tree_foreach(vmi_vms, (GTraverseFunc) control_check_attacker,
@@ -641,7 +641,7 @@ void vm_status_updater_thread() {
                         GSList *r = vm->conn_keys;
                         struct conn_struct *conn;
                         if (r != NULL) {
-                            g_rw_lock_writer_lock(&conntreelock);
+                            g_rw_lock_writer_lock(&connlock);
                             while (r != NULL) {
                                 conn = (struct conn_struct *) g_tree_lookup(
                                         conn_tree, r->data);
@@ -650,7 +650,7 @@ void vm_status_updater_thread() {
                                 free((char *) r->data);
                                 r = r->next;
                             }
-                            g_rw_lock_writer_unlock(&conntreelock);
+                            g_rw_lock_writer_unlock(&connlock);
                         }
                         g_slist_free(vm->conn_keys);
 
@@ -724,7 +724,13 @@ int init_mod_vmi() {
 
     vmi_vms = g_tree_new_full((GCompareDataFunc) strcmp, NULL, NULL,
             (GDestroyNotify) free_vmi_vm);
-    g_ptr_array_foreach(targets, (GFunc) build_vmi_vms, (gpointer) &vmi_sock);
+
+    GHashTableIter i;
+    char *key;
+    struct target *target;
+    ghashtable_foreach(targets, i, key, target) {
+        g_tree_foreach(target->back_handlers, (GTraverseFunc) build_vmi_vms, NULL);
+    }
 
     bannedIPs = g_tree_new_full((GCompareDataFunc) strcmp, NULL,
             (GDestroyNotify) g_free, NULL);

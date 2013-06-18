@@ -59,7 +59,7 @@ int deny_hih_init;
 int reset_ext;
 
 /*! \brief global array of pointers to hold target structures */
-GPtrArray *targets;
+GHashTable *targets;
 
 /*! \brief global hash table that contain the values of the configuration file  */
 GHashTable *config;
@@ -68,7 +68,9 @@ GHashTable *config;
 GHashTable *module;
 
 /*! \brief global hash table to hold module paramaters */
-GHashTable *uplink;
+GHashTable *links;
+
+uint32_t link_count;
 
 /*! \brief global hash table that contain the dynamic correspondance between HIH services et LIH services  */
 GHashTable *high_redirection_table;
@@ -79,13 +81,19 @@ GRWLock hihredirlock;
 
 /*! \brief Balanced Binary Tree that keep meta informations about active connections
  *
+ \param key, each entry is represented by the tuple of the connection (sourceIP+destIP)
+ \param value, the associated value of an entry is a related_conn structure  */
+GTree *conn_tree;
+
+/*! \brief Balanced Binary Tree that keep meta informations about active connections (flows)
+ *
  \param key, each entry is represented by the tuple of the connection (sourceIP+sourcePort+destIP+destPort)
  \param value, the associated value of an entry is a conn_struct structure  */
-GTree *conn_tree;
+GTree *flow_tree;
 
 /*! \brief security writing lock for the Binary Tree
  */
-GRWLock conntreelock;
+GRWLock connlock;
 
 /*! \def list of module to save
  */

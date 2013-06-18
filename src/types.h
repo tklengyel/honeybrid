@@ -58,6 +58,12 @@
  */
 #define BUFSIZE 2048
 
+#define MIN_PACKET_SIZE 42 // Ethernet(14) + IPv4(20) + UDP(8)
+
+#define MIN_UDP_SIZE MIN_PACKET_SIZE
+
+#define MIN_TCP_SIZE 54 // Ethernet(14) + IPv4(20) + TCP(20)
+
 /*! \brief constants to define the origin of a packet
  */
 typedef enum {

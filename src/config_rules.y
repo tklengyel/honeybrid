@@ -44,7 +44,7 @@ char* int_append(char * root, int num);
 %token OPEN END SEMICOLON QUOTE DOT
 
 /* Honeybrid configuration keywords */
-%token MODULE FILTER FRONTEND BACKEND BACKPICK LIMIT CONFIGURATION TARGET UPLINK
+%token MODULE FILTER FRONTEND BACKEND BACKPICK LIMIT CONFIGURATION TARGET LINK HW
 
 /* Content Variables */
 %token <number> NUMBER
@@ -52,18 +52,19 @@ char* int_append(char * root, int num);
 %token <string> EQ
 %token <string> EXPR
 
-%type <hash>    module_settings
-%type <uplink>    uplink_settings
-%type <target>  rule
-%type <gstring>  equation 
-%type <addr>    honeynet
+%type <hash>    	module_settings
+%type <interface>   link_settings
+%type <target>  	rule
+%type <gstring>  	equation 
+%type <addr>    	honeynet
+%type <addr> 		mac
 
 %union {
 	int    number;
 	char * string;
 	GString * gstring;
 	struct GHashTable * hash;
-	struct interface * uplink;
+	struct interface * interface;
 	struct target * target;
 	struct addr * addr;
 }
@@ -88,7 +89,7 @@ char* int_append(char * root, int num);
 %%
 configuration:	/* empty */
 	| configuration config { 	g_printerr("Main config parsed\n"); }
-	| configuration uplink { 	g_printerr("Uplink parsed\n"); }
+	| configuration link { 		g_printerr("Network link parsed\n"); }
 	| configuration module {	g_printerr("Module parsed\n"); }
 	| configuration target {	g_printerr("Target parsed\n"); }
 	;
@@ -132,60 +133,55 @@ parameter: WORD EQ WORD {
 
 
 
-uplink: UPLINK QUOTE WORD QUOTE OPEN uplink_settings END { 
-		g_printerr("Parsing uplink\n");
+link: LINK QUOTE WORD QUOTE OPEN link_settings END { 
         struct interface *iface=(struct interface *)$6;
-        if(iface && iface->name && iface->ip_str && iface->mark) {
+        if(iface) {
             iface->tag=$3;
-            g_hash_table_insert(uplink, &iface->mark, iface);
-            g_printerr("\t'tag' => '%s'\n", iface->tag);
+            iface->id = link_count;
+            link_count++;
+            
+            g_printerr("\t'tag' => '%s'\n", $3);
+            
+            g_hash_table_insert(links, iface->tag, iface);
         } else {
-            errx(1, "Uplink configuration is incomplete!\n");
+            errx(1, "Link configuration is incomplete!\n");
         }
     }
     ;
 
-uplink_settings: {
+link_settings: {
         if (NULL == ($$ = g_malloc0(sizeof(struct interface))))
-            errx(1, "%s: Fatal error while creating uplink table.\n", __func__);
+            errx(1, "%s: Fatal error while creating link table.\n", __func__);
     }
-    | uplink_settings WORD EQ QUOTE honeynet QUOTE SEMICOLON {
-        if(strcmp($2, "ip")) {
-            errx(1, "Unrecognized option: %s. Did you mean: 'ip'?\n", $2); 
-        }
-        struct interface *iface=(struct interface *)$$;
-        iface->ip = $5;
-        iface->ip_str = g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($5)) + 1);
-        sprintf(iface->ip_str, "%s", addr_ntoa($5));
-        g_printerr("\t'%s' => '%s'\n", $2, iface->ip_str);
-        g_free($3);
-        g_free($2);
-    }
-    | uplink_settings WORD EQ QUOTE WORD QUOTE SEMICOLON {
+    | link_settings WORD EQ QUOTE WORD QUOTE SEMICOLON {
         if(strcmp($2, "interface")) {
             errx(1, "Unrecognized option: %s. Did you mean: 'interface'?\n", $2); 
         }
         struct interface *iface=(struct interface *)$$;
         iface->name = $5;
         g_printerr("\t'%s' => '%s'\n", $2, iface->name);
-        g_free($3);
         g_free($2);
+        g_free($3);
     }
-    | uplink_settings WORD EQ NUMBER SEMICOLON {
-        if(strcmp($2, "mark")) {
-            errx(1, "Unrecognized option: %s. Did you mean: 'mark'?\n", $2); 
+	|  link_settings WORD EQ NUMBER SEMICOLON {
+		if(strcmp($2, "promisc")) {
+            errx(1, "Unrecognized option: %s. Did you mean: 'promisc'?\n", $2); 
         }
         struct interface *iface=(struct interface *)$$;
-        iface->mark=$4;
-        g_printerr("\t'%s' => %i\n", $2, iface->mark);
-        g_free($3);
-        g_free($2);
+        iface->promisc = $4;
+        g_printerr("\t'%s' => %i\n", $2, $4);
+        
+		g_free($2);
+		g_free($3);
     }
+    | link_settings FILTER EQ QUOTE equation QUOTE SEMICOLON {
+
+		$$->filter = strdup($5->str);
+		g_printerr("\tPCAP filter:%s\n", $5->str);	
+		g_string_free($5, TRUE);
+		g_free($3);
+	}
     ;
-
-
-
-
 
 module: MODULE QUOTE WORD QUOTE OPEN module_settings END {
 		g_hash_table_insert(module, $3, $6);
@@ -251,119 +247,137 @@ module_settings: {
 	}
 	;
 
+target: TARGET QUOTE WORD QUOTE OPEN rule END {
 
-/*
-target: TARGET OPEN filter END OPEN rule END {
-*/
-target: TARGET OPEN rule END {
-		/*
-		if (pcap_compile_nopcap(1500, LINKTYPE, $6->filter, $3, 1, 0) < 0) {
-			g_printerr("PCAP ERROR: '%s'\n", $3);
-                	yyerror("bad pcap filter");
+		struct interface *iface = g_hash_table_lookup(links, $3);
+		if(iface == NULL) {
+			yyerror("\tTarget interface is not defined!\n");
 		}
-		*/
-		printdbg("\tGoing to add new element to target array...\n");
-		$3->back_handler_count = g_tree_nnodes($3->back_handlers);
-		g_ptr_array_add(targets, $3);
-		printdbg("\t...done\n");
-		/*g_printerr("\tAdded a new target with the following values:\n\tfront_handler: %s\n\tfront_rule: %s\n\tback_handler: %s\n\tback_rule: %s\n\tcontrol: %s\n",
-				//addr_ntoa($3->front_handler), "-", //$3->front_rule->module_name->str,
-				//addr_ntoa($3->back_handler), "-"); //$3->back_rule->module_name->str);
-				addr_ntoa($3->front_handler),($3->front_rule == NULL) ? "(null)" : $3->front_rule->module_name->str,
-				addr_ntoa($3->back_handler), ($3->back_rule  == NULL) ? "(null)" : $3->back_rule->module_name->str,
-				($3->control_rule  == NULL) ? "(null)" : $3->control_rule->module_name->str);
-		*/
+		
+		$6->default_route=iface;
+		
+		printdbg("\tAdding target with default link '%s'\n", $3);
+		g_hash_table_insert(targets, $3, $6);
 	}
 	;
 
 rule: 	{
-		printdbg("\tAllocating memory for new structure 'target'\n");
 		$$ = (struct target *)g_malloc0(sizeof(struct target));
 		
 		// This tree holds the main backend structures
-		$$->back_handlers = g_tree_new_full((GCompareDataFunc)intcmp, NULL, g_free, (GDestroyNotify)free_backend);
+		$$->back_handlers = g_tree_new_full((GCompareDataFunc)intcmp, NULL, g_free, (GDestroyNotify)free_handler);
 		
 		// This table just contains the unique backend IP's
 		// The key (char *ip) lives in the struct allocated for back_handlers so don't free it here
 		$$->unique_backend_ips = g_hash_table_new(g_str_hash, g_str_equal);
 	}
-	| rule FILTER QUOTE equation QUOTE SEMICOLON {
-		//g_printerr("Read pcap filter: '%s'\n", $4);
-		//g_printerr("Read pcap filter: '%s'\n", g_string_free($4, FALSE));
-		//if (pcap_compile_nopcap(1500, LINKTYPE, $$->filter, $4->str, 1, 0) < 0) {
-		$$->filter = malloc(sizeof(struct bpf_program));
-		if (pcap_compile_nopcap(1500, LINKTYPE, $$->filter, $4->str, 1, 0) < 0) {
-			g_printerr("\tPCAP ERROR: '%s'\n", $4->str);
-                	yyerror("\tIncorrect pcap filter");
+	| rule FRONTEND QUOTE WORD QUOTE honeynet HW mac SEMICOLON {
+		$$->front_handler = g_malloc0(sizeof(struct handler));
+		$$->front_handler->iface = g_hash_table_lookup(links, $4);
+		
+		if($$->front_handler->iface == NULL) {
+			yyerror("Front handler interface is undefined!\n");
 		}
-		g_printerr("\tPCAP filter:%s\n", $4->str);	
-		g_string_free($4, TRUE);
-	}
-	| rule FRONTEND honeynet SEMICOLON {
-		$$->front_handler = $3;
-		g_printerr("\tIP %s (%d) copied to front handler\n", addr_ntoa($3), $3->addr_ip);
-		//g_printerr("\tResult IP %s (%d)\n", addr_ntoa($$->front_handler), $$->front_handler->addr_ip);
-		$$->front_rule = NULL;
+		
+		$$->front_handler->ip=$6;
+		$$->front_handler->mac=$8;
+		
+        char *mac = ether_ntoa((struct ether_addr*)&($$->front_handler->mac->addr_eth));
+		g_printerr("\tFrontend defined at %s hw %s on '%s'\n", addr_ntoa($6), mac, $4);
+		g_free($4);	
 	} 
-	| rule FRONTEND honeynet QUOTE equation QUOTE SEMICOLON {
-		g_printerr("\tFrontend at %s: %s\n", addr_ntoa($3), $5->str);
-		$$->front_handler = $3;
-		$$->front_rule = DE_create_tree($5->str);
-		g_string_free($5, TRUE);
+	| rule FRONTEND QUOTE WORD QUOTE honeynet HW mac QUOTE equation QUOTE SEMICOLON {
+	
+		$$->front_handler = g_malloc0(sizeof(struct handler));
+		$$->front_handler->iface = g_hash_table_lookup(links, $4);
+		
+		if($$->front_handler->iface == NULL) {
+			yyerror("Front handler interface is undefined!\n");
+		}
+		
+		$$->front_handler->ip=$6;
+		$$->front_handler->mac=$8;
+		$$->front_handler->rule = DE_create_tree($10->str);
+		
+		$$->front_handler->ip_str=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($6)) + 1);
+        sprintf($$->front_handler->ip_str, "%s", addr_ntoa($6));
+		
+        char *mac = ether_ntoa((struct ether_addr*)&($$->front_handler->mac->addr_eth));
+		g_printerr("\tFrontend defined at %s hw %s on '%s' with rule: %s\n", $$->front_handler->ip_str, mac, $4, $10->str);
+		g_free($4);
+		g_string_free($10, TRUE);
 	}
 	| rule BACKPICK QUOTE equation QUOTE SEMICOLON {
-                g_printerr("\tCreating backend picking rule: %s\n", $4->str);
+        g_printerr("\tCreating backend picking rule: %s\n", $4->str);
 		$$->back_picker = DE_create_tree($4->str);
-		g_printerr("\tBackpick module is at %p\n", $$->back_picker->module);	
 		g_string_free($4, TRUE);
-        }
-	| rule BACKEND honeynet SEMICOLON {
-    		if($$->back_picker == NULL) {
-    			yyerror("Backend needs a rule if no backend picking rule is defined!\n");
-    		}
+    }
+	| rule BACKEND QUOTE WORD QUOTE honeynet HW mac SEMICOLON {
+    	if($$->back_picker == NULL) {
+    		yyerror("Backend needs a rule if no backend picking rule is defined!\n");
+    	}
     		
-    		// This will be freed automatically when the tree is destroyed
-    		$$->backends++;
-    		uint32_t *key=malloc(sizeof(uint32_t));
-    		*key=$$->backends;
+    	struct interface *iface = g_hash_table_lookup(links, $4);
+    	if(iface == NULL) {
+    		yyerror("Back handler interface is undefined!\n");
+    	}	
     		
-    		struct backend *back_handler = g_malloc0(sizeof(struct backend));
-    		back_handler->iface=g_malloc0(sizeof(struct interface));
+    	// This will be freed automatically when the tree is destroyed
+    	$$->back_handler_count++;
+    	uint32_t *key=malloc(sizeof(uint32_t));
+    	*key=$$->back_handler_count;
+    		
+    	struct handler *back_handler = g_malloc0(sizeof(struct handler));
+    	back_handler->iface=iface;
     
-            back_handler->iface->ip=$3;
-    		back_handler->iface->ip_str=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($3)) + 1);
-            sprintf(back_handler->iface->ip_str, "%s", addr_ntoa($3));
+        back_handler->ip=$6;
+        back_handler->ip_str=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($6)) + 1);
+       	back_handler->mac = $8;
+        sprintf(back_handler->ip_str, "%s", addr_ntoa($6));
     
-    		g_tree_insert($$->back_handlers, key, back_handler);
-    		g_hash_table_insert($$->unique_backend_ips, back_handler->iface->ip_str, NULL);
+    	g_tree_insert($$->back_handlers, key, back_handler);
+    	g_hash_table_insert($$->unique_backend_ips, back_handler->ip_str, NULL);
     		
-    		g_printerr("\tBackend %u with IP %s copied to handler without rule\n",
-    		    *key, back_handler->iface->ip_str);
-        }
-	| rule BACKEND honeynet QUOTE equation QUOTE SEMICOLON {
+        char *mac = ether_ntoa((struct ether_addr*)&(back_handler->mac->addr_eth));
+    	g_printerr("\tBackend #%u defined at %s hw %s on '%s' copied to handler without rule\n",
+    		*key, back_handler->ip_str, mac, $4);
+    		
+    	g_free($4);
+    }
+	| rule BACKEND QUOTE WORD QUOTE honeynet HW mac QUOTE equation QUOTE SEMICOLON {
 
-    		// This will be freed automatically when the tree is destroyed
-            $$->backends++;
-            uint32_t *key=malloc(sizeof(uint32_t));
-            *key=$$->backends;
+		struct interface *iface = g_hash_table_lookup(links, $4);
+    	if(iface == NULL) {
+    		yyerror("Back handler interface is undefined!\n");
+    	}
+    	
+    	// This will be freed automatically when the tree is destroyed
+        $$->back_handler_count++;
+        uint32_t *key=malloc(sizeof(uint32_t));
+        *key=$$->back_handler_count;
             
-            struct backend *back_handler = g_malloc0(sizeof(struct backend));
-            back_handler->iface=g_malloc0(sizeof(struct interface));
+        struct handler *back_handler = g_malloc0(sizeof(struct handler));
+        back_handler->iface=g_hash_table_lookup(links, $4);
     
-            back_handler->iface->ip=$3;
-            back_handler->iface->ip_str=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($3)) + 1);
-            sprintf(back_handler->iface->ip_str, "%s", addr_ntoa($3));
-            
-            g_printerr("\tBackend #%u at %s: %s\n",
-                *key, back_handler->iface->ip_str, $5->str);
-            
-            back_handler->rule=DE_create_tree($5->str);
+        back_handler->ip=$6;
+        back_handler->mac = $8;
+        back_handler->rule=DE_create_tree($10->str);
+        back_handler->ip_str=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($6)) + 1);
+        sprintf(back_handler->ip_str, "%s", addr_ntoa($6));
     
-    		g_tree_insert($$->back_handlers, key, back_handler);
-    		g_hash_table_insert($$->unique_backend_ips, back_handler->iface->ip_str, NULL);
+    	g_tree_insert($$->back_handlers, key, back_handler);
+    	g_hash_table_insert($$->unique_backend_ips, back_handler->ip_str, NULL);
+        
+        char *mac = ether_ntoa((struct ether_addr*)&(back_handler->mac->addr_eth));
+        g_printerr("\tBackend #%u defined at %s hw %s on '%s' with rule: %s\n", *key, back_handler->ip_str,
+        mac
+        , $4, $10->str);
                 
-           	g_string_free($5, TRUE);
-        }
+        g_string_free($10, TRUE);
+        g_free($4);
+    }
+//TODO
+/*
 	| rule BACKEND QUOTE equation QUOTE honeynet QUOTE equation QUOTE SEMICOLON {
 
             // This will be freed automatically when the tree is destroyed
@@ -378,8 +392,8 @@ rule: 	{
 		    back_handler->iface->name=g_strdup($8->str);
 		    back_handler->iface->mark=*key; // Automatically assign iptables mark
 		    back_handler->iface->ip=$6;
-		    back_handler->iface->ip_str=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($6)) + 1);
-		    sprintf(back_handler->iface->ip_str, "%s", addr_ntoa($6));
+		    //back_handler->iface->ip_str=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($6)) + 1);
+		    //sprintf(back_handler->iface->ip_str, "%s", addr_ntoa($6));
 		    
             g_printerr("\tBackend #%u at %s on interface %s and tag %s: no rule\n",
                 *key, back_handler->iface->ip_str, back_handler->iface->name, back_handler->iface->tag);
@@ -404,8 +418,8 @@ rule: 	{
 		    back_handler->iface->name=g_strdup($8->str);
 		    back_handler->iface->mark=*key; // Automatically assign iptables mark
 		    back_handler->iface->ip=$6;
-		    back_handler->iface->ip_str=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($6)) + 1);
-            sprintf(back_handler->iface->ip_str, "%s", addr_ntoa($6));
+		    //back_handler->iface->ip_str=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($6)) + 1);
+            //sprintf(back_handler->iface->ip_str, "%s", addr_ntoa($6));
             
             g_printerr("\tBackend #%u at IP %s on interface %s and tag %s: %s\n", 
                 *key, back_handler->iface->ip_str, back_handler->iface->name, back_handler->iface->tag, $11->str);
@@ -418,7 +432,7 @@ rule: 	{
             g_string_free($4, TRUE);
 		    g_string_free($8, TRUE);
 		    g_string_free($11, TRUE);
-        }
+        }*/
 	| rule LIMIT QUOTE equation QUOTE SEMICOLON {
 		$$->control_rule = DE_create_tree($4->str);
 		g_string_free($4, TRUE);
@@ -428,6 +442,14 @@ honeynet: EXPR {
         $$ = (struct addr *)g_malloc0(sizeof(struct addr));
 		if (addr_pton($1, $$) < 0) {
             yyerror("\tIllegal IP address");
+        }
+        g_free($1);
+	}
+	
+mac: EXPR {
+		$$ = (struct addr *)g_malloc0(sizeof(struct addr));
+		if (addr_pton($1, $$) < 0) {
+            yyerror("\tIllegal MAC address");
         }
         g_free($1);
 	}

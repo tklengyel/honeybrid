@@ -20,12 +20,12 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 AC_PREREQ(2.61)
-AC_INIT([honeybrid],
+AC_INIT([Honeybrid - Advanced Honeypot Gateway],
         [1.0.0-rc],
         [Tamas K Lengyel, tamas.k.lengyel@gmail.com],
-        [honeybrid])
+        [honeybrid],
+        [http://honeybrid.sf.net])
 AM_INIT_AUTOMAKE([1.10 foreign])
-AC_CONFIG_SRCDIR([config.h.in])
 AC_CONFIG_HEADER([config.h])
 AC_CONFIG_MACRO_DIR([m4])
 

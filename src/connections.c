@@ -22,7 +22,6 @@
  */
 
 #include "connections.h"
-
 #include <ctype.h>
 #include "constants.h"
 #include "netcode.h"
@@ -74,55 +73,64 @@ static inline int addr2int(const char *address) {
  \param[in] mark: Netfilter mark of the packet
  \return the origin of the packet
  */
-status_t init_pkt(const unsigned char *nf_packet, struct pkt_struct **pkt_in,
-        uint32_t mark, uint32_t nfq_packet_id) {
+status_t init_pkt(struct interface *iface, uint16_t ethertype,
+        const struct pcap_pkthdr *header, const u_char *packet,
+        struct pkt_struct **pkt_out) {
 
     status_t ret = NOK;
 
     struct pkt_struct *pkt = g_malloc0(sizeof(struct pkt_struct));
 
     /* Init a new structure for the current packet */
-    pkt->origin = EXT;
-    pkt->size = ntohs(((struct iphdr*) nf_packet)->tot_len);
-    pkt->mark = mark;
-    pkt->nfq_packet_id = nfq_packet_id;
+    pkt->size = header->len;
+    pkt->in = iface;
 
-    if (pkt->size > BUFSIZE || pkt->size < 40) {
-        printdbg("%s Invalid packet size: dropped\n", H(4));
-
-        goto done;
-    }
-
-    /*! Create fake ethernet header (used later by bpf_filter) */
-    pkt->packet.FRAME = g_malloc0(ETHER_HDR_LEN + pkt->size);
-    memcpy(pkt->packet.FRAME + ETHER_HDR_LEN, nf_packet, pkt->size);
+    /* Save the packet */
+    pkt->packet.FRAME = malloc(pkt->size);
+    memcpy(pkt->packet.FRAME, packet, pkt->size);
 
     pkt->packet.eth = (struct ether_header *) pkt->packet.FRAME;
 
-    // Set IP type on the header
-    ((struct ether_header *) pkt->packet.eth)->ether_type = htons(ETHERTYPE_IP);
-
     /*! Assign the packet IP header and payload to the packet structure */
-    pkt->packet.ip = (struct iphdr *) (pkt->packet.FRAME + ETHER_HDR_LEN);
-
-    if (pkt->packet.ip->ihl < 0x5 || pkt->packet.ip->ihl > 0x08) {
-        printdbg("%s Invalid IP header length: dropped\n", H(4));
-
-        goto done;
+    if (ethertype == ETHERTYPE_IP) {
+        pkt->packet.ip = (struct iphdr *) (pkt->packet.FRAME + ETHER_HDR_LEN);
+    } else if (ethertype == ETHERTYPE_VLAN) {
+        pkt->vlan_in = pkt->packet.vlan_eth->h_vlan_TCI;
+        pkt->packet.ip = (struct iphdr *) (pkt->packet.FRAME + VLAN_ETH_HLEN);
     }
 
     pkt->packet.tcp = (struct tcphdr*) (((char *) pkt->packet.ip)
             + (pkt->packet.ip->ihl << 2));
 
+    pkt->key_src = g_malloc0(
+            snprintf(NULL, 0, "%s",
+                    inet_ntoa(*(struct in_addr*) &pkt->packet.ip->saddr)) + 1);
+    sprintf(pkt->key_src, "%s",
+            inet_ntoa(*(struct in_addr*) &pkt->packet.ip->saddr));
+
+    pkt->key_dst = g_malloc0(
+            snprintf(NULL, 0, "%s",
+                    inet_ntoa(*(struct in_addr*) &pkt->packet.ip->daddr)) + 1);
+    sprintf(pkt->key_dst, "%s",
+            inet_ntoa(*(struct in_addr*) &pkt->packet.ip->daddr));
+
     if (pkt->packet.ip->protocol == IPPROTO_TCP) {
         /*! Process TCP packets */
+
+        if (pkt->size < MIN_TCP_SIZE) {
+            printdbg("%s Invalid TCP header length. Skipped.\n", H(4));
+
+            goto done;
+        }
+
         if (pkt->packet.tcp->doff < 0x05 || pkt->packet.tcp->doff > 0xFF) {
-            printdbg("%s Invalid TCP header length: dropped\n", H(4));
+            printdbg(
+                    "%s Invalid TCP header length: %u. Skipped.\n", H(4), pkt->packet.tcp->doff);
 
             goto done;
         }
         if (pkt->packet.tcp->source == 0 || pkt->packet.tcp->dest == 0) {
-            printdbg("%s Invalid TCP ports: dropped\n", H(4));
+            printdbg("%s Invalid TCP ports. Skipped.\n", H(4));
 
             goto done;
         }
@@ -130,25 +138,29 @@ status_t init_pkt(const unsigned char *nf_packet, struct pkt_struct **pkt_in,
         pkt->packet.payload = (char*) pkt->packet.tcp
                 + (pkt->packet.tcp->doff << 2);
 
-        /*! key_src is the tuple with the source information
+        /*! key_src_with_port is the tuple with the source information
          * {Source IP}:{Source Port} */
-        pkt->key_src = g_malloc0(
+        pkt->key_src_with_port = g_malloc0(
                 snprintf(NULL, 0, "%s:%d",
                         inet_ntoa(*(struct in_addr*) &pkt->packet.ip->saddr),
                         ntohs(pkt->packet.tcp->source)) + 1);
-        sprintf(pkt->key_src, "%s:%d",
+        sprintf(pkt->key_src_with_port, "%s:%d",
                 inet_ntoa(*(struct in_addr*) &pkt->packet.ip->saddr),
                 ntohs(pkt->packet.tcp->source));
 
-        /*! key_dst is the one with the destination information
+        /*! key_dst_with_port is the one with the destination information
          * {Dest IP}:{Dest Port} */
-        pkt->key_dst = g_malloc0(
+        pkt->key_dst_with_port = g_malloc0(
                 snprintf(NULL, 0, "%s:%d",
                         inet_ntoa(*(struct in_addr*) &pkt->packet.ip->daddr),
                         ntohs(pkt->packet.tcp->dest)) + 1);
-        sprintf(pkt->key_dst, "%s:%d",
+        sprintf(pkt->key_dst_with_port, "%s:%d",
                 inet_ntoa(*(struct in_addr*) &pkt->packet.ip->daddr),
                 ntohs(pkt->packet.tcp->dest));
+
+        /*printdbg("%s\n", inet_ntoa(*(struct in_addr*) &pkt->packet.ip->saddr));
+         printdbg("%u\n", ntohs(pkt->packet.tcp->source));
+         printdbg("%s\n", pkt->key_src);*/
 
         /* The volume of data is the total size of the packet minus the size of the IP and TCP headers */
         pkt->data = ntohs(pkt->packet.ip->tot_len) - (pkt->packet.ip->ihl << 2)
@@ -158,29 +170,23 @@ status_t init_pkt(const unsigned char *nf_packet, struct pkt_struct **pkt_in,
         pkt->packet.payload = (char*) pkt->packet.udp + UDP_HDR_LEN;
         /*! Process UDP packet */
         /*! key_src */
-        pkt->key_src = g_malloc0(
+        pkt->key_src_with_port = g_malloc0(
                 snprintf(NULL, 0, "%s:%d",
                         inet_ntoa(*(struct in_addr*) &pkt->packet.ip->saddr),
                         ntohs(pkt->packet.udp->source)) + 1);
-        sprintf(pkt->key_src, "%s:%u",
+        sprintf(pkt->key_src_with_port, "%s:%u",
                 inet_ntoa(*(struct in_addr*) &pkt->packet.ip->saddr),
                 ntohs(pkt->packet.udp->source));
         /*! key_dst */
-        pkt->key_dst = g_malloc0(
+        pkt->key_dst_with_port = g_malloc0(
                 snprintf(NULL, 0, "%s:%d",
                         inet_ntoa(*(struct in_addr*) &pkt->packet.ip->daddr),
                         ntohs(pkt->packet.udp->dest)) + 1);
-        sprintf(pkt->key_dst, "%s:%u",
+        sprintf(pkt->key_dst_with_port, "%s:%u",
                 inet_ntoa(*(struct in_addr*) &pkt->packet.ip->daddr),
                 ntohs(pkt->packet.udp->dest));
         /* The volume of data is the value of udp->ulen minus the size of the UPD header (always 8 bytes) */
         pkt->data = pkt->packet.udp->len - UDP_HDR_LEN;
-    } else {
-        /*! Every other packets are ignored */
-        printdbg(
-                "%s Invalid protocol: %d, packet dropped\n", H(4), pkt->packet.ip->protocol);
-
-        goto done;
     }
 
     if (pkt->data < 0) {
@@ -194,7 +200,7 @@ status_t init_pkt(const unsigned char *nf_packet, struct pkt_struct **pkt_in,
     done: if (ret == NOK) {
         free(pkt);
     } else {
-        *pkt_in = pkt;
+        *pkt_out = pkt;
     }
 
     return ret;
@@ -206,11 +212,13 @@ status_t init_pkt(const unsigned char *nf_packet, struct pkt_struct **pkt_in,
  */
 void free_pkt(struct pkt_struct *pkt) {
     if (pkt != NULL) {
-        printdbg("%s Freeing pkt: %u\n", H(1), pkt->nfq_packet_id);
         g_free(pkt->packet.FRAME);
         g_free(pkt->key);
+        g_free(pkt->key_with_port);
         g_free(pkt->key_src);
         g_free(pkt->key_dst);
+        g_free(pkt->key_src_with_port);
+        g_free(pkt->key_dst_with_port);
         g_free(pkt);
     }
 }
@@ -254,12 +262,12 @@ status_t init_mark(struct pkt_struct *pkt, const struct conn_struct *conn) {
 
     switch (pkt->origin) {
         case HIH:
-            if (conn->uplink_mark)
-                pkt->mark = conn->uplink_mark;
+            if (conn->uplink_vlan)
+                pkt->vlan = conn->uplink_vlan;
             break;
         case EXT:
-            if (conn->downlink_mark)
-                pkt->mark = conn->downlink_mark;
+            if (conn->downlink_vlan)
+                pkt->vlan = conn->downlink_vlan;
             break;
         case LIH:
         default:
@@ -380,51 +388,51 @@ status_t switch_state(struct conn_struct *conn, int new_state) {
  \param[in] uplink_ip: the uplink ip to check for
  \return: NOK on error, OK otherwise
  */
-status_t check_pre_dnat_routing(struct pkt_struct *pkt,
-        struct conn_struct **conn, const char *uplink_ip) {
+/*status_t check_pre_dnat_routing(struct pkt_struct *pkt,
+ struct conn_struct **conn, const char *uplink_ip) {
 
-    char **split = g_strsplit(pkt->key_dst, ":", 0);
+ char **split = g_strsplit(pkt->key_dst, ":", 0);
 
-    if (!strcmp(split[0], uplink_ip)) {
-        // uplink match, let's see if connection originally came from one of the HIHs
+ if (!strcmp(split[0], uplink_ip)) {
+ // uplink match, let's see if connection originally came from one of the HIHs
 
-        uint32_t i;
-        for (i = 0; i < targets->len; i++) {
-            struct target *t = g_ptr_array_index(targets,i);
+ uint32_t i;
+ for (i = 0; i < targets->len; i++) {
+ struct target *t = g_ptr_array_index(targets,i);
 
-            const char *ip = NULL;
-            char *key = NULL;
-            struct backend *back_handler = NULL;
-            GHashTableIter i;
-            ghashtable_foreach(t->unique_backend_ips, &i, &ip, &back_handler)
-            {
+ const char *ip = NULL;
+ char *key = NULL;
+ struct backend *back_handler = NULL;
+ GHashTableIter i;
+ ghashtable_foreach(t->unique_backend_ips, &i, &ip, &back_handler)
+ {
 
-                key = g_malloc0(
-                        snprintf(NULL, 0, "%s:%s:%s", pkt->key_src, ip,
-                                split[1]) + 1);
+ key = g_malloc0(
+ snprintf(NULL, 0, "%s:%s:%s", pkt->key_src, ip,
+ split[1]) + 1);
 
-                sprintf(key, "%s:%s:%s", pkt->key_src, ip, split[1]);
+ sprintf(key, "%s:%s:%s", pkt->key_src, ip, split[1]);
 
-                if (TRUE
-                        == g_tree_lookup_extended(conn_tree, key, NULL,
-                                (gpointer *) conn)
-                        && (*conn)->initiator == HIH) {
-                    printdbg(
-                            "Connection initiated from backend found with mark: %u\n", (*conn)->downlink_mark);
+ if (TRUE
+ == g_tree_lookup_extended(flow_tree, key, NULL,
+ (gpointer *) conn)
+ && (*conn)->initiator == HIH) {
+ printdbg(
+ "Connection initiated from backend found with mark: %u\n", (*conn)->downlink_vlan);
 
-                    pkt->key = key;
+ pkt->key = key;
 
-                    break;
-                } else {
-                    free(key);
-                }
-            }
-        }
-    }
+ break;
+ } else {
+ free(key);
+ }
+ }
+ }
+ }
 
-    g_strfreev(split);
-    return OK;
-}
+ g_strfreev(split);
+ return OK;
+ }*/
 
 status_t conn_lookup(struct pkt_struct *pkt, struct conn_struct **conn) {
 
@@ -432,20 +440,22 @@ status_t conn_lookup(struct pkt_struct *pkt, struct conn_struct **conn) {
 
     /* Creating keys for both directions (0 and 1)*/
     char *key0 = g_malloc0(
-            snprintf(NULL, 0, "%s:%s", pkt->key_src, pkt->key_dst) + 1);
-    sprintf(key0, "%s:%s", pkt->key_src, pkt->key_dst);
+            snprintf(NULL, 0, "%s:%s", pkt->key_src_with_port,
+                    pkt->key_dst_with_port) + 1);
+    sprintf(key0, "%s:%s", pkt->key_src_with_port, pkt->key_dst_with_port);
     char *key1 = g_malloc0(
-            snprintf(NULL, 0, "%s:%s", pkt->key_dst, pkt->key_src) + 1);
-    sprintf(key1, "%s:%s", pkt->key_dst, pkt->key_src);
+            snprintf(NULL, 0, "%s:%s", pkt->key_dst_with_port,
+                    pkt->key_src_with_port) + 1);
+    sprintf(key1, "%s:%s", pkt->key_dst_with_port, pkt->key_src_with_port);
 
     printdbg(
-            "%s Looking for connections between %s and %s!\n", H(0), pkt->key_src, pkt->key_dst);
+            "%s Looking for connections between %s and %s!\n", H(0), pkt->key_src_with_port, pkt->key_dst_with_port);
 
-    g_rw_lock_reader_lock(&conntreelock);
+    g_rw_lock_reader_lock(&connlock);
 
     /* Check first if a structure already exists for direction 0 */
     if (TRUE
-            == g_tree_lookup_extended(conn_tree, key0, NULL,
+            == g_tree_lookup_extended(flow_tree, key0, NULL,
                     (gpointer *) conn)) {
         /* Structure found! It means source is EXT */
         pkt->key = g_strdup(key0);
@@ -453,7 +463,7 @@ status_t conn_lookup(struct pkt_struct *pkt, struct conn_struct **conn) {
 
         /* Then we check for the opposite direction */
     } else if (TRUE
-            == g_tree_lookup_extended(conn_tree, key1, NULL,
+            == g_tree_lookup_extended(flow_tree, key1, NULL,
                     (gpointer *) conn)) {
         /* Structure found! It means destination is EXT and source is INT */
         pkt->key = g_strdup(key1);
@@ -480,11 +490,11 @@ status_t conn_lookup(struct pkt_struct *pkt, struct conn_struct **conn) {
         if (value != NULL) {
             printdbg(
                     "%s ~~~~ This packet is part of a replayed connection ~~~~~\n", H(0));
-            /* Structure found! It means destination is EXT and source is INT */
+            /* Structure found! It means destination is EXT and source is HIH */
 
             char **split = g_strsplit(value, ":", 0);
             /* split[0]=IP, split[1]=port, split[2]=mark */
-            pkt->mark = (uint32_t) atoi(split[2]);
+            pkt->vlan = (uint32_t) atoi(split[2]);
             pkt->key = g_malloc0(
                     snprintf(NULL, 0, "%s:%s:%s", pkt->key_dst, split[0],
                             split[1]) + 1);
@@ -492,37 +502,23 @@ status_t conn_lookup(struct pkt_struct *pkt, struct conn_struct **conn) {
             g_strfreev(split);
 
             printdbg(
-                    "%s ====== Corresponding LIH session: %s, Mark: %u ==== \n", H(0), pkt->key, pkt->mark);
+                    "%s ====== Corresponding LIH session: %s, Mark: %u ==== \n", H(0), pkt->key, pkt->vlan);
 
             pkt->origin = HIH;
 
             if (FALSE
-                    == g_tree_lookup_extended(conn_tree, pkt->key, NULL,
+                    == g_tree_lookup_extended(flow_tree, pkt->key, NULL,
                             (gpointer *) conn)) {
                 printdbg(
                         "%s ~~~~ Error! Related connection structure can't be found with key %s ~~~~~\n", H(0), pkt->key);
                 ret = NOK;
-            }
-        } else {
-
-            // We now check if this is a packet for a connection that's been initiated by a HIH
-            // This requires special IPTABLES rules to queue the response packets
-            // BEFORE they are DNAT-ed to the LIH.
-            const char *ip = NULL;
-            struct interface *uplink_iface = NULL;
-            GHashTableIter i;
-            ghashtable_foreach(uplink, &i, &ip, &uplink_iface)
-            {
-                if (OK == check_pre_dnat_routing(pkt, conn, ip) && *conn) {
-                    break;
-                }
             }
         }
     }
 
     g_free(key0);
     g_free(key1);
-    g_rw_lock_reader_unlock(&conntreelock);
+    g_rw_lock_reader_unlock(&connlock);
 
     if (ret == OK && *conn && pkt->packet.ip->protocol == IPPROTO_TCP) {
         // Both sides sent TCP-FIN already
@@ -533,9 +529,9 @@ status_t conn_lookup(struct pkt_struct *pkt, struct conn_struct **conn) {
             printdbg("%s Expiring TCP connection manually.\n", H((*conn)->id));
             gint expire = 0;
 
-            g_rw_lock_writer_lock(&conntreelock);
+            g_rw_lock_writer_lock(&connlock);
             expire_conn(pkt->key, *conn, &expire);
-            g_rw_lock_writer_unlock(&conntreelock);
+            g_rw_lock_writer_unlock(&connlock);
 
             *conn = NULL;
             goto done;
@@ -575,108 +571,170 @@ status_t conn_lookup(struct pkt_struct *pkt, struct conn_struct **conn) {
 
 status_t create_conn(struct pkt_struct *pkt, struct conn_struct **conn,
         gdouble microtime) {
+
+    status_t result = NOK;
+
     /*! The key could not be found, so we need to figure out where this packet comes from */
     if (pkt->packet.ip->protocol == IPPROTO_TCP && pkt->packet.tcp->syn == 0) {
 
         printdbg(
-                "%s ~~~~ TCP packet without SYN: we drop %s -> %s~~~~\n", H(0), pkt->key_src, pkt->key_dst);
-        return NOK;
+                "%s ~~~~ TCP packet without SYN: we skip %s -> %s~~~~\n", H(0), pkt->key_src, pkt->key_dst);
+        return result;
     }
 
-    /*DEBUG
-     printf("Printing pkt->ip:\n");
-     print_payload( (u_char *)pkt->packet.ip, pkt->size );
-     printf("Printing pkt->FRAME:\n");
-     print_payload( (u_char *)pkt->packet.FRAME, pkt->size + 14);
-     */
+    struct related_conn *related_conn = NULL;
+    struct target *target = NULL;
 
-    /*! Try to match a target with this packet */
-    int found = -1;
-    uint32_t i = 0;
-    for (i = 0; i < targets->len; i++) {
-        if (bpf_filter(
-                ((struct target *) g_ptr_array_index(targets,i))->filter->bf_insns,
-                (u_char *) (pkt->packet.FRAME), pkt->size + ETHER_HDR_LEN,
-                pkt->size + ETHER_HDR_LEN) != 0) {
-            found = i;
+    /*! Let's check if we have any related connection */
+    char *key0 = g_malloc0(
+            snprintf(NULL, 0, "%s:%s", pkt->key_src, pkt->key_dst) + 1);
+    sprintf(key0, "%s:%s", pkt->key_src, pkt->key_dst);
+    char *key1 = g_malloc0(
+            snprintf(NULL, 0, "%s:%s", pkt->key_dst, pkt->key_src) + 1);
+    sprintf(key1, "%s:%s", pkt->key_dst, pkt->key_src);
 
-            pkt->key = g_malloc0(
-                    snprintf(NULL, 0, "%s:%s", pkt->key_src, pkt->key_dst) + 1);
-            sprintf(pkt->key, "%s:%s", pkt->key_src, pkt->key_dst);
+    char *key_with_port0 = g_malloc0(
+            snprintf(NULL, 0, "%s:%s", pkt->key_src_with_port,
+                    pkt->key_dst_with_port) + 1);
+    sprintf(key_with_port0, "%s:%s", pkt->key_src_with_port,
+            pkt->key_dst_with_port);
+
+    char *key_with_port1 = g_malloc0(
+            snprintf(NULL, 0, "%s:%s", pkt->key_dst_with_port,
+                    pkt->key_src_with_port) + 1);
+    sprintf(key_with_port1, "%s:%s", pkt->key_dst_with_port,
+            pkt->key_src_with_port);
+
+    printdbg(
+            "%s Looking for related connections between %s and %s!\n", H(0), pkt->key_src, pkt->key_dst);
+
+    g_rw_lock_writer_lock(&connlock);
+
+    /* Check first if a structure already exists for direction 0 */
+    if (TRUE
+            == g_tree_lookup_extended(conn_tree, key0, NULL,
+                    (gpointer *) related_conn) && related_conn) {
+
+        printdbg("%s Related connection found on target with default route %s!\n", H(0), related_conn->target->default_route->tag);
+
+        target = related_conn->target;
+
+        /* Structure found! It means source is EXT */
+        if (target->default_route == pkt->in) {
+            pkt->key = g_strdup(key0);
+            pkt->key_with_port = g_strdup(key_with_port0);
             pkt->origin = EXT;
+            goto conn_init;
+        } else {
+            /*
+             * This attacker is attacking the honeynet from multiple uplinks.
+             * Since the same backends can be assigned to handle multiple uplinks,
+             * if a honeypot initiates a connection back to the attacker it will
+             * always take the first default route, which may not be the one the
+             * attacker was expecting. This would reveal the presence of the honeynet.
+             *
+             * For incoming connections this would be fine since we know which route the
+             * connection came from, so we could route them back:
+             *
+             * ATTACKER ---> Honeybrid uplink 1 ----> LIH
+             *          ---> Honeybrid uplink 2 --/
+             *
+             * Howver, once the attacker is in and initiates a reverse connection,
+             * we would not know which route to take. He might be expecting the
+             * reverse connection coming from uplink 1 or uplink 2.
+             */
+
             printdbg(
-                    "%s This packet matches the filter of target %d (%s)\n", H(0), i, pkt->key);
+                    "%s Attacker is already active on a different target with default route %s. Skipping.\n",
+                    H(1), target->default_route->tag);
 
-            break;
+            goto done;
         }
-    }
 
-    /*! If not, then it means the packets is either originated from a honeypot inside (we control) or from a non supported external host (we drop) */
-    if (found < 0) {
-        /*! check if the src is in the honeynet */
-        pkt->key = g_malloc0(
-                snprintf(NULL, 0, "%s:%s", pkt->key_dst, pkt->key_src) + 1);
-        sprintf(pkt->key, "%s:%s", pkt->key_dst, pkt->key_src);
+        /* Then we check for the opposite direction */
+    } else if (TRUE
+            == g_tree_lookup_extended(conn_tree, key1, NULL,
+                    (gpointer *) related_conn) && related_conn) {
+
+        printdbg("%s Related connection found on target with default route %s!\n", H(0), related_conn->target->default_route->tag);
+
+        target = related_conn->target;
+
+        /* Structure found! It means destination is EXT and source is INT */
+        pkt->key = g_strdup(key1);
+        pkt->key_with_port = g_strdup(key_with_port1);
 
         struct addr src_addr;
         addr_pton(inet_ntoa(*(struct in_addr*) &pkt->packet.ip->saddr),
                 &src_addr);
 
-        for (i = 0; i < targets->len; i++) {
-
-            if (addr_cmp(
-                    ((const struct target *) g_ptr_array_index(targets,i))->front_handler,
-                    &src_addr) == 0) {
-                printdbg(
-                        "%s This packet matches a LIH honeypot IP address for target %d\n", H(0), i);
-                found = i;
-                pkt->origin = LIH;
-                break;
-                /* Note: this honeypot might be defined later in another target... */
-            }
-
-            if (g_hash_table_lookup(
-                    ((struct target *) g_ptr_array_index(targets,i))->unique_backend_ips,
-                    inet_ntoa(
-                            *(struct in_addr*) &pkt->packet.ip->saddr)) != NULL) {
-                printdbg(
-                        "%s This packet matches a HIH honeypot IP address for target %d\n", H(0), i);
-                found = i;
-                pkt->origin = HIH;
-                break;
-                /* Note: this honeypot might be defined later in another target... */
-            }
-
-        }
-
-        if (found < 0) {
-            /*! if not, then this packet is for an unconfigured target, we drop it */
+        if (addr_cmp(target->front_handler->ip, &src_addr) == 0) {
             printdbg(
-                    "%s No honeypot IP found for this address (%s), pkt key: %s, dropping for now.\n", H(0), inet_ntoa(*(struct in_addr*) &pkt->packet.ip->daddr), pkt->key);
-            return NOK;
+                    "%s This packet matches a LIH honeypot IP address for target with default route %s\n",
+                    H(0), target->default_route->tag);
+            pkt->origin = LIH;
+            goto conn_init;
         }
 
-    } else {
-        // \todo We should now check if the destination is a valid LIH
-        // If not, we should either drop or NAT
-        struct addr dst_addr;
-        addr_pton(inet_ntoa(*(struct in_addr*) &pkt->packet.ip->daddr),
-                &dst_addr);
-
-        if (addr_cmp(
-                ((struct target *) g_ptr_array_index(targets, found))->front_handler,
-                &dst_addr) == 0) {
-            /*! IPs match, we can proceed */
-            //printerr("%s Destination %s match the LIH, continuing...\n", H(0), addr_ntoa(dst_addr));
-        } else {
-            /*! destination address is not the LIH address, so we drop the packet (later we might NAT \todo) */
-            //printerr("%s Destination %s is not the LIH, dropping for now\n", H(0), addr_ntoa(dst_addr));
+        if (g_hash_table_lookup(target->unique_backend_ips,
+                inet_ntoa(*(struct in_addr*) &pkt->packet.ip->saddr)) != NULL) {
             printdbg(
-                    "%s Destination %s is not the LIH, but we continue...\n", H(0), addr_ntoa(&dst_addr));
-//return NOK;
+                    "%s This packet matches a HIH honeypot IP address for target with default route %s\n",
+                    H(0), target->default_route->tag);
+            pkt->origin = HIH;
+            goto conn_init;
         }
-
     }
+
+    // No related connections found.. continue searching.
+
+    /*! Try to match a target with this packet */
+    GHashTableIter i;
+    char *key;
+    ghashtable_foreach(targets, i, key, target) {
+        if (target->default_route == pkt->in) {
+            pkt->key = g_strdup(key0);
+            pkt->key_with_port = g_strdup(key_with_port0);
+            pkt->origin = EXT;
+            printdbg(
+                    "%s This packet is from the default route of target with default route %s\n",
+                    H(0), target->default_route->tag);
+            goto conn_init;
+        }
+    }
+
+    /*! If not, then it means the packets is either originated from a honeypot inside (we control)
+     * or from a non supported external host (we skip) */
+
+    struct addr src_addr;
+    addr_pton(inet_ntoa(*(struct in_addr*) &pkt->packet.ip->saddr), &src_addr);
+
+    GHashTableIter i2;
+    ghashtable_foreach(targets, i2, key, target) {
+        if (addr_cmp(target->front_handler->ip, &src_addr) == 0) {
+            printdbg(
+                    "%s This packet matches a LIH honeypot IP address of target with default route %s\n", H(0), target->default_route->tag);
+            pkt->origin = LIH;
+            goto conn_init;
+        }
+
+        if (g_hash_table_lookup(target->unique_backend_ips,
+                inet_ntoa(*(struct in_addr*) &pkt->packet.ip->saddr)) != NULL) {
+            printdbg(
+                    "%s This packet matches a HIH honeypot IP address of target with default route %s\n", H(0), target->default_route->tag);
+            pkt->origin = HIH;
+            goto conn_init;
+        }
+    }
+
+    /*! this packet is for an unconfigured target, we drop it */
+    printdbg(
+            "%s No honeypot IP found for this address (%s), pkt key: %s, skipping for now.\n", H(0), inet_ntoa(*(struct in_addr*) &pkt->packet.ip->daddr), pkt->key);
+    goto done;
+
+    /*! initialize connection */
+    conn_init:
+    printdbg("%s Initializing connection structure\n", H(5));
 
     /*! Init new connection structure */
     struct conn_struct *conn_init = (struct conn_struct *) g_malloc0(
@@ -686,10 +744,13 @@ status_t create_conn(struct pkt_struct *pkt, struct conn_struct **conn,
     g_rw_lock_writer_lock(&conn_init->lock);
 
     /*! fill the structure */
-    conn_init->target = g_ptr_array_index(targets, found);
+    conn_init->target = target;
     conn_init->key = g_strdup(pkt->key);
     conn_init->key_ext = g_strdup(pkt->key_src);
     conn_init->key_lih = g_strdup(pkt->key_dst);
+    conn_init->key_with_port = g_strdup(pkt->key_with_port);
+    conn_init->key_ext_with_port = g_strdup(pkt->key_src_with_port);
+    conn_init->key_lih_with_port = g_strdup(pkt->key_dst_with_port);
     conn_init->protocol = pkt->packet.ip->protocol;
     conn_init->access_time = microtime;
     conn_init->initiator = pkt->origin;
@@ -707,14 +768,18 @@ status_t create_conn(struct pkt_struct *pkt, struct conn_struct **conn,
     conn_init->total_byte = pkt->size;
     conn_init->decision_rule = g_string_new("");
 
-    if (pkt->origin == LIH) {
-        conn_init->state = CONTROL;
-    } else if (pkt->origin == EXT) {
+    conn_init->original_src = pkt->packet.ip->saddr;
+    conn_init->original_dst = pkt->packet.ip->daddr;
+
+    if (pkt->origin == EXT) {
         conn_init->state = INIT;
-        conn_init->uplink_mark = pkt->mark;
+        conn_init->uplink_vlan = pkt->vlan_in;
+    } else if (pkt->origin == LIH) {
+        conn_init->state = CONTROL;
+        conn_init->downlink_vlan = pkt->vlan_in;
     } else if (pkt->origin == HIH) {
         conn_init->state = INIT;
-        conn_init->downlink_mark = pkt->mark;
+        conn_init->downlink_vlan = pkt->vlan_in;
     }
 
     struct tm *tm;
@@ -728,26 +793,33 @@ status_t create_conn(struct pkt_struct *pkt, struct conn_struct **conn,
             (1 + tm->tm_mon), tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec,
             (int) tv.tv_usec);
 
-    /*! insert entry in B-Tree */
-    g_rw_lock_writer_lock(&conntreelock);
-    g_tree_insert(conn_tree, conn_init->key, conn_init);
-    g_rw_lock_writer_unlock(&conntreelock);
+    /*! init related conn struct */
+    if(!related_conn) {
+        related_conn = g_malloc0(sizeof(struct related_conn));
+    }
+    related_conn->reference_count = 1;
+    related_conn->target = target;
 
-    /*g_rw_lock_reader_lock(&conntreelock);
-     if (TRUE
-     != g_tree_lookup_extended(conn_tree, conn_init->key, NULL,
-     (gpointer *) conn))
-     return NOK;
-     g_rw_lock_reader_unlock(&conntreelock);*/
+    /*! insert entry in B-Tree */
+    g_tree_insert(flow_tree, conn_init->key_with_port, conn_init);
+    g_tree_insert(conn_tree, g_strdup(conn_init->key), related_conn);
 
     printdbg(
-            "%s Key '%s' inserted to conn_tree with uplink mark %u and downlink mark %u\n", H(0), conn_init->key, conn_init->uplink_mark, conn_init->downlink_mark);
+            "%s Key '%s' inserted to flow_tree with uplink mark %u and downlink mark %u\n", H(0), conn_init->key, conn_init->uplink_vlan, conn_init->downlink_vlan);
 
     /*! store new entry in current struct */
     pkt->conn = conn_init;
     *conn = conn_init;
 
-    return OK;
+    result = OK;
+
+    done:
+    g_rw_lock_writer_unlock(&connlock);
+    g_free(key0);
+    g_free(key1);
+    g_free(key_with_port0);
+    g_free(key_with_port1);
+    return result;
 
 }
 
@@ -775,23 +847,23 @@ status_t update_conn(struct pkt_struct *pkt, struct conn_struct *conn,
         conn->count_data_pkt_from_intruder += 1;
 
         // Take the mark from the packet (if any) IFF we don't have one set yet
-        if (pkt->mark) {
-            if (!conn->uplink_mark)
-                conn->uplink_mark = pkt->mark;
-            else if (conn->uplink_mark != pkt->mark) {
+        if (pkt->vlan) {
+            if (!conn->uplink_vlan)
+                conn->uplink_vlan = pkt->vlan;
+            else if (conn->uplink_vlan != pkt->vlan) {
                 printdbg(
-                        "%s Packet mark (%u) doesn't match uplink mark previously set on connection (%u)!\n", H(conn->id), pkt->mark, conn->uplink_mark);
+                        "%s Packet mark (%u) doesn't match uplink mark previously set on connection (%u)!\n", H(conn->id), pkt->vlan, conn->uplink_vlan);
             }
         }
 
     } else if (pkt->origin == HIH) {
         // Take the mark from the packet (if any) IFF we don't have one set yet
-        if (pkt->mark) {
-            if (!conn->downlink_mark)
-                conn->downlink_mark = pkt->mark;
-            else if (conn->downlink_mark != pkt->mark) {
+        if (pkt->vlan) {
+            if (!conn->downlink_vlan)
+                conn->downlink_vlan = pkt->vlan;
+            else if (conn->downlink_vlan != pkt->vlan) {
                 printdbg(
-                        "%s Packet mark (%u) doesn't match uplink mark previously set on connection (%u)!\n", H(conn->id), pkt->mark, conn->uplink_mark);
+                        "%s Packet mark (%u) doesn't match uplink mark previously set on connection (%u)!\n", H(conn->id), pkt->vlan, conn->uplink_vlan);
             }
         }
     }
@@ -818,7 +890,7 @@ status_t expire_conn(gpointer key, struct conn_struct *conn,
     printdbg(
             "%s called with expiration delay on connection %u: %d\n", H(8), conn->id, delay);
 
-    if (NULL != g_tree_lookup(conn_tree, (char *) key)
+    if (NULL != g_tree_lookup(flow_tree, (char *) key)
             && ((curtime - conn->access_time > delay) || conn->state < INIT)) {
 
         /*! output final statistics about the connection */
@@ -864,18 +936,30 @@ status_t init_conn(struct pkt_struct *pkt, struct conn_struct **conn) {
  \param[in] key, a pointer to the current B-Tree key value stored in the pointer table
  \param[in] trash, user data, unused
  */
-void free_conn(gpointer key, __attribute__((unused))   gpointer unused) {
+void free_conn(gpointer key, __attribute__((unused))    gpointer unused) {
 
-    g_rw_lock_writer_lock(&conntreelock);
+    g_rw_lock_writer_lock(&connlock);
 
-    struct conn_struct *conn = (struct conn_struct *) g_tree_lookup(conn_tree,
+    struct conn_struct *conn = (struct conn_struct *) g_tree_lookup(flow_tree,
             key);
 
     if (conn) {
-        g_tree_steal(conn_tree, key);
+        g_tree_steal(flow_tree, key);
+
+        // Decrement the related conn reference count
+        struct related_conn *related = (struct related_conn *) g_tree_lookup(conn_tree, conn->key);
+        if(related) {
+            related->reference_count--;
+
+            // If this is the last one, free memory
+            if(related->reference_count == 0) {
+                g_tree_remove(conn_tree, conn->key);
+                related=NULL;
+            }
+        }
     }
 
-    g_rw_lock_writer_unlock(&conntreelock);
+    g_rw_lock_writer_unlock(&connlock);
 
     if (conn) {
 
@@ -934,25 +1018,28 @@ void clean() {
         // Wait for timeout or signal
         g_mutex_lock(&threading_cond_lock);
         sleep_cycle = g_get_monotonic_time() + 60 * G_TIME_SPAN_SECOND;
-        g_cond_wait_until(&threading_cond, &threading_cond_lock, sleep_cycle);
+        if (!g_cond_wait_until(&threading_cond, &threading_cond_lock,
+                sleep_cycle)) {
+
+            printdbg("%s cleaning\n", H(8));
+
+            /*! init the table*/
+            entrytoclean = g_ptr_array_new();
+
+            /*! call the clean function for each value */
+            g_rw_lock_reader_lock(&connlock);
+            g_tree_foreach(flow_tree, (GTraverseFunc) expire_conn, &delay);
+            g_rw_lock_reader_unlock(&connlock);
+
+            /*! remove each key listed from the btree */
+            g_ptr_array_foreach(entrytoclean, (GFunc) free_conn, NULL);
+
+            /*! free the array */
+            g_ptr_array_free(entrytoclean, TRUE);
+            entrytoclean = NULL;
+        }
+
         g_mutex_unlock(&threading_cond_lock);
-
-        printdbg("%s cleaning\n", H(8));
-
-        /*! init the table*/
-        entrytoclean = g_ptr_array_new();
-
-        /*! call the clean function for each value */
-        g_rw_lock_reader_lock(&conntreelock);
-        g_tree_foreach(conn_tree, (GTraverseFunc) expire_conn, &delay);
-        g_rw_lock_reader_unlock(&conntreelock);
-
-        /*! remove each key listed from the btree */
-        g_ptr_array_foreach(entrytoclean, (GFunc) free_conn, NULL);
-
-        /*! free the array */
-        g_ptr_array_free(entrytoclean, TRUE);
-        entrytoclean = NULL;
     }
 }
 
@@ -968,10 +1055,10 @@ status_t setup_redirection(struct conn_struct *conn, uint32_t hih_use) {
     }
 
     printdbg("%s [** Starting... **]\n", H(conn->id));
-    struct backend *back_handler = g_tree_lookup(conn->target->back_handlers,
+    struct handler *back_handler = g_tree_lookup(conn->target->back_handlers,
             &hih_use);
     struct interface *hihiface = back_handler->iface;
-    struct addr *hihaddr = hihiface->ip;
+    struct addr *hihaddr = back_handler->ip;
 
     if (hihaddr != NULL) {
         gchar **tmp;
@@ -990,9 +1077,9 @@ status_t setup_redirection(struct conn_struct *conn, uint32_t hih_use) {
         if (g_hash_table_lookup(high_redirection_table,
                 key_hih_ext->str) == NULL) {
 
-            /* Insert as value: conn->key_lih:conn->uplink_mark */
+            /* Insert as value: conn->key_lih:conn->uplink_vlan */
             GString *value = g_string_new("");
-            g_string_printf(value, "%s:%u", conn->key_lih, conn->uplink_mark);
+            g_string_printf(value, "%s:%u", conn->key_lih, conn->uplink_vlan);
 
             g_hash_table_insert(high_redirection_table,
                     g_strdup(key_hih_ext->str), g_strdup(value->str));
@@ -1043,7 +1130,7 @@ status_t setup_redirection(struct conn_struct *conn, uint32_t hih_use) {
 
         while (current && current->origin == EXT) {
 
-            forward(current);
+            forward_ext(current);
 
             conn->replay_id++;
             current = (struct pkt_struct*) g_slist_nth_data(conn->BUFFER,

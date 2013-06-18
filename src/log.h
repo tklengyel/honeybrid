@@ -29,34 +29,14 @@
 #include "globals.h"
 
 #define L(sdata,ddata,level,id) \
-	if (0 != honeylog(sdata,ddata,level,id)) \
-	{g_printerr("******LOG ENGINE ERROR******\n");}
+    if (0 != honeylog(sdata,ddata,level,id)) \
+    {g_print("******LOG ENGINE ERROR******\n");}
+#define H(id)               log_header(__func__, id)
 
-#define printdbg(...) \
-    if(debug) { \
-    	g_mutex_lock(&log_header_lock); \
-    	g_printerr (__VA_ARGS__); \
-    	g_mutex_unlock(&log_header_lock); \
-    }
+#define printdbg(...) g_printerr(__VA_ARGS__)
 
-// Should only be used with printerr()
-#define H(id) log_header(__func__, id)
-static inline const char* log_header(const char* function_name, int id) {
-    struct tm *tm;
-    struct timeval tv;
-    struct timezone tz;
-    gettimeofday(&tv, &tz);
-    tm = localtime(&tv.tv_sec);
-    if (tm == NULL) {
-        perror("localtime");
-        return '\0';
-    }
-    snprintf(log_header_string, 200,
-            "%d-%02d-%02d %02d:%02d:%02d.%.6d;%6u;%s:\t", (1900 + tm->tm_year),
-            (1 + tm->tm_mon), tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec,
-            (int) tv.tv_usec, id, function_name);
-    return log_header_string;
-}
+const char* log_header(const char* function_name, int id);
+const char* now(void);
 
 status_t honeylog(char *sdata, char *ddata, log_verbosity_t level, unsigned id);
 

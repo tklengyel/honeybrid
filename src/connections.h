@@ -29,8 +29,9 @@
 
 status_t switch_state(struct conn_struct *conn, int new_state);
 
-status_t init_pkt(const unsigned char *nf_packet, struct pkt_struct **pk,
-		uint32_t mark, uint32_t nfq_packet_id);
+status_t init_pkt(struct interface *iface, uint16_t ethertype,
+        const struct pcap_pkthdr *header, const u_char *packet,
+        struct pkt_struct **pkt_out);
 
 void free_pkt(struct pkt_struct *pkt);
 
@@ -39,7 +40,7 @@ status_t store_pkt(struct conn_struct *conn, struct pkt_struct *pkt);
 status_t init_conn(struct pkt_struct *pkt, struct conn_struct **conn);
 
 status_t expire_conn(gpointer key, struct conn_struct *cur_conn,
-		gint *expiration_delay);
+        gint *expiration_delay);
 
 void free_conn(gpointer key, gpointer trash);
 

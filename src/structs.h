@@ -27,35 +27,39 @@
 #include "types.h"
 
 /*!
- \def backend
- \brief structure to hold backend information (id, decision rule and interface information)
+ \def handler
+ \brief structure to hold target handler information (decision rule and interface information)
  */
-struct backend {
-    const uint32_t id;
+struct handler {
+    struct addr *ip;
+    char *ip_str;
+    struct addr *mac;
     struct node *rule;
     struct interface *iface;
 };
 
-void free_backend(struct backend *);
+void free_handler(struct handler *);
 
 /*!
  \def target
  \brief structure to hold target information: PCAP filter and rules to accept/forward/redirect/control packets
  */
 struct target {
-    struct bpf_program *filter; /* PCAP compiled filter to select packets for this target */
-    struct addr *front_handler; /* Honeypot IP address(es) handling the first response (front end) */
-    struct node *front_rule; /* Rules of decision modules to accept packet to be handled by the frontend */
-    GTree *back_handlers; /* Honeypot backends handling the second response with key: hihID, value: struct backend */
+    struct interface *default_route; /* Default interface to send upstream packets on */
+    struct handler *front_handler;
+    GTree *back_handlers; /* Honeypot backends handling the second response with key: hihID, value: struct handler */
     uint32_t back_handler_count; /* Number of backends defined in the GTree */
     GHashTable *unique_backend_ips; /* Unique backend IPs of back_handlers */
     struct node *back_picker; /* Rule(s) to pick which backend to use (such as VM name, etc.) */
     struct node *control_rule; /* Rules of decision modules to limit outbound packets from honeypots */
-    uint32_t backends; /* Number of backends specified */
 };
 
-void free_target(gpointer data);
-void free_target_gfunc(struct target *, gpointer user_data);
+void free_target(struct target *t);
+
+struct related_conn {
+    uint32_t reference_count;
+    struct target *target;
+};
 
 /*!
  \def ethernet_hdr
@@ -79,6 +83,9 @@ struct ethernet_hdr {
 struct packet {
     union {
         const struct ether_header *eth;
+        const struct vlan_ethhdr *vlan_eth;
+    };
+    union {
         const struct iphdr *ip;
         const struct tcp_packet *tcppacket;
         const struct udp_packet *udppacket;
@@ -143,12 +150,25 @@ struct udp_packet {
  */
 struct interface {
     char *name; // like "eth0"
-    struct addr *ip;
-    char *ip_str;
     char *tag; // like "main"
+    char *filter;
+
+    int promisc;
+    int id;
+
+    struct addr *ip;
+    bpf_u_int32 netmask; /* subnet mask  */
+    bpf_u_int32 ip_network; /* ip network */
+    struct addr *mac;
+
+    pcap_t *pcap;
+    GThread *pcap_looper;
+    struct bpf_program pcap_filter;
+
+    //TODO: deprecate
+    int mark;
     int tcp_socket;
     int udp_socket;
-    int mark;
 };
 
 void free_interface(struct interface *iface);
@@ -186,6 +206,24 @@ struct expected_data_struct {
     const char* payload;
 };
 
+/*! vlan_ethhdr
+ * Stolen from the Linux kernel header linux/if_vlan.h
+ * struct vlan_ethhdr - vlan ethernet header (ethhdr + vlan_hdr)
+ *      @h_dest: destination ethernet address
+ *      @h_source: source ethernet address
+ *      @h_vlan_proto: ethernet protocol (always 0x8100)
+ *      @h_vlan_TCI: priority and VLAN ID
+ *      @h_vlan_encapsulated_proto: packet type ID or len
+ */
+#define VLAN_ETH_HLEN   18      /* Total octets in header.   */
+struct vlan_ethhdr {
+    unsigned char   h_dest[ETH_ALEN];
+    unsigned char   h_source[ETH_ALEN];
+    __be16          h_vlan_proto;
+    __be16          h_vlan_TCI;
+    __be16          h_vlan_encapsulated_proto;
+} __attribute__ ((__packed__));
+
 /*! custom_conn_data
  \brief Extra information to be attached to a conn_struct by a module
 
@@ -219,6 +257,11 @@ struct conn_struct {
     char *key;
     char *key_ext;
     char *key_lih;
+
+    char *key_with_port;
+    char *key_ext_with_port;
+    char *key_lih_with_port;
+
     uint8_t protocol;
     GString *start_timestamp;
     gdouble start_microtime;
@@ -238,7 +281,12 @@ struct conn_struct {
     GSList *BUFFER;
     struct expected_data_struct expected_data;
     GRWLock lock;
+
+    __be32 original_src;
+    __be32 original_dst;
+
     struct hih_struct hih;
+
     origin_t initiator; // who initiated the conn? EXT/LIH/HIH
 
     struct target *target;
@@ -254,8 +302,8 @@ struct conn_struct {
     replay_problem_t replay_problem;
     int invalid_problem; //unused
 
-    uint32_t uplink_mark; // adding support for multiple uplinks
-    uint32_t downlink_mark; // adding support for multiple backends on separate bridges
+    uint32_t uplink_vlan; // adding support for multiple uplinks
+    uint32_t downlink_vlan; // adding support for multiple backends on separate bridges
 
     GSList *custom_data; // allow custom data to be assigned to the connection by modules
                          // the list elements have to point to struct custom_conn_data
@@ -278,17 +326,28 @@ struct pkt_struct {
     struct packet packet;
     origin_t origin;
     int data;
-    int size;
+    uint32_t size;
     int DE;
     struct conn_struct * conn;
+
     char *key_src;
     char *key_dst;
+    char *key_src_with_port;
+    char *key_dst_with_port;
     char *key;
+    char *key_with_port;
     int position; // position in the connection queue
 
+    __be16 vlan_in;
+    __be16 vlan_out;
+
+    struct interface *in;
+    struct interface *out;
+
     gboolean last; // last packet to be pushed in the queue
-    uint32_t nfq_packet_id; // the nfq packet id of this packet
-    uint32_t mark; // ip mark (can be used for custom routing/tagging)
+
+    //TODO: Deprecate
+    uint32_t vlan;
 }__attribute__ ((packed));
 
 /*! \brief Structure to pass arguments to the Decision Engine
@@ -300,16 +359,6 @@ struct DE_submit_args {
     int packetposition;
 };
 
-/*! \brief Structure to receive verdict from process_packet in nfq_cb
- \param statement, 0 for reject, 1 for accept
- \param mark, the netfilter mark to set on the packet (if any)
- */
-
-struct verdict {
-    status_t statement;
-    u_int32_t mark;
-};
-
 /*!
  \def mod_args
  *
@@ -317,7 +366,7 @@ struct verdict {
  */
 struct mod_args {
     const struct node *node;
-    const struct pkt_struct *pkt;
+    struct pkt_struct *pkt;
     const uint32_t backend_test;
     uint32_t backend_use;
 };
@@ -347,7 +396,7 @@ struct node {
  \brief structure to hold decision input/output of the DE engine
  */
 struct decision_holder {
-    const struct pkt_struct *pkt;
+    struct pkt_struct *pkt;
     struct node *node;
     uint32_t backend_test;
     uint32_t backend_use;

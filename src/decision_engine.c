@@ -279,9 +279,9 @@ void get_decision(struct decision_holder *decision) {
     }
 }
 
-int get_decision_backend(gpointer key, gpointer value, gpointer data) {
-    struct decision_holder *decision = (struct decision_holder *) data;
-    struct backend *back_handler = (struct backend *) value;
+int get_decision_backend(gpointer key, struct handler * back_handler, struct decision_holder * decision) {
+    //struct decision_holder *decision = (struct decision_holder *) data;
+    //struct handler *back_handler = (struct handler *) value;
     decision->backend_test = *(uint32_t *) key;
     decision->node = back_handler->rule;
     get_decision(decision);
@@ -314,7 +314,7 @@ status_t DE_process_packet(struct pkt_struct *pkt) {
 
     switch (pkt->conn->state) {
         case INIT:
-            decision.node = (struct node *) pkt->conn->target->front_rule;
+            decision.node = (struct node *) pkt->conn->target->front_handler->rule;
             get_decision(&decision);
 
             /* If we're in INIT, we need to get ACCEPT or REJECT from the frontend definition of the target */
@@ -335,8 +335,8 @@ status_t DE_process_packet(struct pkt_struct *pkt) {
                     printdbg(
                             "%s Global backend rule gave us a HIH: %u\n", H(pkt->conn->id), decision.backend_use);
 
-                    struct backend *back_handler =
-                            (struct backend *) g_tree_lookup(
+                    struct handler *back_handler =
+                            (struct handler *) g_tree_lookup(
                                     pkt->conn->target->back_handlers,
                                     &(decision.backend_use));
 
