@@ -34,6 +34,7 @@
 #include <stdarg.h>
 #include <glib/gprintf.h>
 
+#include "constants.h"
 #include "globals.h"
 #include "structs.h"
 #include "convenience.h"
@@ -104,8 +105,7 @@ now(void) {
 status_t honeylog(char *sdata, char *ddata, log_verbosity_t level, unsigned id) {
     /*!filter events upon their log level*/
     if (level > LOG_LEVEL) {
-        if (ddata != NULL)
-            free(ddata);
+        if (ddata != NULL) free(ddata);
     } else {
         struct tm *tm;
         struct timeval tv;
@@ -144,13 +144,12 @@ status_t honeylog(char *sdata, char *ddata, log_verbosity_t level, unsigned id) 
 
 int open_debug_log(void) {
     int fd;
-    if (0 != chdir(CONFIG_REQUIRED("log_directory")))
-        errx(1, "%s: can't change directory", __func__);
+    if (0 != chdir(CONFIG_REQUIRED("log_directory"))) errx(1,
+            "%s: can't change directory", __func__);
     if ((fd = open(CONFIG_REQUIRED("debug_file"), O_CREAT | O_WRONLY | O_APPEND,
-            0744)) == -1)
-        err(1, "%s: open", __func__);
-    if (0 != chdir(CONFIG_REQUIRED("exec_directory")))
-        warnx("%s: can't change directory", __func__);
+            0744)) == -1) err(1, "%s: open", __func__);
+    if (0 != chdir(CONFIG_REQUIRED("exec_directory"))) warnx(
+            "%s: can't change directory", __func__);
     return fd;
 }
 
@@ -252,8 +251,8 @@ void rotate_connection_log(int signal_nb) {
                 logfile_name->str, new_name->str);
         L(NULL, logbuf, LOG_HIGH, LOG_LOG);
 
-        if (chdir(CONFIG_REQUIRED("log_directory")) < 0)
-            errx(1, "Failed to chdir to log_directory!\n");
+        if (chdir(CONFIG_REQUIRED("log_directory")) < 0) errx(1,
+                "Failed to chdir to log_directory!\n");
 
         if (rename(logfile_name->str, new_name->str)) {
             L("rotate_connection_log()\tERROR: can't rename log file!\n", NULL,
@@ -263,8 +262,8 @@ void rotate_connection_log(int signal_nb) {
         //i = open(logfile_name, O_RDWR | O_CREAT, 0640);
         logfd = fopen(CONFIG_REQUIRED("log_file"), (char *) "a");
 
-        if (chdir(CONFIG_REQUIRED("exec_directory")) < 0)
-            errx(1, "Failed to chdir to exec_directory!\n");
+        if (chdir(CONFIG_REQUIRED("exec_directory")) < 0) errx(1,
+                "Failed to chdir to exec_directory!\n");
 
         ///g_free(logfile_name);
         ///free(new_name);
@@ -329,47 +328,6 @@ void connection_log(const struct conn_struct *conn) {
         rotate_connection_log(0);
     }
 
-    GString *proto = g_string_new("");
-    switch (conn->protocol) {
-        case 6:
-            g_string_printf(proto, "TCP");
-            break;
-        case 17:
-            g_string_printf(proto, "UDP");
-            break;
-        default:
-            g_string_printf(proto, "%d", conn->protocol);
-            break;
-    }
-
-    GString *status = g_string_new("");
-    switch (conn->state) {
-        case INIT:
-            g_string_printf(status, "INIT");
-            break;
-        case DECISION:
-            g_string_printf(status, "DECISION");
-            break;
-        case REPLAY:
-            g_string_printf(status, "REPLAY");
-            break;
-        case FORWARD:
-            g_string_printf(status, "FORWARD");
-            break;
-        case PROXY:
-            g_string_printf(status, "PROXY");
-            break;
-        case DROP:
-            g_string_printf(status, "DROP");
-            break;
-        case CONTROL:
-            g_string_printf(status, "CONTROL");
-            break;
-        default:
-            g_string_printf(status, "INVALID");
-            break;
-    }
-
     conn_status_t i;
     GString *status_info[6];
     gdouble lasttime = conn->start_microtime;
@@ -395,12 +353,9 @@ void connection_log(const struct conn_struct *conn) {
                         conn->stat_packet[i], conn->stat_byte[i]);
             }
         } else {
-            if (i == REPLAY)
-                g_string_printf(status_info[i], ".|.|.|.");
-            else if (i == DECISION)
-                g_string_printf(status_info[i], ".|.");
-            else
-                g_string_printf(status_info[i], ".|.|.");
+            if (i == REPLAY) g_string_printf(status_info[i], ".|.|.|.");
+            else if (i == DECISION) g_string_printf(status_info[i], ".|.");
+            else g_string_printf(status_info[i], ".|.|.");
         }
     }
 
@@ -409,18 +364,21 @@ void connection_log(const struct conn_struct *conn) {
 
     /*! Output according to the format configured */
     if (output == OUTPUT_MYSQL) {
-        log_mysql(conn, proto, status, status_info, total_duration);
+        log_mysql(conn, lookup_proto(conn->protocol), lookup_state(conn->state),
+                status_info, total_duration);
     } else if (output == OUTPUT_STDOUT || output == OUTPUT_LOGFILES) {
         if (NULL != CONFIG("log_format")
                 && !strcmp(CONFIG("log_format"), "csv")) {
-            log_csv(conn, proto, status, status_info, total_duration, output);
+            log_csv(conn, lookup_proto(conn->protocol),
+                    lookup_state(conn->state), status_info, total_duration,
+                    output);
         } else {
-            log_std(conn, proto, status, status_info, total_duration, output);
+            log_std(conn, lookup_proto(conn->protocol),
+                    lookup_state(conn->state), status_info, total_duration,
+                    output);
         }
     }
 
-    g_string_free(proto, TRUE);
-    g_string_free(status, TRUE);
     g_string_free(status_info[INIT], TRUE);
     g_string_free(status_info[DECISION], TRUE);
     g_string_free(status_info[REPLAY], TRUE);
@@ -429,12 +387,12 @@ void connection_log(const struct conn_struct *conn) {
 
 }
 
-status_t log_csv(const struct conn_struct *conn, const GString *proto,
-        const GString *status, GString **status_info, gdouble duration,
+status_t log_csv(const struct conn_struct *conn, const char *proto,
+        const char *status, GString **status_info, gdouble duration,
         output_t output) {
 
     gchar **tuple;
-    tuple = g_strsplit(conn->key, ":", 0);
+    tuple = g_strsplit(conn->key_with_port, ":", 0);
 
     int log_size = snprintf(NULL, 0,
 #ifdef HAVE_XMPP
@@ -442,9 +400,9 @@ status_t log_csv(const struct conn_struct *conn, const GString *proto,
 #else
             "%s,%.3f,%d,%s,%s,%s,%s,%s,%d,%d,%s,%d,%s,%s,%s,%s,%s,%s\n",
 #endif
-            conn->start_timestamp->str, duration, conn->uplink_vlan, proto->str,
+            conn->start_timestamp->str, duration, conn->uplink_vlan, proto,
             tuple[0], tuple[1], tuple[2], tuple[3], conn->total_packet,
-            conn->total_byte, status->str, conn->id,
+            conn->total_byte, status, conn->id,
             //status_info[INVALID]->str,
             status_info[INIT]->str, status_info[DECISION]->str,
             status_info[REPLAY]->str, status_info[FORWARD]->str,
@@ -465,9 +423,9 @@ status_t log_csv(const struct conn_struct *conn, const GString *proto,
 #else
             "%s,%.3f,%d,%s,%s,%s,%s,%s,%d,%d,%s,%d,%s,%s,%s,%s,%s,%s\n",
 #endif
-            conn->start_timestamp->str, duration, conn->uplink_vlan, proto->str,
+            conn->start_timestamp->str, duration, conn->uplink_vlan, proto,
             tuple[0], tuple[1], tuple[2], tuple[3], conn->total_packet,
-            conn->total_byte, status->str, conn->id,
+            conn->total_byte, status, conn->id,
             //status_info[INVALID]->str,
             status_info[INIT]->str, status_info[DECISION]->str,
             status_info[REPLAY]->str, status_info[FORWARD]->str,
@@ -480,10 +438,8 @@ status_t log_csv(const struct conn_struct *conn, const GString *proto,
 #endif
             );
 
-    if (output == OUTPUT_STDOUT)
-        printf("%s", logbuf);
-    else if (output == OUTPUT_LOGFILES)
-        fprintf(logfd, "%s", logbuf);
+    if (output == OUTPUT_STDOUT) printf("%s", logbuf);
+    else if (output == OUTPUT_LOGFILES) fprintf(logfd, "%s", logbuf);
 
     free(logbuf);
     g_strfreev(tuple);
@@ -491,23 +447,37 @@ status_t log_csv(const struct conn_struct *conn, const GString *proto,
     return OK;
 }
 
-status_t log_std(const struct conn_struct *conn, const GString *proto,
-        const GString *status, GString **status_info, gdouble duration,
+status_t log_std(const struct conn_struct *conn, const char *proto,
+        const char *status, GString **status_info, gdouble duration,
         output_t output) {
 
-    gchar **tuple;
-    tuple = g_strsplit(conn->key, ":", 0);
+    char src[INET_ADDRSTRLEN];
+    char dst[INET_ADDRSTRLEN];
+    uint16_t src_port;
+    uint16_t dst_port;
+
+    if(conn->initiator==EXT) {
+        inet_ntop(AF_INET, &(conn->first_pkt_src_ip.addr_ip), src, INET_ADDRSTRLEN);
+        inet_ntop(AF_INET, &(conn->first_pkt_dst_ip.addr_ip), dst, INET_ADDRSTRLEN);
+        src_port = conn->first_pkt_src_port;
+        dst_port = conn->first_pkt_dst_port;
+    } else {
+        inet_ntop(AF_INET, &(conn->first_pkt_dst_ip.addr_ip), src, INET_ADDRSTRLEN);
+        inet_ntop(AF_INET, &(conn->first_pkt_src_ip.addr_ip), dst, INET_ADDRSTRLEN);
+        src_port = conn->first_pkt_dst_port;
+        dst_port = conn->first_pkt_src_port;
+    }
 
     int log_size =
             snprintf(NULL, 0,
 #ifdef HAVE_XMPP
-                    "%s %.3f %d %s %s:%s -> %s:%s %d %d %s ** %d %s %s %s %s %s [%s] | %i %i\n",
+                    "%s %.3f %d %s %s:%u -> %s:%u %d %d %s ** %d %s %s %s %s %s [%s] | %i %i\n",
 #else
-                    "%s %.3f %d %s %s:%s -> %s:%s %d %d %s ** %d %s %s %s %s %s [%s]\n",
+                    "%s %.3f %s %s:%u -> %s:%u %d %d %s ** %d %s %s %s %s %s [%s]\n",
 #endif
-                    conn->start_timestamp->str, duration, conn->uplink_vlan,
-                    proto->str, tuple[0], tuple[1], tuple[2], tuple[3],
-                    conn->total_packet, conn->total_byte, status->str, conn->id,
+                    conn->start_timestamp->str, duration, proto, src,
+                    src_port, dst, dst_port, conn->total_packet,
+                    conn->total_byte, status, conn->id,
                     //status_info[INVALID]->str,
                     status_info[INIT]->str, status_info[DECISION]->str,
                     status_info[REPLAY]->str, status_info[FORWARD]->str,
@@ -525,13 +495,12 @@ status_t log_std(const struct conn_struct *conn, const GString *proto,
 
     sprintf(logbuf,
 #ifdef HAVE_XMPP
-            "%s %.3f %d %s %s:%s -> %s:%s %d %d %s ** %d %s %s %s %s %s [%s] | %i %i \n",
+            "%s %.3f %d %s %s:%u -> %s:%u %d %d %s ** %d %s %s %s %s %s [%s] | %i %i\n",
 #else
-            "%s %.3f %d %s %s:%s -> %s:%s %d %d %s ** %d %s %s %s %s %s [%s]\n",
+            "%s %.3f %s %s:%u -> %s:%u %d %d %s ** %d %s %s %s %s %s [%s]\n",
 #endif
-            conn->start_timestamp->str, duration, conn->uplink_vlan, proto->str,
-            tuple[0], tuple[1], tuple[2], tuple[3], conn->total_packet,
-            conn->total_byte, status->str, conn->id,
+            conn->start_timestamp->str, duration, proto, src, src_port, dst,
+            dst_port, conn->total_packet, conn->total_byte, status, conn->id,
             //status_info[INVALID]->str,
             status_info[INIT]->str, status_info[DECISION]->str,
             status_info[REPLAY]->str, status_info[FORWARD]->str,
@@ -544,13 +513,10 @@ status_t log_std(const struct conn_struct *conn, const GString *proto,
 #endif
             );
 
-    if (output == OUTPUT_STDOUT)
-        printf("%s", logbuf);
-    else
-        g_fprintf(logfd, "%s", logbuf);
+    if (output == OUTPUT_STDOUT) printf("%s", logbuf);
+    else g_fprintf(logfd, "%s", logbuf);
 
     free(logbuf);
-    g_strfreev(tuple);
 
     return OK;
 }
@@ -591,15 +557,15 @@ status_t init_mysql_log() {
     }
 }
 
-status_t log_mysql(const struct conn_struct *conn, const GString *proto,
-        const GString *status, GString **status_info, gdouble duration) {
+status_t log_mysql(const struct conn_struct *conn, const char *proto,
+        const char *status, GString **status_info, gdouble duration) {
 
     status_t ret = OK;
 
     if (init_mysql_log() == 0) {
 
         gchar **tuple;
-        tuple = g_strsplit(conn->key, ":", 0);
+        tuple = g_strsplit(conn->key_with_port, ":", 0);
 
         int log_size = snprintf(NULL, 0, "INSERT INTO honeybrid VALUES ("
                 "'',"
@@ -613,12 +579,13 @@ status_t log_mysql(const struct conn_struct *conn, const GString *proto,
 #ifdef HAVE_XMPP
                 ",%i,%i"
 #endif
-                ");", conn->start_microtime, duration, (int) conn->uplink_vlan,
-                proto->str, tuple[0], tuple[1], tuple[2], tuple[3],
-                conn->total_packet, conn->total_byte, status->str, conn->id,
-                status_info[INIT]->str, status_info[DECISION]->str,
-                status_info[REPLAY]->str, status_info[FORWARD]->str,
-                status_info[PROXY]->str,
+                ");",
+
+        conn->start_microtime, duration, (int) conn->uplink_vlan, proto,
+                tuple[0], tuple[1], tuple[2], tuple[3], conn->total_packet,
+                conn->total_byte, status, conn->id, status_info[INIT]->str,
+                status_info[DECISION]->str, status_info[REPLAY]->str,
+                status_info[FORWARD]->str, status_info[PROXY]->str,
                 (conn->custom_data ? custom_conn_data(conn->custom_data) : "-")
 #ifdef HAVE_XMPP
                 conn->dionaeaDownload, conn->dionaeaDownloadTime
@@ -640,8 +607,8 @@ status_t log_mysql(const struct conn_struct *conn, const GString *proto,
                 ",%i,%i"
 #endif
                 ");", conn->start_microtime, duration, (int) conn->uplink_vlan,
-                proto->str, tuple[0], tuple[1], tuple[2], tuple[3],
-                conn->total_packet, conn->total_byte, status->str, conn->id,
+                proto, tuple[0], tuple[1], tuple[2], tuple[3],
+                conn->total_packet, conn->total_byte, status, conn->id,
                 status_info[INIT]->str, status_info[DECISION]->str,
                 status_info[REPLAY]->str, status_info[FORWARD]->str,
                 status_info[PROXY]->str,
@@ -668,8 +635,8 @@ status_t init_mysql_log() {
 }
 
 status_t log_mysql(__attribute__((unused)) const struct conn_struct *conn,
-        __attribute__((unused)) const GString *proto,
-        __attribute__((unused)) const GString *status,
+        __attribute__((unused)) const char *proto,
+        __attribute__((unused)) const char *status,
         __attribute__((unused)) GString **status_info,
         __attribute__((unused)) gdouble duration) {
     return NOK;

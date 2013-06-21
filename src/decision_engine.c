@@ -310,7 +310,7 @@ status_t DE_process_packet(struct pkt_struct *pkt) {
 
     status_t result = NOK;
 
-    printdbg("%s Packet pushed to DE: %s\n", H(pkt->conn->id), pkt->conn->key);
+    printdbg("%s Packet pushed to DE: %s\n", H(pkt->conn->id), pkt->conn->key_with_port);
 
     switch (pkt->conn->state) {
         case INIT:

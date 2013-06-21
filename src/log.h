@@ -54,15 +54,15 @@ void rotate_connection_log(int signal_nb);
 //void connection_stat(struct conn_struct *conn);
 void connection_log();
 
-status_t log_mysql(const struct conn_struct *conn, const GString *proto,
-        const GString *status, GString **status_info, gdouble duration);
+status_t log_mysql(const struct conn_struct *conn, const char *proto,
+        const char *status, GString **status_info, gdouble duration);
 
-status_t log_csv(const struct conn_struct *conn, const GString *proto,
-        const GString *status, GString **status_info, gdouble duration,
+status_t log_csv(const struct conn_struct *conn, const char *proto,
+        const char *status, GString **status_info, gdouble duration,
         output_t output);
 
-status_t log_std(const struct conn_struct *conn, const GString *proto,
-        const GString *status, GString **status_info, gdouble duration,
+status_t log_std(const struct conn_struct *conn, const char *proto,
+        const char *status, GString **status_info, gdouble duration,
         output_t output);
 
 status_t init_mysql_log();

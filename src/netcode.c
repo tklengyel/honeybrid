@@ -45,7 +45,8 @@
 /*! ip_checksum
  \brief IP checksum using in_cksum
  */
-#define ip_checksum(hdr) \
+#define set_ip_checksum(hdr) \
+    ((struct iphdr*)hdr)->check = 0; \
 	((struct iphdr*)hdr)->check = \
 		in_cksum(hdr, \
 		sizeof(struct iphdr))
@@ -53,10 +54,18 @@
 /*! udp_checksum
  \brief UDP checksum using in_cksum
  */
-#define udp_checksum(hdr) \
+#define set_udp_checksum(hdr) \
+    ((struct udp_packet *)hdr)->udp.check = 0; \
 	((struct udp_packet *)hdr)->udp.check = \
 		in_cksum( hdr, \
         sizeof(struct udphdr))
+
+/*! udp_checksum
+ \brief UDP checksum using in_cksum
+ */
+#define set_tcp_checksum(hdr) \
+    ((struct tcp_packet *)hdr)->tcp.check = 0; \
+    ((struct tcp_packet *)hdr)->tcp.check = tcp_checksum(hdr)
 
 /*! in_cksum
  \brief Checksum routine for Internet Protocol family headers
@@ -121,10 +130,9 @@ void set_iface_info(struct interface *iface) {
         exit(1);
     }
     struct sockaddr_in* source_ip_addr = (struct sockaddr_in*) &ifr.ifr_addr;
-    iface->ip=g_malloc0(sizeof(struct addr));
-    addr_pack(iface->ip, ADDR_TYPE_IP, 0, &(source_ip_addr->sin_addr.s_addr), sizeof(uint32_t));
+    addr_pack(&iface->ip, ADDR_TYPE_IP, 0, &(source_ip_addr->sin_addr.s_addr), sizeof(uint32_t));
 
-    // Obtain the source MAC address, copy into Ethernet header and ARP request.
+    // Obtain the source MAC address, copy into Ethernet header
     if (ioctl(fd, SIOCGIFHWADDR, &ifr) == -1) {
         perror(0);
         close(fd);
@@ -137,44 +145,52 @@ void set_iface_info(struct interface *iface) {
     }
     close(fd);
 
-    iface->mac = g_malloc0(sizeof(struct addr));
-    addr_pack(iface->mac, ADDR_TYPE_ETH, 0, ifr.ifr_hwaddr.sa_data, ETH_ALEN);
+    addr_pack(&iface->mac, ADDR_TYPE_ETH, 0, ifr.ifr_hwaddr.sa_data, ETH_ALEN);
 }
 
+/*
+ * Sends ARP reply to all ARP requests with the receiving interface's MAC.
+ * We don't reply to the interface's IP as that will be handled by the OS and no need to duplicate replies.
+ *
+ * This is a bit invasive and ettercap-like, so it's not very nice to use on a production lan..
+ */
 void send_arp_reply(struct interface *iface, const u_char *packet) {
 
-    struct ether_header *eth = (struct ether_header *)packet;
-    struct ether_arp *request= (struct ether_arp *)(packet + ETHER_HDR_LEN);
+    //struct ether_header *eth = (struct ether_header *) packet;
+    struct ether_arp *request = (struct ether_arp *) (packet + ETHER_HDR_LEN);
 
-    // Construct Ethernet header.
-    struct ether_header header;
-    header.ether_type = htons(ETH_P_ARP);
-    memcpy(&header.ether_shost, &iface->mac->addr_eth, sizeof(header.ether_shost));
-    memcpy(&header.ether_dhost, &request->arp_sha, sizeof(header.ether_dhost));
+    // Only reply to ARP requests that don't match our interface's IP
+    if (request->ea_hdr.ar_op == htons(ARPOP_REQUEST) && *(ip_addr_t *)request->arp_tpa != iface->ip.addr_ip) {
 
-    // Construct ARP reply
-    struct ether_arp reply;
-    reply.arp_hrd = htons(ARPHRD_ETHER);
-    reply.arp_pro = htons(ETH_P_IP);
-    reply.arp_hln = ETHER_ADDR_LEN;
-    reply.arp_pln = sizeof(in_addr_t);
-    reply.arp_op = htons(ARPOP_REPLY);
-    memcpy(&reply.arp_sha, &iface->mac->addr_eth, sizeof(reply.arp_sha));
+        unsigned char frame[ETHER_HDR_LEN + sizeof(struct ether_arp)];
 
-    // Copy IP into ARP reply.
-    memcpy(&reply.arp_spa, &request->arp_tpa, sizeof(reply.arp_spa));
-    memcpy(&reply.arp_tpa, &request->arp_spa, sizeof(reply.arp_tpa));
+        // Construct Ethernet header.
+        struct ether_header *header = (struct ether_header *)frame;
+        header->ether_type = htons(ETH_P_ARP);
+        memcpy(&header->ether_shost, &iface->mac.addr_eth,
+                sizeof(header->ether_shost));
+        memcpy(&header->ether_dhost, &request->arp_sha,
+                sizeof(header->ether_dhost));
 
-    // Combine the Ethernet header and ARP request into a contiguous block.
-    unsigned char frame[ETHER_HDR_LEN + sizeof(struct ether_arp)];
-    memcpy(frame, &header, ETHER_HDR_LEN);
-    memcpy(frame + ETHER_HDR_LEN, &reply, sizeof(struct ether_arp));
+        // Construct ARP reply
+        struct ether_arp *reply = (struct ether_arp *) (frame + ETHER_HDR_LEN);;
+        reply->arp_hrd = htons(ARPHRD_ETHER);
+        reply->arp_pro = htons(ETH_P_IP);
+        reply->arp_hln = ETHER_ADDR_LEN;
+        reply->arp_pln = sizeof(in_addr_t);
+        reply->arp_op = htons(ARPOP_REPLY);
+        memcpy(&reply->arp_sha, &iface->mac.addr_eth, sizeof(reply->arp_sha));
 
-    // Write the Ethernet frame to the interface.
-    if (pcap_inject(iface->pcap, frame, sizeof(frame)) == -1) {
-        printdbg("%s ARP reply injection failed!\n", H(5));
-    } else {
-        printdbg("%s Sent ARP reply!\n", H(5));
+        // Copy IP into ARP reply.
+        memcpy(&reply->arp_spa, &request->arp_tpa, sizeof(reply->arp_spa));
+        memcpy(&reply->arp_tpa, &request->arp_spa, sizeof(reply->arp_tpa));
+
+        // Write the Ethernet frame to the interface.
+        if (pcap_inject(iface->pcap, frame, sizeof(frame)) == -1) {
+            printdbg("%s ARP reply injection failed!\n", H(5));
+        } else {
+            printdbg("%s Sent ARP reply!\n", H(5));
+        }
     }
 }
 
@@ -184,9 +200,7 @@ void send_arp_reply(struct interface *iface, const u_char *packet) {
  \return OK
  */
 static inline
-void tcp_checksum(struct tcp_packet* pkt) {
-
-    //int padd = (pkt->ip.tot_len) & 1;
+uint16_t tcp_checksum(struct tcp_packet* pkt) {
 
     struct tcp_chk_packet chk_p;
     bzero(&chk_p, sizeof(struct tcp_chk_packet));
@@ -196,10 +210,6 @@ void tcp_checksum(struct tcp_packet* pkt) {
     unsigned short TCPHDRDATA_SIZE = TOT_SIZE - IPHDR_SIZE;
     unsigned short len_tcp = TCPHDRDATA_SIZE;
 
-    if (len_tcp - sizeof(struct tcphdr) >= BUFSIZE)
-        printdbg(
-                "%s TCP data is greater then our buffer size! %lu > %i!\n", H(0), len_tcp - sizeof(struct tcphdr), BUFSIZE);
-
     chk_p.pseudohdr.saddr = pkt->ip.saddr;
     chk_p.pseudohdr.daddr = pkt->ip.daddr;
     chk_p.pseudohdr.proto = IPPROTO_TCP;
@@ -207,11 +217,8 @@ void tcp_checksum(struct tcp_packet* pkt) {
 
     memcpy(&chk_p.tcp, &pkt->tcp, sizeof(struct tcphdr));
     memcpy(&chk_p.payload, &pkt->payload, len_tcp - sizeof(struct tcphdr));
-    chk_p.tcp.check = 0x00; // checksum field has to be zeroed before checksum
 
-    pkt->tcp.check = in_cksum(&chk_p, sizeof(struct pseudotcphdr) + len_tcp);
-
-    printdbg("%s TCP checksum set to 0x%x\n", H(21), pkt->tcp.check);
+    return in_cksum(&chk_p, sizeof(struct pseudotcphdr) + len_tcp);
 }
 
 /*
@@ -412,56 +419,32 @@ static inline status_t fix_tcp_timestamps(struct tcphdr* th,
     return NOK;
 }
 
-/*! send_raw
- \brief send a packet over a raw socket
- \param[in] p, the packet structure that contains the packet to be sent
- \return OK if the packet has been succesfully sent
+/*
+ * NAT Ethernet and IP header, fix checksums
  */
-
-status_t send_raw(const struct iphdr *p, const struct interface *iface) {
-
-#ifdef DEBUG
-    struct tcphdr *test = (struct tcphdr*) (((char *) p) + (p->ihl << 2));
-    printdbg(
-            "%s sending packet in raw socket: %s:%d -> ", H(4), inet_ntoa(*(struct in_addr *) &p->saddr), ntohs(test->source));
-    printdbg(
-            "%s:%d\n", inet_ntoa(*(struct in_addr *) &p->daddr), ntohs(test->dest));
-#endif
-
-    struct sockaddr_in dst;
-    bzero(&dst, sizeof(struct sockaddr_in));
-    int bytes_sent;
-    int sockettouse = 0;
-    dst.sin_addr.s_addr = p->daddr;
-    dst.sin_family = AF_INET;
-
-    if (!iface) {
-        if (p->protocol == IPPROTO_TCP)
-            sockettouse = tcp_rsd;
-        else if (p->protocol == IPPROTO_UDP)
-            sockettouse = udp_rsd;
-        else
-            return NOK;
-    } else {
-        if (p->protocol == IPPROTO_TCP)
-            sockettouse = iface->tcp_socket;
-        else if (p->protocol == IPPROTO_UDP)
-            sockettouse = iface->udp_socket;
-        else
-            return NOK;
+static inline void nat(struct pkt_struct* pkt) {
+    switch (pkt->origin) {
+        //SNAT
+        case LIH:
+        case HIH:
+            memcpy(&pkt->packet.eth->ether_dhost, &pkt->nat.dst_mac->addr_eth, ETH_ALEN);
+            memcpy(&pkt->packet.ip->saddr, &pkt->nat.src_ip->addr_ip, sizeof(ip_addr_t));
+            break;
+        //DNAT
+        case EXT:
+        default:
+            memcpy(&pkt->packet.eth->ether_dhost, &pkt->nat.dst_mac->addr_eth, ETH_ALEN);
+            memcpy(&pkt->packet.ip->daddr, &pkt->nat.dst_ip->addr_ip, sizeof(ip_addr_t));
+            break;
     }
 
-    bytes_sent = sendto(sockettouse, p, ntohs(p->tot_len), 0,
-            (__CONST_SOCKADDR_ARG) &dst, sizeof(struct sockaddr_in));
-
-    if (bytes_sent < 0) {
-        printdbg("%s Packet not sent\n", H(4));
-        return NOK;
+    if(pkt->packet.ip->protocol == IPPROTO_TCP) {
+        set_tcp_checksum(pkt->packet.tcppacket);
     } else {
-        printdbg(
-                "%s Packet of size %u sent on socket %i to %s, total of %u bytes\n", H(4), ntohs(p->tot_len), sockettouse, inet_ntoa(dst.sin_addr), bytes_sent);
-        return OK;
+        set_udp_checksum(pkt->packet.udppacket);
     }
+
+    set_ip_checksum(pkt->packet.ip);
 }
 
 /*! proxy
@@ -473,14 +456,17 @@ status_t send_raw(const struct iphdr *p, const struct interface *iface) {
  */
 status_t proxy(struct pkt_struct* pkt) {
 
-    //TODO: NAT
+    nat(pkt);
 
     printdbg("%s Sending PROXY packet on %s\n", H(6), pkt->out->tag);
 
     if (pkt->out && pcap_inject(pkt->out->pcap, pkt->packet.eth, pkt->size) != -1) {
+        printdbg("%s PROXY OK\n", H(6));
+
         return OK;
     }
 
+    printdbg("%s PROXY NOK\n", H(6));
     return NOK;
 }
 
@@ -492,13 +478,16 @@ status_t proxy(struct pkt_struct* pkt) {
  \return OK if the packet has been succesfully sent
  */
 
+/*
+ * Forward packets coming from a HIH
+ */
 status_t forward_hih(struct pkt_struct* pkt) {
     printdbg("%s forwarding packet to EXT\n", H(pkt->conn->id));
 
-    struct iphdr * ip = (struct iphdr *) pkt->packet.ip;
+    struct iphdr * ip = pkt->packet.ip;
 
     /*!We set LIH source IP*/
-    ip->saddr = pkt->conn->hih.lih_addr;
+    ip->saddr = pkt->conn->hih.lih_addr->addr_ip;
 
     /*!If TCP, we update the source port, the sequence number, and the checksum*/
     if (ip->protocol == IPPROTO_TCP) {
@@ -509,18 +498,17 @@ status_t forward_hih(struct pkt_struct* pkt) {
         tcp_fwd->tcp.seq = htonl(
                 ntohl(pkt->packet.tcp->seq) + pkt->conn->hih.delta);
         fix_tcp_timestamps(&tcp_fwd->tcp, pkt->conn);
-        tcp_checksum(tcp_fwd);
+        set_tcp_checksum(tcp_fwd);
     }
     /*!If UDP, we update the source port and the checksum*/
     else if (ip->protocol == IPPROTO_UDP) //udp
     {
         ((struct udp_packet*) pkt->packet.udppacket)->udp.source =
                 pkt->conn->hih.port;
-        udp_checksum(pkt->packet.udppacket);
+        set_udp_checksum(pkt->packet.udppacket);
     }
 
-    ip_checksum(ip);
-
+    set_ip_checksum(ip);
 
     if(pcap_inject(pkt->out->pcap, pkt->packet.eth, pkt->size) == (int)pkt->size) {
         return OK;
@@ -529,6 +517,9 @@ status_t forward_hih(struct pkt_struct* pkt) {
     return NOK;
 }
 
+/*
+ * Forward packets coming from EXT
+ */
 status_t forward_ext(struct pkt_struct* pkt) {
 
     struct iphdr * ip = (struct iphdr *) pkt->packet.ip;
@@ -537,7 +528,7 @@ status_t forward_ext(struct pkt_struct* pkt) {
             "%s forwarding packet to HIH %u\n", H(pkt->conn->id), pkt->conn->hih.hihID);
 
     ip = (struct iphdr *) pkt->packet.ip;
-    ip->daddr = pkt->conn->hih.addr;
+    ip->daddr = pkt->conn->hih.addr->addr_ip;
 
     /*!If TCP, we update the destination port, the acknowledgement number if any, and the checksum*/
     if (ip->protocol == IPPROTO_TCP) {
@@ -550,18 +541,18 @@ status_t forward_ext(struct pkt_struct* pkt) {
                     ntohl(pkt->packet.tcp->ack_seq)
                     + ~(pkt->conn->hih.delta) + 1);
         }
-        tcp_checksum(tcp_fwd);
+        set_tcp_checksum(tcp_fwd);
     }
     /*!If UDP, we update the destination port and the checksum*/
     else if (ip->protocol == IPPROTO_UDP) {
         ((struct udp_packet*) pkt->packet.udppacket)->udp.dest =
                 pkt->conn->hih.port;
-        udp_checksum(pkt->packet.udppacket);
+        set_udp_checksum(pkt->packet.udppacket);
     }
 
     struct interface *iface = pkt->conn->hih.iface;
 
-    ip_checksum(ip);
+    set_ip_checksum(ip);
 
     if (pcap_inject(iface->pcap, pkt->packet.eth, pkt->size)
             == (int)pkt->size) {
@@ -581,10 +572,7 @@ status_t forward_ext(struct pkt_struct* pkt) {
 void reply_reset(struct pkt_struct *pkt, struct interface *iface) {
 
     if (pkt && iface) {
-
-        status_t res;
         struct tcp_packet rst;
-        bzero(&rst, sizeof(struct tcp_packet));
 
         /*! fill up the IP header */
         rst.ip.version = 4;
@@ -593,10 +581,10 @@ void reply_reset(struct pkt_struct *pkt, struct interface *iface) {
         rst.ip.frag_off = ntohs(0x4000);
         rst.ip.ttl = 0x40;
         rst.ip.protocol = IPPROTO_TCP;
-        //rst.ip.check = 0x00;
         rst.ip.saddr = pkt->packet.ip->daddr;
         rst.ip.daddr = pkt->packet.ip->saddr;
-        ip_checksum(&rst);
+        rst.ip.check = 0x00;
+        set_ip_checksum(&rst);
 
         /*! fill up the TCP header */
         rst.tcp.source = pkt->packet.tcp->dest;

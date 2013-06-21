@@ -174,32 +174,32 @@ void init_signal() {
     sigfillset(&sa_term.sa_mask);
 
     /*! SIGHUP*/
-    if (sigaction(SIGHUP, &sa_term, NULL) != 0)
-        errx(1, "%s: Failed to install sighandler for SIGHUP", __func__);
+    if (sigaction(SIGHUP, &sa_term, NULL) != 0) errx(1,
+            "%s: Failed to install sighandler for SIGHUP", __func__);
 
     /*! SIGINT*/
-    if (sigaction(SIGINT, &sa_term, NULL) != 0)
-        errx(1, "%s: Failed to install sighandler for SIGINT", __func__);
+    if (sigaction(SIGINT, &sa_term, NULL) != 0) errx(1,
+            "%s: Failed to install sighandler for SIGINT", __func__);
 
     /*! SIGQUIT*/
-    if (sigaction(SIGQUIT, &sa_term, NULL) != 0)
-        errx(1, "%s: Failed to install sighandler for SIGQUIT", __func__);
+    if (sigaction(SIGQUIT, &sa_term, NULL) != 0) errx(1,
+            "%s: Failed to install sighandler for SIGQUIT", __func__);
 
     /*! SIGILL*/
-    if (sigaction(SIGILL, &sa_term, NULL) != 0)
-        errx(1, "%s: Failed to install sighandler for SIGILL", __func__);
+    if (sigaction(SIGILL, &sa_term, NULL) != 0) errx(1,
+            "%s: Failed to install sighandler for SIGILL", __func__);
 
     /*! SIGSEGV*/
-    if (sigaction(SIGSEGV, &sa_term, NULL) != 0)
-        errx(1, "%s: Failed to install sighandler for SIGSEGV", __func__);
+    if (sigaction(SIGSEGV, &sa_term, NULL) != 0) errx(1,
+            "%s: Failed to install sighandler for SIGSEGV", __func__);
 
     /*! SIGTERM*/
-    if (sigaction(SIGTERM, &sa_term, NULL) != 0)
-        errx(1, "%s: Failed to install sighandler for SIGTERM", __func__);
+    if (sigaction(SIGTERM, &sa_term, NULL) != 0) errx(1,
+            "%s: Failed to install sighandler for SIGTERM", __func__);
 
     /*! SIGBUS*/
-    if (sigaction(SIGBUS, &sa_term, NULL) != 0)
-        errx(1, "%s: Failed to install sighandler for SIGBUS", __func__);
+    if (sigaction(SIGBUS, &sa_term, NULL) != 0) errx(1,
+            "%s: Failed to install sighandler for SIGBUS", __func__);
 
     /*! ignore signals: */
     struct sigaction sa_ignore;
@@ -208,20 +208,20 @@ void init_signal() {
     sigfillset(&sa_ignore.sa_mask);
 
     /*! SIGABRT*/
-    if (sigaction(SIGABRT, &sa_ignore, NULL) != 0)
-        errx(1, "%s: Failed to install sighandler for SIGABRT", __func__);
+    if (sigaction(SIGABRT, &sa_ignore, NULL) != 0) errx(1,
+            "%s: Failed to install sighandler for SIGABRT", __func__);
 
     /*! SIGALRM*/
-    if (sigaction(SIGALRM, &sa_ignore, NULL) != 0)
-        errx(1, "%s: Failed to install sighandler for SIGALRM", __func__);
+    if (sigaction(SIGALRM, &sa_ignore, NULL) != 0) errx(1,
+            "%s: Failed to install sighandler for SIGALRM", __func__);
 
     /*! SIGUSR2*/
-    if (sigaction(SIGUSR2, &sa_ignore, NULL) != 0)
-        errx(1, "%s: Failed to install sighandler for SIGUSR2", __func__);
+    if (sigaction(SIGUSR2, &sa_ignore, NULL) != 0) errx(1,
+            "%s: Failed to install sighandler for SIGUSR2", __func__);
 
     /*! SIGPOLL*/
-    if (sigaction(SIGPOLL, &sa_ignore, NULL) != 0)
-        errx(1, "%s: Failed to install sighandler for SIGPOLL", __func__);
+    if (sigaction(SIGPOLL, &sa_ignore, NULL) != 0) errx(1,
+            "%s: Failed to install sighandler for SIGPOLL", __func__);
 
     /*! rotate logs: */
     struct sigaction sa_rotate_log;
@@ -233,8 +233,8 @@ void init_signal() {
     sigfillset(&sa_rotate_log.sa_mask);
 
     /*! SIGUSR1*/
-    if (sigaction(SIGUSR1, &sa_rotate_log, NULL) != 0)
-        errx(1, "%s: Failed to install sighandler for SIGUSR1", __func__);
+    if (sigaction(SIGUSR1, &sa_rotate_log, NULL) != 0) errx(1,
+            "%s: Failed to install sighandler for SIGUSR1", __func__);
 }
 
 /*! init_syslog
@@ -256,10 +256,8 @@ static void init_syslog(int argc, char *argv[]) {
 
     buf[0] = '\0';
     for (i = 1; i < argc; i++) {
-        if (i > 1 && g_strlcat(buf, " ", sizeof(buf)) >= sizeof(buf))
-            break;
-        if (g_strlcat(buf, argv[i], sizeof(buf)) >= sizeof(buf))
-            break;
+        if (i > 1 && g_strlcat(buf, " ", sizeof(buf)) >= sizeof(buf)) break;
+        if (g_strlcat(buf, argv[i], sizeof(buf)) >= sizeof(buf)) break;
     }
 
     syslog(LOG_NOTICE, "started with %s", buf);
@@ -274,8 +272,7 @@ void init_parser(char *filename) {
     g_printerr("--------------------------\nReading configuration\n");
 
     FILE *fp = fopen(filename, "r");
-    if (!fp)
-        err(1, "fopen(%s)", filename);
+    if (!fp) err(1, "fopen(%s)", filename);
 
     //extern int yydebug;
     //yydebug = 1;
@@ -291,32 +288,31 @@ void init_variables() {
     /*! create the hash table to store the config */
     if (NULL
             == (config = g_hash_table_new_full(g_str_hash, g_str_equal, g_free,
-                    g_free)))
-        errx(1, "%s: Fatal error while creating config hash table.\n",
-                __func__);
+                    g_free))) errx(1,
+            "%s: Fatal error while creating config hash table.\n", __func__);
 
     /*! create the array of pointer to store the target information */
     if (NULL
             == (targets = g_hash_table_new_full(g_str_hash, g_str_equal, g_free,
-                    (GDestroyNotify) free_target)))
-        errx(1, "%s: Fatal error while creating target hash table.\n",
-                __func__);
+                    (GDestroyNotify) free_target))) errx(1,
+            "%s: Fatal error while creating target hash table.\n", __func__);
 
     /*! create the hash table to store module information */
     if (NULL
             == (module = g_hash_table_new_full(g_str_hash, g_str_equal, g_free,
-                    (GDestroyNotify) g_hash_table_destroy)))
-        errx(1, "%s: Fatal error while creating module hash table.\n",
-                __func__);
+                    (GDestroyNotify) g_hash_table_destroy))) errx(1,
+            "%s: Fatal error while creating module hash table.\n", __func__);
 
     /*! create the hash table for the log engine */
     if (NULL
             == (links = g_hash_table_new_full(g_str_hash, g_str_equal, NULL,
-                    (GDestroyNotify) free_interface)))
-        errx(1, "%s: Fatal error while creating links hash table.\n", __func__);
+                    (GDestroyNotify) free_interface))) errx(1,
+            "%s: Fatal error while creating links hash table.\n", __func__);
 
     /* create the main B-Tree to store meta informations of active connections */
-    if (NULL == (conn_tree = g_tree_new_full((GCompareDataFunc) g_strcmp0, NULL, g_free, g_free))) {
+    if (NULL
+            == (conn_tree = g_tree_new_full((GCompareDataFunc) g_strcmp0, NULL,
+                    g_free, g_free))) {
         errx(1, "%s: Fatal error while creating conn_tree.\n", __func__);
     }
 
@@ -326,17 +322,16 @@ void init_variables() {
     }
 
     /*! create the hash table for the log engine */
-    if (NULL == (module_to_save = g_hash_table_new(g_str_hash, g_str_equal)))
-        errx(1, "%s: Fatal error while creating module_to_save hash table.\n",
-                __func__);
+    if (NULL == (module_to_save = g_hash_table_new(g_str_hash, g_str_equal))) errx(
+            1, "%s: Fatal error while creating module_to_save hash table.\n",
+            __func__);
 
     /*! create the redirection table */
     if (NULL
             == (high_redirection_table = g_hash_table_new_full(g_str_hash,
-                    g_str_equal, g_free, g_free)))
-        errx(1,
-                "%s: Fatal error while creating high_redirection_table hash table.\n",
-                __func__);
+                    g_str_equal, g_free, g_free))) errx(1,
+            "%s: Fatal error while creating high_redirection_table hash table.\n",
+            __func__);
 
     /* set debug file */
     fdebug = -1;
@@ -382,11 +377,11 @@ void init_pcap() {
                     __func__, iface->name, pcapErr);
         }
 
-        printdbg(
-                "%s Starting pcap_looper on interface %s (%s): ", H(4), iface->name, iface->tag);
-        printdbg("ip %s ", inet_ntoa(*(struct in_addr*)&iface->ip));
-        printdbg("netmask %s ", inet_ntoa(*(struct in_addr *)&iface->netmask));
-        printdbg("hw %s\n", ether_ntoa((struct ether_addr*)&(iface->mac->addr_eth)));
+        /*printdbg(
+         "%s Starting pcap_looper on interface %s (%s): ", H(4), iface->name, iface->tag);
+         printdbg("ip %s ", addr_ntoa(iface->ip));
+         printdbg("netmask %s ", inet_ntoa(*(struct in_addr *)&iface->netmask));
+         printdbg("hw %s\n", addr_ntoa(iface->mac));*/
 
         iface->pcap = pcap_open_live(iface->name, BUFSIZE, iface->promisc, -1,
                 pcapErr);
@@ -531,6 +526,7 @@ int close_conn_trees() {
     flow_tree = NULL;
 
     g_tree_destroy(conn_tree);
+
     conn_tree = NULL;
 
     return 0;
@@ -540,16 +536,16 @@ int close_conn_trees() {
  \brief destroy structures and free memory when the program has to quit */
 void close_all(void) {
     /*! wait for thread to close */
-    if (close_thread() < 0)
-        g_printerr("%s: Error when waiting for threads to close\n", H(0));
+    if (close_thread() < 0) g_printerr(
+            "%s: Error when waiting for threads to close\n", H(0));
 
     /*! delete conn_tree */
-    if (close_conn_trees() < 0)
-        g_printerr("%s: Error when closing conn_tree\n", H(0));
+    if (close_conn_trees() < 0) g_printerr("%s: Error when closing conn_tree\n",
+            H(0));
 
     /*! delete lock file */
-    if (unlink(pidfile) < 0)
-        g_printerr("%s: Error when removing lock file\n", H(0));
+    if (unlink(pidfile) < 0) g_printerr("%s: Error when removing lock file\n",
+            H(0));
 
     /*! close log file */
     if (OUTPUT_LOGFILES == ICONFIG_REQUIRED("output")) {
@@ -563,7 +559,7 @@ void close_all(void) {
 
     /*! delete hashes */
     if (close_hash() < 0)
-        printdbg("%s: Error when closing hashes\n", H(0));
+    printdbg("%s: Error when closing hashes\n", H(0));
 }
 
 void pcap_looper(struct interface *iface) {
@@ -577,36 +573,35 @@ void pcap_looper(struct interface *iface) {
 /*! process_packet
  *
  \brief Function called for each received packet. It's thread safe. */
-void process_packet(u_char *input,
-        const struct pcap_pkthdr *header, const u_char *packet) {
+void process_packet(u_char *input, const struct pcap_pkthdr *header,
+        const u_char *packet) {
 
     if (header->len > BUFSIZE || header->len < MIN_PACKET_SIZE) {
         printdbg("%s Invalid packet size: %u. Skipped.\n", H(4), header->len);
         return;
     }
 
-    struct ether_header *eth = (struct ether_header *)packet;
+    struct ether_header *eth = (struct ether_header *) packet;
     uint16_t ethertype = ntohs(eth->ether_type);
     struct iphdr *ip = NULL;
 
-    /*! Catch ARP, TCP and UDP packets */
-    if(ethertype == ETHERTYPE_ARP) {
-        send_arp_reply((struct interface *)input, packet);
-        return;
-    } else if (ethertype == ETHERTYPE_IP) {
+    /*! Catch TCP and UDP packets */
+
+    if (ethertype == ETHERTYPE_IP) {
         ip = (struct iphdr *) (packet + ETHER_HDR_LEN);
     } else if (ethertype == ETHERTYPE_VLAN) {
 
-        struct vlan_ethhdr *veth = (struct vlan_ethhdr *)packet;
+        struct vlan_ethhdr *veth = (struct vlan_ethhdr *) packet;
 
-        if(ntohs(veth->h_vlan_encapsulated_proto) == ETHERTYPE_IP) {
+        if (ntohs(veth->h_vlan_encapsulated_proto) == ETHERTYPE_IP) {
             ip = (struct iphdr *) (packet + VLAN_ETH_HLEN);
         } else {
-            printdbg("%s Invalid encapsulated VLAN ethernet type: %u. Skipped.\n",
-                    H(4), ntohs(veth->h_vlan_encapsulated_proto));
+            printdbg(
+                    "%s Invalid encapsulated VLAN ethernet type: %u. Skipped.\n", H(4), ntohs(veth->h_vlan_encapsulated_proto));
+            return;
         }
     } else {
-        printdbg("%s Invalid ethernet type: %u. Skipped.\n", H(4), ethertype);
+        printdbg( "%s Invalid ethernet type: %u. Skipped.\n", H(4), ethertype);
         return;
     }
 
@@ -629,7 +624,8 @@ void process_packet(u_char *input,
     struct pkt_struct * pkt = NULL;
 
     /*! Initialize the packet structure (into pkt) and find the origin of the packet */
-    if (init_pkt((struct interface *)input, ethertype, header, packet, &pkt) == NOK) {
+    if (init_pkt((struct interface *) input, ethertype, header, packet, &pkt)
+            == NOK) {
         printdbg("%s Packet structure couldn't be initialized\n", H(0));
 
         pkt = NULL;
@@ -637,8 +633,7 @@ void process_packet(u_char *input,
 
     } else {
         printdbg(
-                "%s** NEW packet from %s %s, %d bytes. **\n",
-                H(0), pkt->key_src, lookup_proto(pkt->packet.ip->protocol), header->len);
+                "%s** NEW packet from %s %s, %d bytes. **\n", H(0), pkt->key_src, lookup_proto(pkt->packet.ip->protocol), header->len);
 
         g_async_queue_push(de_queues[PKT2QUEUEID(pkt)], pkt);
     }
@@ -673,16 +668,16 @@ void de_thread(gpointer data) {
         }
 
         printdbg(
-                "%s Origin: %s %s, %u bytes with %u bytes of data\n", H(conn->id),
-                lookup_origin(pkt->origin), lookup_state(conn->state), pkt->size, pkt->data);
+                "%s Origin: %s %s, %u bytes with %u bytes of data\n", H(conn->id), lookup_origin(pkt->origin), lookup_state(conn->state), pkt->size, pkt->data);
 
         /*! Check that there was no problem getting the current connection structure
          *  and make sure the STATE is valid */
-        if ((conn->state < INIT || conn->state >=__MAX_CONN_STATUS) && pkt->origin == EXT) {
+        if ((conn->state < INIT || conn->state >= __MAX_CONN_STATUS)
+                && pkt->origin == EXT) {
 
             printdbg("%s Packet not from a valid connection\n", H(conn->id));
-            if (pkt->packet.ip->protocol == IPPROTO_TCP && reset_ext == 1)
-                reply_reset(pkt, pkt->conn->target->default_route);
+            if (pkt->packet.ip->protocol == IPPROTO_TCP && reset_ext == 1) reply_reset(
+                    pkt, pkt->conn->target->default_route);
 
             free_pkt(pkt);
             goto done;
@@ -691,8 +686,8 @@ void de_thread(gpointer data) {
         if (conn->state == DROP) {
             printdbg("%s This connection is marked as DROPPED\n", H(conn->id));
 
-            if (pkt->packet.ip->protocol == IPPROTO_TCP && reset_ext == 1)
-                reply_reset(pkt, pkt->conn->target->default_route);
+            if (pkt->packet.ip->protocol == IPPROTO_TCP && reset_ext == 1) reply_reset(
+                    pkt, pkt->conn->target->default_route);
 
             free_pkt(pkt);
             goto done;
@@ -703,6 +698,11 @@ void de_thread(gpointer data) {
             case LIH:
 
                 pkt->out = pkt->conn->target->default_route;
+
+                //SNAT
+                pkt->nat.src_ip = &pkt->conn->first_pkt_dst_ip;
+                pkt->nat.dst_mac = &pkt->conn->first_pkt_src_mac;
+                pkt->nat.dst_ip = &pkt->conn->first_pkt_src_ip;
 
                 switch (conn->state) {
                     case INIT:
@@ -749,7 +749,7 @@ void de_thread(gpointer data) {
                             conn->hih.lih_syn_seq = ntohl(pkt->packet.tcp->seq);
                         }
 
-                        if(DE_process_packet(pkt) == OK) {
+                        if (DE_process_packet(pkt) == OK) {
                             proxy(pkt);
                         }
 
@@ -763,8 +763,8 @@ void de_thread(gpointer data) {
                     default:
                         printdbg(
                                 "%s Packet from LIH at wrong state => reset\n", H(conn->id));
-                        if (pkt->packet.ip->protocol == IPPROTO_TCP)
-                            reply_reset(pkt, pkt->conn->target->front_handler->iface);
+                        if (pkt->packet.ip->protocol == IPPROTO_TCP) reply_reset(
+                                pkt, pkt->conn->target->front_handler->iface);
                         free_pkt(pkt);
                         break;
                 }
@@ -773,6 +773,11 @@ void de_thread(gpointer data) {
             case HIH:
 
                 pkt->out = pkt->conn->target->default_route;
+
+                //SNAT
+                pkt->nat.src_ip = &pkt->conn->first_pkt_dst_ip;
+                pkt->nat.dst_mac = &pkt->conn->first_pkt_src_mac;
+                pkt->nat.dst_ip = &pkt->conn->first_pkt_src_ip;
 
                 /*! Packet is from the high interaction honeypot */
                 switch (conn->state) {
@@ -798,7 +803,7 @@ void de_thread(gpointer data) {
                         free_pkt(pkt);
                         break;
                     case CONTROL:
-                        if(DE_process_packet(pkt) == OK) {
+                        if (DE_process_packet(pkt) == OK) {
                             proxy(pkt);
                         }
                         free_pkt(pkt);
@@ -810,7 +815,7 @@ void de_thread(gpointer data) {
                             printdbg(
                                     "%s Packet from HIH at wrong state, so we reset\n", H(conn->id));
                             if (pkt->packet.ip->protocol == IPPROTO_TCP) {
-                                reply_reset(pkt,pkt->conn->hih.iface);
+                                reply_reset(pkt, pkt->conn->hih.iface);
                             }
                             switch_state(conn, DROP);
                             free_pkt(pkt);
@@ -818,7 +823,7 @@ void de_thread(gpointer data) {
                             printdbg(
                                     "%s Packet from HIH in a new connection, so we control it\n", H(conn->id));
                             switch_state(conn, CONTROL);
-                            if(DE_process_packet(pkt) == OK) {
+                            if (DE_process_packet(pkt) == OK) {
                                 proxy(pkt);
                             }
                             free_pkt(pkt);
@@ -831,12 +836,15 @@ void de_thread(gpointer data) {
             default:
 
                 pkt->out = pkt->conn->target->front_handler->iface;
+                //DNAT
+                pkt->nat.dst_mac = pkt->conn->target->front_handler->mac;
+                pkt->nat.dst_ip = pkt->conn->target->front_handler->ip;
 
                 /*! Packet is from the external attacker (origin == EXT) */
                 switch (conn->state) {
                     case INIT:
                         //g_string_assign(conn->decision_rule, ";");
-                        if(DE_process_packet(pkt) == OK) {
+                        if (DE_process_packet(pkt) == OK) {
                             proxy(pkt);
                         }
 
@@ -848,7 +856,7 @@ void de_thread(gpointer data) {
                         }
                         break;
                     case DECISION:
-                        if(DE_process_packet(pkt) == OK) {
+                        if (DE_process_packet(pkt) == OK) {
                             proxy(pkt);
                         }
 
@@ -882,7 +890,9 @@ void de_thread(gpointer data) {
                 break;
         }
 
-        done: if (conn) {
+        done:
+        printdbg("%s de_thread end of loop\n", H(1));
+        if (conn) {
             g_rw_lock_writer_unlock(&conn->lock);
         }
     }

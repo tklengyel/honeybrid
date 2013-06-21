@@ -254,6 +254,10 @@ target: TARGET QUOTE WORD QUOTE OPEN rule END {
 			yyerror("\tTarget interface is not defined!\n");
 		}
 		
+		if(NULL != g_hash_table_lookup(targets, $3)) {
+			yyerror("\tThis link is already assigned to a target!\n");
+		}
+		
 		$6->default_route=iface;
 		
 		printdbg("\tAdding target with default link '%s'\n", $3);
@@ -282,7 +286,7 @@ rule: 	{
 		$$->front_handler->ip=$6;
 		$$->front_handler->mac=$8;
 		
-        char *mac = ether_ntoa((struct ether_addr*)&($$->front_handler->mac->addr_eth));
+        char *mac = addr_ntoa($$->front_handler->mac);
 		g_printerr("\tFrontend defined at %s hw %s on '%s'\n", addr_ntoa($6), mac, $4);
 		g_free($4);	
 	} 
@@ -302,7 +306,7 @@ rule: 	{
 		$$->front_handler->ip_str=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($6)) + 1);
         sprintf($$->front_handler->ip_str, "%s", addr_ntoa($6));
 		
-        char *mac = ether_ntoa((struct ether_addr*)&($$->front_handler->mac->addr_eth));
+        char *mac = addr_ntoa($$->front_handler->mac);
 		g_printerr("\tFrontend defined at %s hw %s on '%s' with rule: %s\n", $$->front_handler->ip_str, mac, $4, $10->str);
 		g_free($4);
 		g_string_free($10, TRUE);
@@ -338,7 +342,7 @@ rule: 	{
     	g_tree_insert($$->back_handlers, key, back_handler);
     	g_hash_table_insert($$->unique_backend_ips, back_handler->ip_str, NULL);
     		
-        char *mac = ether_ntoa((struct ether_addr*)&(back_handler->mac->addr_eth));
+        char *mac = addr_ntoa(back_handler->mac);
     	g_printerr("\tBackend #%u defined at %s hw %s on '%s' copied to handler without rule\n",
     		*key, back_handler->ip_str, mac, $4);
     		
@@ -368,7 +372,7 @@ rule: 	{
     	g_tree_insert($$->back_handlers, key, back_handler);
     	g_hash_table_insert($$->unique_backend_ips, back_handler->ip_str, NULL);
         
-        char *mac = ether_ntoa((struct ether_addr*)&(back_handler->mac->addr_eth));
+       char *mac = addr_ntoa(back_handler->mac);
         g_printerr("\tBackend #%u defined at %s hw %s on '%s' with rule: %s\n", *key, back_handler->ip_str,
         mac
         , $4, $10->str);

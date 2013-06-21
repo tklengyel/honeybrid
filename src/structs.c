@@ -45,6 +45,7 @@ void free_handler(struct handler *handler) {
     if (handler) {
         g_free(handler->ip);
         g_free(handler->ip_str);
+        g_free(handler->mac);
         DE_destroy_tree(handler->rule);
         g_free(handler);
     }

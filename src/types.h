@@ -68,6 +68,7 @@
  */
 typedef enum {
     EXT,
+    INT,
     LIH,
     HIH,
 
@@ -88,6 +89,12 @@ typedef enum {
 
     __MAX_CONN_STATUS
 } conn_status_t;
+
+typedef enum {
+    DNAT_LIH,
+    DNAT_HIH,
+    SNAT
+} nat_t;
 
 /*! \brief output modes
  */

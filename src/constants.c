@@ -55,6 +55,7 @@ const char *packet_origin_string[__MAX_ORIGIN] = {
 	[0 ... __MAX_ORIGIN-1] = unknown,
 
 	[EXT] = "[EXT] External",
+	[INT] = "[INT] Internal - Either LIH or HIH",
 	[LIH] = "[LIH] Low-interaction honeypot",
 	[HIH] = "[HIH] High-interaction honeypot"
 };

@@ -82,20 +82,20 @@ struct ethernet_hdr {
  */
 struct packet {
     union {
-        const struct ether_header *eth;
-        const struct vlan_ethhdr *vlan_eth;
+        struct ether_header *eth;
+        struct vlan_ethhdr *vlan_eth;
     };
     union {
-        const struct iphdr *ip;
-        const struct tcp_packet *tcppacket;
-        const struct udp_packet *udppacket;
+        struct iphdr *ip;
+        struct tcp_packet *tcppacket;
+        struct udp_packet *udppacket;
     };
     union {
-        const struct tcphdr *tcp;
-        const struct udphdr *udp;
+        struct tcphdr *tcp;
+        struct udphdr *udp;
     };
 
-    const char *payload;
+    char *payload;
 
     char *FRAME; // This holds all the packet data
 };
@@ -156,19 +156,14 @@ struct interface {
     int promisc;
     int id;
 
-    struct addr *ip;
+    struct addr ip;
     bpf_u_int32 netmask; /* subnet mask  */
     bpf_u_int32 ip_network; /* ip network */
-    struct addr *mac;
+    struct addr mac;
 
     pcap_t *pcap;
     GThread *pcap_looper;
     struct bpf_program pcap_filter;
-
-    //TODO: deprecate
-    int mark;
-    int tcp_socket;
-    int udp_socket;
 };
 
 void free_interface(struct interface *iface);
@@ -181,12 +176,12 @@ void free_interface(struct interface *iface);
  */
 struct hih_struct {
     int hihID;
-    uint32_t addr;
+    struct addr *addr;
     struct interface *iface;
     uint16_t port;
     unsigned lih_syn_seq;
     unsigned delta;
-    uint32_t lih_addr;
+    struct addr *lih_addr;
     char *redirect_key;
 };
 
@@ -255,9 +250,6 @@ struct custom_conn_data {
  */
 struct conn_struct {
     char *key;
-    char *key_ext;
-    char *key_lih;
-
     char *key_with_port;
     char *key_ext_with_port;
     char *key_lih_with_port;
@@ -282,12 +274,16 @@ struct conn_struct {
     struct expected_data_struct expected_data;
     GRWLock lock;
 
-    __be32 original_src;
-    __be32 original_dst;
+    origin_t initiator; // who initiated the conn? EXT/LIH/HIH
+
+    struct addr first_pkt_src_mac;
+    struct addr first_pkt_dst_mac;
+    struct addr first_pkt_src_ip;
+    struct addr first_pkt_dst_ip;
+    uint16_t first_pkt_src_port;
+    uint16_t first_pkt_dst_port;
 
     struct hih_struct hih;
-
-    origin_t initiator; // who initiated the conn? EXT/LIH/HIH
 
     struct target *target;
 
@@ -314,6 +310,14 @@ unsigned int dionaeaDownloadTime;
 #endif
 }__attribute__ ((packed));
 
+struct nat {
+    nat_t type;
+    struct addr *src_mac;
+    struct addr *src_ip;
+    struct addr *dst_mac;
+    struct addr *dst_ip;
+};
+
 /*! pkt_struct
  \brief The meta information of a packet stored in the conn_struct connection structure
 
@@ -330,10 +334,13 @@ struct pkt_struct {
     int DE;
     struct conn_struct * conn;
 
+    struct nat nat;
+
     char *key_src;
     char *key_dst;
     char *key_src_with_port;
     char *key_dst_with_port;
+
     char *key;
     char *key_with_port;
     int position; // position in the connection queue
