@@ -33,7 +33,11 @@
     {g_print("******LOG ENGINE ERROR******\n");}
 #define H(id)               log_header(__func__, id)
 
+#ifdef HONEYBRID_DEBUG
 #define printdbg(...) g_printerr(__VA_ARGS__)
+#else
+#define printdbg(...)
+#endif
 
 const char* log_header(const char* function_name, int id);
 const char* now(void);

@@ -137,8 +137,6 @@ link: LINK QUOTE WORD QUOTE OPEN link_settings END {
         struct interface *iface=(struct interface *)$6;
         if(iface) {
             iface->tag=$3;
-            iface->id = link_count;
-            link_count++;
             
             g_printerr("\t'tag' => '%s'\n", $3);
             
@@ -258,6 +256,7 @@ target: TARGET QUOTE WORD QUOTE OPEN rule END {
 			yyerror("\tThis link is already assigned to a target!\n");
 		}
 		
+		iface->target = $6;
 		$6->default_route=iface;
 		
 		printdbg("\tAdding target with default link '%s'\n", $3);

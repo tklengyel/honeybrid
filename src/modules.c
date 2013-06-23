@@ -46,7 +46,7 @@ typedef enum {
 
     MOD_YESNO,
 
-    MOD_VMI,
+    //MOD_VMI,
 
     MOD_CONTROL,
 
@@ -78,7 +78,7 @@ const struct mod_def module_definitions[__MAX_HONEYBRID_MODULE] = {
 
     [MOD_YESNO] = {.name = "yesno", .function = mod_yesno},
 
-    [MOD_VMI] = {.name = "vmi", .function = mod_vmi},
+    //[MOD_VMI] = {.name = "vmi", .function = mod_vmi},
 
     [MOD_CONTROL] = {.name = "control", .function = mod_control},
 
@@ -114,7 +114,7 @@ void init_modules() {
     init_mod_dionaea();
 #endif
 
-    init_mod_vmi();
+    //init_mod_vmi();
 
     /*! create a thread that will save module memory every minute */
     if ((mod_backup = g_thread_new("module_backup_saver",

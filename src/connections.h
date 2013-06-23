@@ -27,7 +27,7 @@
 #include "types.h"
 #include "structs.h"
 
-status_t switch_state(struct conn_struct *conn, int new_state);
+status_t switch_state(struct conn_struct *conn, conn_status_t new_state);
 
 status_t init_pkt(struct interface *iface, uint16_t ethertype,
         const struct pcap_pkthdr *header, const u_char *packet,
@@ -39,10 +39,11 @@ status_t store_pkt(struct conn_struct *conn, struct pkt_struct *pkt);
 
 status_t init_conn(struct pkt_struct *pkt, struct conn_struct **conn);
 
-status_t expire_conn(gpointer key, struct conn_struct *cur_conn,
-        gint *expiration_delay);
+gboolean expire_conn(struct addr *ip, struct attacker_pin *pin, gpointer delay);
 
-void free_conn(gpointer key, gpointer trash);
+void remove_conn(struct expire_conn *expire, gpointer data);
+
+void free_conn(struct conn_struct *conn);
 
 status_t init_mark(struct pkt_struct *pkt, const struct conn_struct *conn);
 

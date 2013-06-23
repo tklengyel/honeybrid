@@ -57,7 +57,7 @@ status_t init_pkt(struct interface *iface, uint16_t ethertype,
     struct pkt_struct *pkt = g_malloc0(sizeof(struct pkt_struct));
 
     /* Init a new structure for the current packet */
-    pkt->size = header->len;
+    pkt->size = header->caplen;
     pkt->in = iface;
 
     /* Save the packet */
@@ -68,25 +68,28 @@ status_t init_pkt(struct interface *iface, uint16_t ethertype,
 
     /*! Assign the packet IP header and payload to the packet structure */
     if (ethertype == ETHERTYPE_IP) {
+        pkt->original_headers.eth = g_memdup(pkt->packet.eth, ETHER_HDR_LEN);
         pkt->packet.ip = (struct iphdr *) (pkt->packet.FRAME + ETHER_HDR_LEN);
     } else if (ethertype == ETHERTYPE_VLAN) {
+        pkt->original_headers.vlan = g_memdup(pkt->packet.vlan_eth, VLAN_ETH_HLEN);
         pkt->vlan_in = pkt->packet.vlan_eth->h_vlan_TCI;
         pkt->packet.ip = (struct iphdr *) (pkt->packet.FRAME + VLAN_ETH_HLEN);
     }
+
+    pkt->original_headers.ip = g_memdup(pkt->packet.ip, (pkt->packet.ip->ihl << 2));
 
     pkt->packet.tcp = (struct tcphdr*) (((char *) pkt->packet.ip)
             + (pkt->packet.ip->ihl << 2));
 
     char tmp[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &(pkt->packet.ip->saddr), tmp, INET_ADDRSTRLEN);
-    pkt->key_src = g_strdup(tmp);
+    pkt->src = g_strdup(tmp);
 
     inet_ntop(AF_INET, &(pkt->packet.ip->daddr), tmp, INET_ADDRSTRLEN);
-    pkt->key_dst = g_strdup(tmp);
+    pkt->dst = g_strdup(tmp);
 
     if (pkt->packet.ip->protocol == IPPROTO_TCP) {
         /*! Process TCP packets */
-
         if (pkt->size < MIN_TCP_SIZE) {
             printdbg("%s Invalid TCP header length. Skipped.\n", H(4));
 
@@ -105,23 +108,25 @@ status_t init_pkt(struct interface *iface, uint16_t ethertype,
             goto done;
         }
 
+        pkt->original_headers.tcp = g_memdup(pkt->packet.tcp, sizeof(struct tcphdr));
+
         pkt->packet.payload = (char*) pkt->packet.tcp
                 + (pkt->packet.tcp->doff << 2);
 
         /*! key_src_with_port is the tuple with the source information
          * {Source IP}:{Source Port} */
-        pkt->key_src_with_port = g_malloc0(
-                snprintf(NULL, 0, "%s:%d", pkt->key_src,
+        pkt->src_with_port = g_malloc0(
+                snprintf(NULL, 0, "%s:%d", pkt->src,
                         ntohs(pkt->packet.tcp->source)) + 1);
-        sprintf(pkt->key_src_with_port, "%s:%d", pkt->key_src,
+        sprintf(pkt->src_with_port, "%s:%d", pkt->src,
                 ntohs(pkt->packet.tcp->source));
 
         /*! key_dst_with_port is the one with the destination information
          * {Dest IP}:{Dest Port} */
-        pkt->key_dst_with_port = g_malloc0(
-                snprintf(NULL, 0, "%s:%d", pkt->key_dst,
+        pkt->dst_with_port = g_malloc0(
+                snprintf(NULL, 0, "%s:%d", pkt->dst,
                         ntohs(pkt->packet.tcp->dest)) + 1);
-        sprintf(pkt->key_dst_with_port, "%s:%d", pkt->key_dst,
+        sprintf(pkt->dst_with_port, "%s:%d", pkt->dst,
                 ntohs(pkt->packet.tcp->dest));
 
         /* The volume of data is the total size of the packet minus the size of the IP and TCP headers */
@@ -129,23 +134,26 @@ status_t init_pkt(struct interface *iface, uint16_t ethertype,
                 - (pkt->packet.tcp->doff << 2);
 
     } else if (pkt->packet.ip->protocol == IPPROTO_UDP) {
+
+        pkt->original_headers.udp = g_memdup(pkt->packet.udp, sizeof(struct udphdr));
+
         pkt->packet.payload = (char*) pkt->packet.udp + UDP_HDR_LEN;
         /*! Process UDP packet */
         /*! key_src */
-        pkt->key_src_with_port = g_malloc0(
-                snprintf(NULL, 0, "%s:%d", pkt->key_src,
+        pkt->src_with_port = g_malloc0(
+                snprintf(NULL, 0, "%s:%d", pkt->src,
                         ntohs(pkt->packet.udp->source)) + 1);
-        sprintf(pkt->key_src_with_port, "%s:%u", pkt->key_src,
+        sprintf(pkt->src_with_port, "%s:%u", pkt->src,
                 ntohs(pkt->packet.udp->source));
         /*! key_dst */
-        pkt->key_dst_with_port = g_malloc0(
-                snprintf(NULL, 0, "%s:%d", pkt->key_dst,
+        pkt->dst_with_port = g_malloc0(
+                snprintf(NULL, 0, "%s:%d", pkt->dst,
                         ntohs(pkt->packet.udp->dest)) + 1);
-        sprintf(pkt->key_dst_with_port, "%s:%u", pkt->key_dst,
+        sprintf(pkt->dst_with_port, "%s:%u", pkt->dst,
                 ntohs(pkt->packet.udp->dest));
         /* The volume of data is the value of udp->ulen minus the size of the UPD header (always 8 bytes) */
         pkt->data = pkt->packet.udp->len - UDP_HDR_LEN;
-    } else{
+    } else {
         printdbg("%s Invalid protocol, packet skipped\n", H(4));
 
         goto done;
@@ -160,23 +168,35 @@ status_t init_pkt(struct interface *iface, uint16_t ethertype,
     // Check if the packet comes from a target interface
     if (g_hash_table_lookup(targets, pkt->in->tag)) {
         pkt->origin = EXT;
-        pkt->key = pkt->key_src;
-        pkt->key_with_port = pkt->key_src_with_port;
+
+        addr_pack(&pkt->keys.ip, ADDR_TYPE_IP, 0, &pkt->packet.ip->saddr,
+                sizeof(ip_addr_t));
+
+        if (pkt->packet.ip->protocol == IPPROTO_TCP) {
+            pkt->keys.port = pkt->packet.tcp->source;
+        } else if (pkt->packet.ip->protocol == IPPROTO_UDP) {
+            pkt->keys.port = pkt->packet.udp->source;
+        }
     } else {
         // Packet came from an interface that's not assigned as a target default route
         // That means it's an internal honeynet interface, so packet is either from LIH or HIH
         // but we don't know which (yet)
         pkt->origin = INT;
-        pkt->key = pkt->key_dst;
-        pkt->key_with_port = pkt->key_dst_with_port;
-    }
 
-    printdbg("%s Packet is from %s. Keys: %s %s\n", H(4), lookup_origin(pkt->origin), pkt->key, pkt->key_with_port);
+        addr_pack(&pkt->keys.ip, ADDR_TYPE_IP, 0, &pkt->packet.ip->daddr,
+                sizeof(ip_addr_t));
+
+        if (pkt->packet.ip->protocol == IPPROTO_TCP) {
+            pkt->keys.port = pkt->packet.tcp->dest;
+        } else if (pkt->packet.ip->protocol == IPPROTO_UDP) {
+            pkt->keys.port = pkt->packet.udp->dest;
+        }
+    }
 
     ret = OK;
 
     done: if (ret == NOK) {
-        free(pkt);
+        free_pkt(pkt);
     } else {
         *pkt_out = pkt;
     }
@@ -190,13 +210,16 @@ status_t init_pkt(struct interface *iface, uint16_t ethertype,
  */
 void free_pkt(struct pkt_struct *pkt) {
     if (pkt != NULL) {
+        g_free(pkt->original_headers.eth);
+        g_free(pkt->original_headers.vlan);
+        g_free(pkt->original_headers.ip);
+        g_free(pkt->original_headers.tcp);
+        g_free(pkt->original_headers.udp);
         g_free(pkt->packet.FRAME);
-        g_free(pkt->key_src);
-        g_free(pkt->key_dst);
-        g_free(pkt->key_src_with_port);
-        g_free(pkt->key_dst_with_port);
-//        g_free(pkt->key);
-//        g_free(pkt->key_with_port);
+        g_free(pkt->src);
+        g_free(pkt->dst);
+        g_free(pkt->src_with_port);
+        g_free(pkt->dst_with_port);
         g_free(pkt);
     }
 }
@@ -228,9 +251,10 @@ status_t store_pkt(struct conn_struct *conn, struct pkt_struct *pkt) {
         ret = OK;
     }
 
-    if (ret == OK)
-    printdbg(
-            "%s\t Packet stored in memory for connection %s\n", H(conn->id), conn->key);
+    if (ret == OK) {
+        printdbg(
+                "%s\t Packet stored in memory for connection %u\n", H(conn->id), conn->id);
+    }
 
     return ret;
 }
@@ -342,12 +366,13 @@ void print_payload(const u_char *payload, int len) {
     return;
 }
 
-status_t switch_state(struct conn_struct *conn, int new_state) {
-    int old = conn->state;
-    conn->state = new_state;
+status_t switch_state(struct conn_struct *conn, conn_status_t new_state) {
 
     printdbg(
-            "%s switching state from %s (%d) to %s (%d)\n", H(conn->id), lookup_state(old), old, lookup_state(new_state), new_state);
+            "%s switching state from %s to %s\n",
+            H(conn->id), lookup_state(conn->state), lookup_state(new_state));
+
+    conn->state = new_state;
 
     return OK;
 }
@@ -405,86 +430,110 @@ status_t switch_state(struct conn_struct *conn, int new_state) {
  return OK;
  }*/
 
-status_t conn_lookup(struct pkt_struct *pkt, struct conn_struct **conn) {
+int conn_lookup(struct pkt_struct *pkt, struct attacker_pin **pin,
+        struct conn_struct **conn) {
 
-    status_t ret = NOK;
+    int ret = 0;
     *conn = NULL;
+    *pin = NULL;
 
-    g_rw_lock_reader_lock(&connlock);
+    g_mutex_lock(&connlock);
 
     printdbg(
-            "%s Looking for connection %s <-> %s with key %s!\n", H(0), pkt->key_src_with_port, pkt->key_dst_with_port, pkt->key_with_port);
+            "%s Looking for connection %s%s <-> %s%s!\n",
+            H(0), pkt->src_with_port, pkt->in->target?" (TARGET)":"",
+            pkt->dst_with_port, pkt->in->target?" (TARGET)":"");
 
-    /* Check first if a structure already exists */
+    /* Check first if the attacker is pinned to a target already */
     if (TRUE
-            == g_tree_lookup_extended(conn_tree, pkt->key_with_port, NULL,
-                    (gpointer *) conn)) {
+            == g_tree_lookup_extended(conn_tree, &pkt->keys.ip, NULL,
+                    (gpointer *) pin)) {
 
-        // Connection found, update origin if its still unknown internal
-        if (pkt->origin == INT) {
-            if (pkt->in == (*conn)->target->front_handler->iface) {
-                pkt->origin = LIH;
-            } else {
-                pkt->origin = HIH;
+        // Attacker is pinned to a target
+
+        // Let's see if this packet is of the right target if its coming from EXT
+        if (pkt->origin == EXT && (*pin)->target->default_route != pkt->in) {
+            printdbg(
+                    "%s Attacker %s is attacking multiple targets which is currently not supported. Skipping.", H(3), pkt->src);
+            ret = -1;
+        } else if (TRUE
+                == g_tree_lookup_extended((*pin)->port_tree, &pkt->keys.port,
+                        NULL, (gpointer *) conn)) {
+
+            if (pkt->packet.ip->protocol != (*conn)->protocol) {
+                printdbg(
+                        "%s This connection is supposed to be %s but packet is %s. Skipping (TODO?)", H(3), lookup_proto((*conn)->protocol), lookup_proto(pkt->packet.ip->protocol));
+                ret = -1;
             }
-        }
 
-        ret = OK;
-    }
+            g_mutex_lock(&(*conn)->lock);
 
-    g_rw_lock_reader_unlock(&connlock);
-
-    if (ret == OK && pkt->packet.ip->protocol == IPPROTO_TCP) {
-        // Both sides sent TCP-FIN already
-        // We need to expire this connection and start a new one.
-        if ((*conn)->tcp_fin_in && (*conn)->tcp_fin_out
-                && !tcp_ack_only(pkt->packet.tcp)) {
-
-            printdbg("%s Expiring TCP connection manually.\n", H((*conn)->id));
-            gint expire = 0;
-
-            g_rw_lock_writer_lock(&connlock);
-            expire_conn(pkt->key, *conn, &expire);
-            g_rw_lock_writer_unlock(&connlock);
-
-            *conn = NULL;
-            goto done;
-
-        } else if (pkt->packet.tcp->fin) {
-            if (pkt->origin == EXT) {
-                (*conn)->tcp_fin_in = TRUE;
-            } else {
-                (*conn)->tcp_fin_out = TRUE;
+            // Connection found, update origin if it's still unknown internal
+            if (pkt->origin == INT) {
+                if (pkt->packet.ip->saddr==(*conn)->target->front_handler->ip->addr_ip) {
+                    // If it matches the front handler's IP, its LIH
+                    pkt->origin = LIH;
+                } else {
+                    // If its not from the front handler, it must be one of the back handlers
+                    pkt->origin = HIH;
+                }
             }
-            goto done;
-        }
 
-        if ((*conn)->tcp_fin_in
-                && pkt->origin == EXT&& !tcp_ack_only(pkt->packet.tcp)) {
-
-                printdbg
-            ("%s This incoming TCP connection has been closed but it's still sending non-ACK packets."
-                    "This is VERY suspicious!\n",
-                    H((*conn)->id));
-
-        }
-
-        if ((*conn)->tcp_fin_out
-                && pkt->origin != EXT&& !tcp_ack_only(pkt->packet.tcp)) {
-
-                printdbg
-            ("%s This outgoing TCP connection has been closed but it's still sending non-ACK packets."
-                    "This is VERY suspicious!\n",
-                    H((*conn)->id));
-
+            ret = 1;
         }
     }
 
-    done: return ret;
+    /*if (ret == 1 && pkt->packet.ip->protocol == IPPROTO_TCP) {
+     // Both sides sent TCP-FIN already
+     // We need to expire this connection and start a new one.
+     if ((*conn)->tcp_fin_in && (*conn)->tcp_fin_out
+     && !tcp_ack_only(pkt->packet.tcp)) {
+
+     printdbg("%s Expiring TCP connection manually.\n", H((*conn)->id));
+     //gint expire = 0;
+
+     //TODO
+     *conn = NULL;
+     goto done;
+
+     } else if (pkt->packet.tcp->fin) {
+     if (pkt->origin == EXT) {
+     (*conn)->tcp_fin_in = TRUE;
+     } else {
+     (*conn)->tcp_fin_out = TRUE;
+     }
+     goto done;
+     }
+
+     if ((*conn)->tcp_fin_in
+     && pkt->origin == EXT&& !tcp_ack_only(pkt->packet.tcp)) {
+
+     printdbg
+     ("%s This incoming TCP connection has been closed but it's still sending non-ACK packets."
+     "This is VERY suspicious!\n",
+     H((*conn)->id));
+
+     }
+
+     if ((*conn)->tcp_fin_out
+     && pkt->origin != EXT&& !tcp_ack_only(pkt->packet.tcp)) {
+
+     printdbg
+     ("%s This outgoing TCP connection has been closed but it's still sending non-ACK packets."
+     "This is VERY suspicious!\n",
+     H((*conn)->id));
+
+     }
+     }
+
+     done:*/
+    g_mutex_unlock(&connlock);
+
+    return ret;
 }
 
-status_t create_conn(struct pkt_struct *pkt, struct conn_struct **conn,
-        gdouble microtime) {
+status_t create_conn(struct pkt_struct *pkt, struct attacker_pin *pin,
+        struct conn_struct **conn, gdouble microtime) {
 
     status_t result = NOK;
 
@@ -492,13 +541,13 @@ status_t create_conn(struct pkt_struct *pkt, struct conn_struct **conn,
     if (pkt->packet.ip->protocol == IPPROTO_TCP && pkt->packet.tcp->syn == 0) {
 
         printdbg(
-                "%s ~~~~ TCP packet without SYN: we skip %s -> %s~~~~\n", H(0), pkt->key_src, pkt->key_dst);
+                "%s ~~~~ TCP packet without SYN: we skip %s -> %s~~~~\n", H(0), pkt->src_with_port, pkt->dst_with_port);
         return result;
     }
 
     struct target *target = NULL;
 
-    g_rw_lock_writer_lock(&connlock);
+    g_mutex_lock(&connlock);
 
     if (pkt->origin == EXT) {
         target = g_hash_table_lookup(targets, pkt->in->tag);
@@ -507,15 +556,13 @@ status_t create_conn(struct pkt_struct *pkt, struct conn_struct **conn,
 
     // We need to loop the targets to find the Honeypot where this packet came from
 
-    struct addr src_addr;
     char tmp[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &pkt->packet.ip->saddr, tmp, INET_ADDRSTRLEN);
-    addr_pton(tmp, &src_addr);
 
     char *target_if;
     GHashTableIter i;
     ghashtable_foreach(targets, i, target_if, target) {
-        if (addr_cmp(target->front_handler->ip, &src_addr) == 0) {
+        if (pkt->packet.ip->saddr==target->front_handler->ip->addr_ip) {
             printdbg(
                     "%s This packet matches a LIH honeypot IP address of target with default route %s\n", H(0), target->default_route->tag);
             pkt->origin = LIH;
@@ -532,7 +579,7 @@ status_t create_conn(struct pkt_struct *pkt, struct conn_struct **conn,
 
     /*! this packet is for an unconfigured target, we drop it */
     printdbg(
-            "%s No honeypot IP found for this address (%s), pkt key: %s, skipping for now.\n", H(0), pkt->key_dst, pkt->key);
+            "%s No honeypot IP found for this address: %s. Skipping for now.\n", H(0), pkt->dst);
     goto done;
 
     /*! initialize connection */
@@ -543,13 +590,12 @@ status_t create_conn(struct pkt_struct *pkt, struct conn_struct **conn,
     struct conn_struct *conn_init = (struct conn_struct *) g_malloc0(
             sizeof(struct conn_struct));
 
-    g_rw_lock_init(&conn_init->lock);
-    g_rw_lock_writer_lock(&conn_init->lock);
+    g_mutex_init(&conn_init->lock);
+    g_mutex_lock(&conn_init->lock);
 
     /*! fill the structure */
     conn_init->target = target;
-    conn_init->key = g_strdup(pkt->key);
-    conn_init->key_with_port = g_strdup(pkt->key_with_port);
+    conn_init->keys = pkt->keys;
     //conn_init->key_ext_with_port = g_strdup(pkt->key_src_with_port);
     //conn_init->key_lih_with_port = g_strdup(pkt->key_dst_with_port);
     conn_init->protocol = pkt->packet.ip->protocol;
@@ -581,11 +627,11 @@ status_t create_conn(struct pkt_struct *pkt, struct conn_struct **conn,
             &pkt->packet.ip->daddr, sizeof(ip_addr_t));
 
     if (conn_init->protocol == IPPROTO_TCP) {
-        conn_init->first_pkt_src_port = ntohs(pkt->packet.tcp->source);
-        conn_init->first_pkt_dst_port = ntohs(pkt->packet.tcp->dest);
+        conn_init->first_pkt_src_port = pkt->packet.tcp->source;
+        conn_init->first_pkt_dst_port = pkt->packet.tcp->dest;
     } else {
-        conn_init->first_pkt_src_port = ntohs(pkt->packet.udp->source);
-        conn_init->first_pkt_dst_port = ntohs(pkt->packet.udp->dest);
+        conn_init->first_pkt_src_port = pkt->packet.udp->source;
+        conn_init->first_pkt_dst_port = pkt->packet.udp->dest;
     }
 
     if (pkt->origin == EXT) {
@@ -610,11 +656,24 @@ status_t create_conn(struct pkt_struct *pkt, struct conn_struct **conn,
             (1 + tm->tm_mon), tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec,
             (int) tv.tv_usec);
 
-    /*! insert entry in B-Tree */
-    g_tree_insert(conn_tree, conn_init->key_with_port, conn_init);
+    /*! Pin this attacker to the target */
+    if (!pin) {
+        pin = g_malloc0(sizeof(struct attacker_pin));
+
+        pin->ip = conn_init->keys.ip;
+        pin->target = conn_init->target;
+        pin->port_tree = g_tree_new((GCompareFunc) intcmp);
+
+        g_tree_insert(conn_tree, &pin->ip, pin);
+
+        printdbg(
+                "%s Created new attacker pin entry to target with default route %s\n", H(0), conn_init->target->default_route->name);
+    }
+
+    g_tree_insert(pin->port_tree, &conn_init->keys.port, conn_init);
 
     printdbg(
-            "%s Key '%s' inserted to conn_tree with uplink mark %u and downlink mark %u\n", H(0), conn_init->key_with_port, conn_init->uplink_vlan, conn_init->downlink_vlan);
+            "%s Connection inserted to attacker's port_tree with key %u\n", H(0), conn_init->keys.port);
 
     /*! store new entry in current struct */
     pkt->conn = conn_init;
@@ -622,7 +681,7 @@ status_t create_conn(struct pkt_struct *pkt, struct conn_struct **conn,
 
     result = OK;
 
-    done: g_rw_lock_writer_unlock(&connlock);
+    done: g_mutex_unlock(&connlock);
     return result;
 
 }
@@ -640,7 +699,6 @@ status_t update_conn(struct pkt_struct *pkt, struct conn_struct *conn,
         state = PROXY;
     }
 
-    g_rw_lock_writer_lock(&(conn->lock));
     /*! statistics */
     conn->last_pkt = pkt;
     conn->stat_time[state] = microtime;
@@ -677,37 +735,63 @@ status_t update_conn(struct pkt_struct *pkt, struct conn_struct *conn,
     return OK;
 }
 
-/*! expire_conn
- \brief called for each entry in the B-Tree, if a time value is upper to "expiration_delay" (default is 120 sec) and the connection is not marked as redirected, entry is deleted
- \param[in] key, a pointer to the current B-Tree key value
- \param[in] conn, a pointer to the current B-Tree associated value
- \param[in] expiration_delay
- \return FALSE, to continue to traverse the tree (if TRUE is returned, traversal is stopped)
- */
-status_t expire_conn(gpointer key, struct conn_struct *conn,
-        gint *expiration_delay) {
+void remove_conn(struct expire_conn *expire,
+        __attribute__ ((unused)) gpointer data) {
+
+    if (!expire->delay) {
+        // This connection must expire
+        g_mutex_lock(&expire->conn->lock);
+    } else if (FALSE == g_mutex_trylock(&expire->conn->lock)) {
+        return;
+    }
+
+    struct attacker_pin *pin = (struct attacker_pin *) g_tree_lookup(conn_tree,
+            expire->key_ip);
+
+    g_tree_remove(pin->port_tree, &expire->key_port);
+
+    if (g_tree_nnodes(pin->port_tree) == 0) {
+        g_tree_remove(conn_tree, expire->key_ip);
+        free_attacker_pin(pin);
+    }
+
+    connection_log(expire->conn);
+    free_conn(expire->conn);
+}
+
+gboolean expire_conn_port(uint16_t *port, struct conn_struct *conn,
+        struct expire_conn_port *input) {
+
     GTimeVal t;
     g_get_current_time(&t);
-    gint curtime = (t.tv_sec);
+    int curtime = (t.tv_sec);
+    int delay = GPOINTER_TO_INT(input->delay);
 
-    int delay = *expiration_delay;
-
-    if (NULL != g_tree_lookup(conn_tree, (char *) key)
-            && ((curtime - conn->access_time > delay) || conn->state < INIT)) {
+    if ((curtime - conn->access_time > delay || conn->state < INIT)) {
 
         printdbg(
                 "%s called with expiration delay on connection %u: %d\n", H(8), conn->id, delay);
 
-        /*! output final statistics about the connection */
-        connection_log(conn);
+        struct expire_conn *expire = g_malloc0(sizeof(struct expire_conn));
 
-        /*! lock the structure, this will never be unlocked */
-        g_rw_lock_writer_lock(&conn->lock);
+        expire->conn = conn;
+        expire->key_port = *port;
+        expire->key_ip = input->key_ip;
+        expire->delay = delay;
 
-        /*! list the entry for later removal */
-        g_ptr_array_add(entrytoclean, key);
+        g_ptr_array_add(entrytoclean, expire);
 
     }
+
+    return FALSE;
+}
+
+gboolean expire_conn(struct addr *ip, struct attacker_pin *pin, gpointer delay) {
+
+    struct expire_conn_port expire = { .delay = delay, .key_ip = ip };
+
+    g_tree_foreach(pin->port_tree, (GTraverseFunc) expire_conn_port, &expire);
+
     return FALSE;
 }
 
@@ -726,13 +810,17 @@ status_t init_conn(struct pkt_struct *pkt, struct conn_struct **conn) {
     microtime += ((gdouble) t.tv_sec);
     microtime += (((gdouble) t.tv_usec) / 1000000.0);
 
-    if (OK == conn_lookup(pkt, conn)) {
-        return update_conn(pkt, *conn, microtime);
-    } else {
-        return create_conn(pkt, conn, microtime);
-    }
+    struct attacker_pin *pin = NULL;
 
-    return NOK;
+    switch (conn_lookup(pkt, &pin, conn)) {
+        case 0:
+            return create_conn(pkt, pin, conn, microtime);
+        case 1:
+            return update_conn(pkt, *conn, microtime);
+        case -1:
+        default:
+            return NOK;
+    }
 }
 
 /*! free_conn
@@ -740,22 +828,10 @@ status_t init_conn(struct pkt_struct *pkt, struct conn_struct **conn) {
  \param[in] key, a pointer to the current B-Tree key value stored in the pointer table
  \param[in] trash, user data, unused
  */
-void free_conn(gpointer key, __attribute__((unused))      gpointer unused) {
-
-    g_rw_lock_writer_lock(&connlock);
-
-    struct conn_struct *conn = (struct conn_struct *) g_tree_lookup(conn_tree,
-            key);
-
-    if (conn) {
-        g_tree_steal(conn_tree, key);
-    }
-
-    g_rw_lock_writer_unlock(&connlock);
-
+void free_conn(struct conn_struct *conn) {
     if (conn) {
 
-        printdbg("%s entry removed - tuple = %s\n", H(8), (char*) key);
+        printdbg("%s Connection %u entry removed\n", H(8), conn->id);
 
         GSList *current = conn->BUFFER;
         struct pkt_struct* tmp;
@@ -782,26 +858,10 @@ void free_conn(gpointer key, __attribute__((unused))      gpointer unused) {
             current = g_slist_next(current);
         }
         g_slist_free(conn->custom_data);
-
-        /*if(conn->replay_id) {
-            g_rw_lock_writer_lock(&hihredirlock);
-            GHashTable *hih_redir_list = (GHashTable *)g_hash_table_lookup(high_redirection_table, conn->key);
-            if(hih_redir_list) {
-                g_hash_table_remove(hih_redir_list, conn->key_with_port);
-                if(g_hash_table_size(hih_redir_list)==0) {
-                    g_hash_table_destroy(hih_redir_list);
-                    g_hash_table_remove(high_redirection_table, conn->key);
-                }
-            }
-            g_rw_lock_writer_unlock(&hihredirlock);
-        }*/
-
-        g_free(conn->key);
-        g_free(conn->key_with_port);
+        g_mutex_clear(&conn->lock);
         g_free(conn->hih.redirect_key);
         g_string_free(conn->start_timestamp, TRUE);
         g_string_free(conn->decision_rule, TRUE);
-        g_rw_lock_clear(&(conn->lock));
         g_free(conn);
     }
 }
@@ -827,15 +887,16 @@ void clean() {
             printdbg("%s cleaning\n", H(8));
 
             /*! init the table*/
-            entrytoclean = g_ptr_array_new();
+            entrytoclean = g_ptr_array_new_with_free_func(g_free);
 
             /*! call the clean function for each value */
-            g_rw_lock_reader_lock(&connlock);
-            g_tree_foreach(conn_tree, (GTraverseFunc) expire_conn, &delay);
-            g_rw_lock_reader_unlock(&connlock);
+            g_mutex_lock(&connlock);
+            g_tree_foreach(conn_tree, (GTraverseFunc) expire_conn,
+                    GINT_TO_POINTER(delay));
 
             /*! remove each key listed from the btree */
-            g_ptr_array_foreach(entrytoclean, (GFunc) free_conn, NULL);
+            g_ptr_array_foreach(entrytoclean, (GFunc) remove_conn, NULL);
+            g_mutex_unlock(&connlock);
 
             /*! free the array */
             g_ptr_array_free(entrytoclean, TRUE);
@@ -862,34 +923,32 @@ status_t setup_redirection(struct conn_struct *conn, uint32_t hih_use) {
     printdbg("%s [** Starting... **]\n", H(conn->id));
     struct handler *back_handler = g_tree_lookup(conn->target->back_handlers,
             &hih_use);
-    struct interface *hihiface = back_handler->iface;
-    struct addr *hihaddr = back_handler->ip;
 
-    if (hihaddr != NULL) {
+    if (back_handler->ip) {
 
         /*GHashTable *hih_redir_list = NULL;
 
-        g_rw_lock_writer_lock(&hihredirlock);
+         g_rw_lock_writer_lock(&hihredirlock);
 
-        if ((hih_redir_list = g_hash_table_lookup(high_redirection_table,
-                conn->key)) == NULL) {
-            if (NULL
-                    == (links = g_hash_table_new_full(g_str_hash, g_str_equal,
-                            g_free, NULL))) errx(1,
-                    "%s: Fatal error while creating nested redirection hash table.\n",
-                    __func__);
-        }
+         if ((hih_redir_list = g_hash_table_lookup(high_redirection_table,
+         conn->key)) == NULL) {
+         if (NULL
+         == (links = g_hash_table_new_full(g_str_hash, g_str_equal,
+         g_free, NULL))) errx(1,
+         "%s: Fatal error while creating nested redirection hash table.\n",
+         __func__);
+         }
 
-        g_hash_table_insert(hih_redir_list, g_strdup(conn->key_with_port),
-                GUINT_TO_POINTER(TRUE));
+         g_hash_table_insert(hih_redir_list, g_strdup(conn->key_with_port),
+         GUINT_TO_POINTER(TRUE));
 
-        g_hash_table_insert(high_redirection_table, g_strdup(conn->key),
-                hih_redir_list);
+         g_hash_table_insert(high_redirection_table, g_strdup(conn->key),
+         hih_redir_list);
 
-        printdbg(
-                "%s [** high_redirection_table updated: key %s value %s **]\n", H(conn->id), conn->key, conn->key_with_port);
+         printdbg(
+         "%s [** high_redirection_table updated: key %s value %s **]\n", H(conn->id), conn->key, conn->key_with_port);
 
-        g_rw_lock_writer_unlock(&hihredirlock);*/
+         g_rw_lock_writer_unlock(&hihredirlock);*/
 
         GTimeVal t;
         g_get_current_time(&t);
@@ -898,9 +957,9 @@ status_t setup_redirection(struct conn_struct *conn, uint32_t hih_use) {
         microtime += (((gdouble) t.tv_usec) / 1000000.0);
 
         conn->hih.hihID = hih_use;
-        conn->hih.iface = hihiface;
-        conn->hih.addr = hihaddr;
-        conn->hih.lih_addr = conn->target->front_handler->ip;
+        conn->hih.iface = back_handler->iface;
+        conn->hih.ip = back_handler->ip;
+        conn->hih.mac = back_handler->mac;
         conn->hih.port = conn->first_pkt_dst_port;
         /*! We then update the status of the connection structure */
         conn->stat_time[DECISION] = microtime;

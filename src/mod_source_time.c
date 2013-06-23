@@ -41,7 +41,7 @@ mod_result_t mod_source_time(struct mod_args *args) {
     int deny_after = 1200; /* 20 minutes */
     int allow_after = 0; /* accept after this many seconds elapsed since first seeing src */
     gchar *backup_file, *exp, *timef, *timea;
-    gchar **key_src;
+    char *key_src;
     gchar **info;
     GKeyFile *backup;
 
@@ -50,9 +50,9 @@ mod_result_t mod_source_time(struct mod_args *args) {
     gint now = (t.tv_sec);
 
     /*! get the IP address from the packet */
-    key_src = g_strsplit(args->pkt->key_src, ":", 0);
+    key_src = args->pkt->src;
 
-    printdbg("%s source IP is %s\n", H(args->pkt->conn->id), key_src[0]);
+    printdbg("%s source IP is %s\n", H(args->pkt->conn->id), key_src);
 
     /*! get the backup file for this module */
     if (NULL
@@ -99,7 +99,7 @@ mod_result_t mod_source_time(struct mod_args *args) {
             H(args->pkt->conn->id));
 
     if (NULL == (info = g_key_file_get_string_list(backup, "source", /* generic group name \todo: group by port number? */
-    key_src[0], NULL, NULL))) {
+    key_src, NULL, NULL))) {
         /*! Unknown IP */
         printdbg("%s IP not found... new entry created\n",
                 H(args->pkt->conn->id));
@@ -154,13 +154,11 @@ mod_result_t mod_source_time(struct mod_args *args) {
         }
     }
 
-    g_key_file_set_string_list(backup, "source", key_src[0],
+    g_key_file_set_string_list(backup, "source", key_src,
             (const gchar * const *) info, 3);
 
     save_backup(backup, backup_file);
 
-    /*! clean and exit */
-    //g_strfreev(key_src);
     return result;
 }
 

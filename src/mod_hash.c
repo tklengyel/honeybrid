@@ -139,7 +139,7 @@ mod_result_t mod_hash(struct mod_args *args) {
     gint now = (t.tv_sec);
 
     /*! get the IP address from the packet */
-    key_dst = g_strsplit(args->pkt->key_dst, ":", 2);
+    key_dst = g_strsplit(args->pkt->dst_with_port, ":", 2);
 
     /*! get the destination port */
     port = key_dst[1];

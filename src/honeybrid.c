@@ -93,23 +93,14 @@
 #include "connections.h"
 
 // Get the Queue ID the packet should be assigned to
-// based on the last byte of the src and dst IP address
-#define PKT2QUEUEID(pkt) \
-    ( \
-        (uint32_t) \
-            ( \
-                ( \
-                ((pkt->packet.ip->saddr & 0xFF000000) >> 24) \
-                + \
-                ((pkt->packet.ip->daddr & 0xFF000000) >> 24) \
-                ) \
-                % decision_threads \
-            ) \
-    )
+// based on the last byte of the external IP
+#define IP2QUEUEID(iface, ip) \
+    (iface->target) ? \
+            (((ip->saddr & 0xFF000000) >> 24) % decision_threads) \
+            : \
+            (((ip->daddr & 0xFF000000) >> 24) % decision_threads)
 
 void pcap_looper(struct interface *iface);
-void process_packet(u_char *input, const struct pcap_pkthdr *header,
-        const u_char *packet);
 
 GThread **pcap_loopers;
 
@@ -310,7 +301,7 @@ void init_variables() {
             "%s: Fatal error while creating links hash table.\n", __func__);
 
     /* create the main B-Tree to store meta informations of active connections */
-    if (NULL == (conn_tree = g_tree_new((GCompareFunc) g_strcmp0))) {
+    if (NULL == (conn_tree = g_tree_new((GCompareFunc) addr_cmp))) {
         errx(1, "%s: Fatal error while creating conn_tree.\n", __func__);
     }
 
@@ -321,10 +312,10 @@ void init_variables() {
 
     /*! create the redirection table */
     /*if (NULL
-            == (high_redirection_table = g_hash_table_new_full(g_str_hash,
-                    g_str_equal, g_free, g_free))) errx(1,
-            "%s: Fatal error while creating high_redirection_table hash table.\n",
-            __func__);*/
+     == (high_redirection_table = g_hash_table_new_full(g_str_hash,
+     g_str_equal, g_free, g_free))) errx(1,
+     "%s: Fatal error while creating high_redirection_table hash table.\n",
+     __func__);*/
 
     /* set debug file */
     fdebug = -1;
@@ -339,19 +330,10 @@ void init_variables() {
     running = OK;
 }
 
-void init_pcap() {
 
-    /*
-     * We need to call pcap_open_live and pcap_loop on each interface
-     * because pcap_open_live with "any" fragments the ethernet header.
-     *
-     * TODO: Check if pcap has been fixed. It's broken as of 6/19/2013
-     * Expected header: ethernet header source: 30:46:9a:a0:9e:28 destination: 68:a3:c4:4c:a4:3b (ETHERTYPE_IP)
-     * What pcap gives: ethernet header source: 30:46:9a:a0:9e:28 destination: 0:0:0:1:0:6 (?)
-     *
-     * The dst MAC and ether_type are screwed.
-     *
-     */
+/*! init_pcap
+ \brief Initialize pcap capture on each interface and start their respective threads */
+void init_pcap() {
 
     GHashTableIter i;
     char *key = NULL;
@@ -370,7 +352,7 @@ void init_pcap() {
                     __func__, iface->name, pcapErr);
         }
 
-        iface->pcap = pcap_open_live(iface->name, BUFSIZE, iface->promisc, -1,
+        iface->pcap = pcap_open_live(iface->name, BUFSIZE, 0, -1,
                 pcapErr);
 
         if (iface->pcap == NULL) {
@@ -404,6 +386,9 @@ void init_pcap() {
     }
 }
 
+
+/*! wait_pcap
+ \brief Wait till all pcap looper threads exit */
 void wait_pcap() {
     GHashTableIter i;
     char *key = NULL;
@@ -422,9 +407,9 @@ int close_thread() {
 
     /* First, let's make sure all packets already queued get processed */
     uint32_t i;
-    struct pkt_struct pkt = { .last = TRUE };
+    struct raw_pcap raw = { .last = TRUE };
     for (i = 0; i < decision_threads; i++) {
-        g_async_queue_push(de_queues[i], &pkt);
+        g_async_queue_push(de_queues[i], &raw);
         printdbg("%s: Waiting for de_thread %i to terminate\n", H(0), i);
         g_thread_join(de_threads[i]);
         g_async_queue_unref(de_queues[i]);
@@ -447,11 +432,11 @@ int close_hash() {
      */
 
     /*if (high_redirection_table != NULL) {
-        printdbg("%s: Destroying table high_redirection_table\n", H(0));
-        g_rw_lock_writer_lock(&hihredirlock);
-        g_hash_table_destroy(high_redirection_table);
-        high_redirection_table = NULL;
-    }*/
+     printdbg("%s: Destroying table high_redirection_table\n", H(0));
+     g_rw_lock_writer_lock(&hihredirlock);
+     g_hash_table_destroy(high_redirection_table);
+     high_redirection_table = NULL;
+     }*/
 
     if (config != NULL) {
         printdbg("%s: Destroying table config\n", H(0));
@@ -495,15 +480,15 @@ int close_conn_tree() {
      * traverse the B-Tree to remove the singly linked lists and then destroy the B-Tree
      */
     int delay = 0;
-    entrytoclean = g_ptr_array_new();
+    entrytoclean = g_ptr_array_new_with_free_func(g_free);
 
-    g_rw_lock_writer_lock(&connlock);
+    g_mutex_lock(&connlock);
 
     /*! call the clean function for each value, delete the value if TRUE is returned */
-    g_tree_foreach(conn_tree, (GTraverseFunc) expire_conn, &delay);
+    g_tree_foreach(conn_tree, (GTraverseFunc) expire_conn, GINT_TO_POINTER(delay));
 
     /*! remove each key listed from the btree */
-    g_ptr_array_foreach(entrytoclean, (GFunc) free_conn, NULL);
+    g_ptr_array_foreach(entrytoclean, (GFunc) remove_conn, NULL);
 
     /*! free the array */
     g_ptr_array_free(entrytoclean, TRUE);
@@ -541,13 +526,59 @@ void close_all(void) {
     }
 
     /*! delete hashes */
-    if (close_hash() < 0)
-    printdbg("%s: Error when closing hashes\n", H(0));
+    if (close_hash() < 0) {
+        printdbg("%s: Error when closing hashes\n", H(0));
+    }
+}
+
+void pcap_cb(u_char *input, const struct pcap_pkthdr *header,
+        const u_char *packet) {
+
+    if (header->len != header->caplen) {
+        printdbg("%s Truncated packet. Captured %u out of %u bytes. Skipped.\n", H(4), header->caplen, header->len);
+        return;
+    }
+
+    struct iphdr *ip = NULL;
+
+    /*! Catch TCP and UDP packets */
+
+    switch (ntohs(((struct ether_header *) packet)->ether_type)) {
+        case ETHERTYPE_IP:
+            ip = (struct iphdr *) (packet + ETHER_HDR_LEN);
+            break;
+        case ETHERTYPE_VLAN:
+            if (ntohs(((struct vlan_ethhdr *) packet)->h_vlan_encapsulated_proto) == ETHERTYPE_IP) {
+                ip = (struct iphdr *) (packet + VLAN_ETH_HLEN);
+            } else {
+                printdbg(
+                        "%s Invalid encapsulated VLAN ethernet type. Skipped.\n", H(4));
+                return;
+            }
+            break;
+        default:
+            printdbg( "%s Invalid ethernet type. Skipped.\n", H(4));
+            return;
+    }
+
+    struct raw_pcap *raw = malloc(sizeof(struct raw_pcap));
+    raw->header = g_memdup(header, sizeof(struct pcap_pkthdr));
+    raw->packet = g_memdup(packet, header->caplen);
+    raw->iface = (struct interface *) input;
+    raw->last = FALSE;
+
+    uint32_t queue_id = IP2QUEUEID(raw->iface, ip);
+
+    printdbg(
+            "%s** RAW packet of size %u pushed to queue %u **\n", H(0), header->len, queue_id);
+
+    g_async_queue_push(de_queues[queue_id], raw);
+
 }
 
 void pcap_looper(struct interface *iface) {
     if (iface) {
-        pcap_loop(iface->pcap, -1, process_packet, (u_char *) iface);
+        pcap_loop(iface->pcap, -1, pcap_cb, (u_char *) iface);
     } else {
         errx(1, "%s can't start. Iface is NULL\n", __func__);
     }
@@ -556,12 +587,13 @@ void pcap_looper(struct interface *iface) {
 /*! process_packet
  *
  \brief Function called for each received packet. It's thread safe. */
-void process_packet(u_char *input, const struct pcap_pkthdr *header,
-        const u_char *packet) {
+status_t process_packet(struct interface *iface,
+        const struct pcap_pkthdr *header, const u_char *packet,
+        struct pkt_struct **pkt) {
 
-    if (header->len > BUFSIZE || header->len < MIN_PACKET_SIZE) {
+    if (header->len < MIN_PACKET_SIZE) {
         printdbg("%s Invalid packet size: %u. Skipped.\n", H(4), header->len);
-        return;
+        return NOK;
     }
 
     struct ether_header *eth = (struct ether_header *) packet;
@@ -581,63 +613,66 @@ void process_packet(u_char *input, const struct pcap_pkthdr *header,
         } else {
             printdbg(
                     "%s Invalid encapsulated VLAN ethernet type: %u. Skipped.\n", H(4), ntohs(veth->h_vlan_encapsulated_proto));
-            return;
+            return NOK;
         }
     } else {
         printdbg( "%s Invalid ethernet type: %u. Skipped.\n", H(4), ethertype);
-        return;
+        return NOK;
     }
 
     if (ip->protocol != IPPROTO_TCP && ip->protocol != IPPROTO_UDP) {
         printdbg("%s Invalid IP protocol: %u. Skipped\n", H(4), ip->protocol);
-        return;
+        return NOK;
     }
 
     if (ip->ihl < 0x5 || ip->ihl > 0x08) {
         printdbg("%s Invalid IP header length: %u. Skipped.\n", H(4), ip->ihl);
-        return;
+        return NOK;
     }
 
     if (ntohs(ip->tot_len) > header->len) {
         printdbg(
                 "%s Truncated packet: %u/%u. Skipped.\n", H(4), header->len, ntohs(ip->tot_len));
-        return;
+        return NOK;
     }
 
-    struct pkt_struct * pkt = NULL;
+    *pkt = NULL;
 
     /*! Initialize the packet structure (into pkt) and find the origin of the packet */
-    if (init_pkt((struct interface *) input, ethertype, header, packet, &pkt)
-            == NOK) {
+    if (init_pkt(iface, ethertype, header, packet, pkt) == NOK) {
         printdbg("%s Packet structure couldn't be initialized\n", H(0));
 
         pkt = NULL;
-        return;
+        return NOK;
 
-    } else {
-        printdbg(
-                "%s** NEW packet from %s %s, %d bytes. **\n", H(0), pkt->key_src, lookup_proto(pkt->packet.ip->protocol), header->len);
-
-        g_async_queue_push(de_queues[PKT2QUEUEID(pkt)], pkt);
     }
 
-    return;
+    return OK;
 }
 
 void de_thread(gpointer data) {
 
     uint32_t thread_id = GPOINTER_TO_UINT(data);
-    struct pkt_struct *pkt = NULL;
+    struct raw_pcap *raw = NULL;
 
     printdbg("%s: Decision engine thread %i started\n", H(0), thread_id);
 
-    while ((pkt = (struct pkt_struct *) g_async_queue_pop(de_queues[thread_id]))) {
+    while ((raw = (struct raw_pcap *) g_async_queue_pop(de_queues[thread_id]))) {
+
+        printdbg("%s Got a RAW packet from queue %u\n", H(0), thread_id);
 
         // Exit the thread
-        if (pkt->last) {
+        if (raw->last) {
             printdbg("%s Shutting down thread %u\n", H(1), thread_id);
             return;
         }
+
+        struct pkt_struct *pkt = NULL;
+        if (process_packet(raw->iface, raw->header, raw->packet, &pkt) == NOK) {
+            free_raw_pcap(raw);
+            goto done;
+        }
+        free_raw_pcap(raw);
 
         struct conn_struct *conn = NULL;
 
@@ -659,18 +694,22 @@ void de_thread(gpointer data) {
                 && pkt->origin == EXT) {
 
             printdbg("%s Packet not from a valid connection\n", H(conn->id));
-            if (pkt->packet.ip->protocol == IPPROTO_TCP && reset_ext == 1) reply_reset(
-                    pkt, pkt->conn->target->default_route);
+            if (pkt->origin == EXT && pkt->packet.ip->protocol == IPPROTO_TCP
+                    && reset_ext == 1) {
+                reply_reset(pkt, pkt->conn->target->default_route);
+            }
 
             free_pkt(pkt);
             goto done;
         }
 
         if (conn->state == DROP) {
-            printdbg("%s This connection is marked as DROPPED\n", H(conn->id));
 
-            if (pkt->packet.ip->protocol == IPPROTO_TCP && reset_ext == 1) reply_reset(
-                    pkt, pkt->conn->target->default_route);
+            printdbg("%s This connection is marked as DROPPED\n", H(conn->id));
+            if (pkt->origin == EXT && pkt->packet.ip->protocol == IPPROTO_TCP
+                    && reset_ext == 1) {
+                reply_reset(pkt, pkt->conn->target->default_route);
+            }
 
             free_pkt(pkt);
             goto done;
@@ -679,14 +718,6 @@ void de_thread(gpointer data) {
         switch (pkt->origin) {
             /*! Packet is from the low interaction honeypot */
             case LIH:
-
-                pkt->out = pkt->conn->target->default_route;
-
-                //SNAT
-                pkt->nat.src_ip = &pkt->conn->first_pkt_dst_ip;
-                pkt->nat.dst_mac = &pkt->conn->first_pkt_src_mac;
-                pkt->nat.dst_ip = &pkt->conn->first_pkt_src_ip;
-
                 switch (conn->state) {
                     case INIT:
                         if (pkt->packet.ip->protocol == IPPROTO_TCP
@@ -694,7 +725,7 @@ void de_thread(gpointer data) {
                             conn->hih.lih_syn_seq = ntohl(pkt->packet.tcp->seq);
                         }
 
-                        proxy(pkt);
+                        proxy_int(pkt);
 
                         // Only store packets if there are backends
                         if (conn->target->back_handler_count > 0) {
@@ -710,7 +741,7 @@ void de_thread(gpointer data) {
                             conn->hih.lih_syn_seq = ntohl(pkt->packet.tcp->seq);
                         }
 
-                        proxy(pkt);
+                        proxy_int(pkt);
 
                         // Only store packets if there are backends
                         if (conn->target->back_handler_count > 0) {
@@ -723,7 +754,7 @@ void de_thread(gpointer data) {
                     case PROXY:
                         printdbg(
                                 "%s Packet from LIH proxied directly to its destination\n", H(conn->id));
-                        proxy(pkt);
+                        proxy_int(pkt);
                         free_pkt(pkt);
                         break;
                     case CONTROL:
@@ -733,7 +764,7 @@ void de_thread(gpointer data) {
                         }
 
                         if (DE_process_packet(pkt) == OK) {
-                            proxy(pkt);
+                            proxy_int(pkt);
                         }
 
                         // Only store packets if there are backends
@@ -754,14 +785,6 @@ void de_thread(gpointer data) {
                 break;
 
             case HIH:
-
-                pkt->out = pkt->conn->target->default_route;
-
-                //SNAT
-                pkt->nat.src_ip = &pkt->conn->first_pkt_dst_ip;
-                pkt->nat.dst_mac = &pkt->conn->first_pkt_src_mac;
-                pkt->nat.dst_ip = &pkt->conn->first_pkt_src_ip;
-
                 /*! Packet is from the high interaction honeypot */
                 switch (conn->state) {
                     case REPLAY:
@@ -782,12 +805,12 @@ void de_thread(gpointer data) {
                     case PROXY:
                         printdbg(
                                 "%s Packet from HIH proxied directly to its destination\n", H(conn->id));
-                        proxy(pkt);
+                        proxy_int(pkt);
                         free_pkt(pkt);
                         break;
                     case CONTROL:
                         if (DE_process_packet(pkt) == OK) {
-                            proxy(pkt);
+                            proxy_int(pkt);
                         }
                         free_pkt(pkt);
                         break;
@@ -807,7 +830,7 @@ void de_thread(gpointer data) {
                                     "%s Packet from HIH in a new connection, so we control it\n", H(conn->id));
                             switch_state(conn, CONTROL);
                             if (DE_process_packet(pkt) == OK) {
-                                proxy(pkt);
+                                proxy_int(pkt);
                             }
                             free_pkt(pkt);
                         }
@@ -817,30 +840,13 @@ void de_thread(gpointer data) {
 
             case EXT:
             default:
-
-                pkt->out = pkt->conn->target->front_handler->iface;
-                //DNAT
-                pkt->nat.dst_mac = pkt->conn->target->front_handler->mac;
-                pkt->nat.dst_ip = pkt->conn->target->front_handler->ip;
-
                 /*! Packet is from the external attacker (origin == EXT) */
                 switch (conn->state) {
                     case INIT:
+                    case DECISION:
                         //g_string_assign(conn->decision_rule, ";");
                         if (DE_process_packet(pkt) == OK) {
-                            proxy(pkt);
-                        }
-
-                        // Only store packets if there are backends
-                        if (conn->target->back_handler_count > 0) {
-                            store_pkt(conn, pkt);
-                        } else {
-                            free_pkt(pkt);
-                        }
-                        break;
-                    case DECISION:
-                        if (DE_process_packet(pkt) == OK) {
-                            proxy(pkt);
+                            proxy_ext(pkt);
                         }
 
                         // Only store packets if there are backends
@@ -857,13 +863,13 @@ void de_thread(gpointer data) {
                     case PROXY:
                         printdbg(
                                 "%s Packet from EXT proxied directly to its destination (PROXY)\n", H(conn->id));
-                        proxy(pkt);
+                        proxy_ext(pkt);
                         free_pkt(pkt);
                         break;
                     case CONTROL:
                         printdbg(
                                 "%s Packet from EXT proxied directly to its destination (CONTROL)\n", H(conn->id));
-                        proxy(pkt);
+                        proxy_ext(pkt);
                         free_pkt(pkt);
                         break;
                     default:
@@ -874,10 +880,12 @@ void de_thread(gpointer data) {
         }
 
         done:
-        printdbg("%s de_thread end of loop\n", H(1));
-        if (conn) {
-            g_rw_lock_writer_unlock(&conn->lock);
+
+        if(conn) {
+            g_mutex_unlock(&conn->lock);
         }
+
+        printdbg("%s de_thread end of loop\n", H(1));
     }
 }
 
@@ -898,7 +906,6 @@ int main(int argc, char *argv[]) {
 
     int argument;
     char *config_file_name = "";
-    link_count = 0;
     gboolean daemonize = FALSE;
     debug = FALSE;
 
@@ -962,10 +969,6 @@ int main(int argc, char *argv[]) {
                  - top ports?
                  - top IP addresses?
                  */
-                /*case 'd':
-                 g_printerr("Daemonizing honeybrid\n");
-                 daemonize = 1;
-                 break;*/
             case 'd':
                 g_printerr("Daemonizing honeybrid\n");
                 daemonize = TRUE;
@@ -1110,8 +1113,8 @@ int main(int argc, char *argv[]) {
 
     init_pcap();
     wait_pcap();
-
     close_all();
+
     g_printerr("Honeybrid exited successfully.\n");
     exit(0);
 }

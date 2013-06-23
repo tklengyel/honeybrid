@@ -37,14 +37,15 @@
  */
 
 gpointer config_lookup(const char * parameter, gboolean required) {
-	gpointer ret = g_hash_table_lookup(config, parameter);
-	if (!ret && required) {
-		errx(1, "Missing configuration parameter '%s'", parameter);
-	}
-	return ret;
+    gpointer ret = g_hash_table_lookup(config, parameter);
+    if (!ret && required) {
+        errx(1, "Missing configuration parameter '%s'", parameter);
+    }
+    return ret;
 }
 
-gint intcmp(gconstpointer v1, gconstpointer v2, __attribute__((unused)) gconstpointer unused) {
-	return (*(uint32_t *) v1 < (*(uint32_t *) v2) ? 1 :
-			(*(uint32_t *) v1 == (*(uint32_t *) v2)) ? 0 : -1);
+gint intcmp(gconstpointer v1, gconstpointer v2,
+        __attribute__((unused))  gconstpointer unused) {
+    return (*(uint32_t *) v1 < (*(uint32_t *) v2) ? 1 :
+            (*(uint32_t *) v1 == (*(uint32_t *) v2)) ? 0 : -1);
 }

@@ -27,7 +27,9 @@
 #include "types.h"
 #include "structs.h"
 
-status_t proxy(struct pkt_struct* pkt);
+status_t proxy_int(struct pkt_struct* pkt);
+
+status_t proxy_ext(struct pkt_struct* pkt);
 
 status_t forward_hih(struct pkt_struct* pkt);
 

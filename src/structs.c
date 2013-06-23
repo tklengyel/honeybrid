@@ -34,10 +34,13 @@
 
 void free_interface(struct interface *iface) {
     if (iface) {
-        g_free(iface->filter);
+        if(iface->filter) {
+            pcap_freecode(&iface->pcap_filter);
+            free(iface->filter);
+        }
         g_free(iface->name);
         g_free(iface->tag);
-        g_free(iface);
+        free(iface);
     }
 }
 
@@ -47,7 +50,7 @@ void free_handler(struct handler *handler) {
         g_free(handler->ip_str);
         g_free(handler->mac);
         DE_destroy_tree(handler->rule);
-        g_free(handler);
+        free(handler);
     }
 }
 
@@ -57,4 +60,17 @@ void free_target(struct target *t) {
     g_hash_table_destroy(t->unique_backend_ips);
     DE_destroy_tree(t->control_rule);
     g_free(t);
+}
+
+void free_attacker_pin(struct attacker_pin *pin) {
+    if(pin) {
+        if(pin->port_tree) g_tree_destroy(pin->port_tree);
+        free(pin);
+    }
+}
+
+void free_raw_pcap(struct raw_pcap *raw) {
+    free(raw->header);
+    free(raw->packet);
+    free(raw);
 }

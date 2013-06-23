@@ -70,7 +70,7 @@ struct attacker_search {
     gint event;
 };
 
-const char* vmi_log(gpointer data) {
+/*const char* vmi_log(gpointer data) {
     static char vmi_log_buff[12];
     snprintf(vmi_log_buff, 12, "'%u'", GPOINTER_TO_UINT(data));
     return vmi_log_buff;
@@ -316,16 +316,11 @@ gboolean find_if_banned(gpointer key, __attribute__((unused))  gpointer unused,
 mod_result_t mod_vmi_front(struct mod_args *args) {
     printdbg("%s VMI Front Module called\n", H(args->pkt->conn->id));
 
-    gchar **values = g_strsplit(args->pkt->key_src, ":", 0);
-    /*struct attacker_search attacker;
-     attacker.srcIP = values[0];
-     attacker.banned = 0;*/
-
     //printf("Check if attacker is banned..\n");
     //g_tree_foreach(bannedIPs, (GTraverseFunc)find_if_banned,(gpointer)&attacker);
     //if(attacker.banned==0) {
     struct vm_search vm;
-    vm.srcIP = values[0];
+    vm.srcIP = args->pkt->src;
     vm.vm = NULL;
 
     g_tree_foreach(vmi_vms, (GTraverseFunc) find_used_vm, &vm);
@@ -338,8 +333,6 @@ mod_result_t mod_vmi_front(struct mod_args *args) {
         }
         g_rw_lock_writer_unlock(&(vm.vm->lock));
     }
-
-    g_strfreev(values);
 
     return ACCEPT;
 }
@@ -395,6 +388,8 @@ mod_result_t mod_vmi_pick(struct mod_args *args) {
 
         // save the connection keys
         g_rw_lock_writer_lock(&(search.vm->lock));
+        struct addr *key_dup = malloc(sizeof(struct addr));
+        memcpy(key_dup, &args->pkt->key_ip);
         search.vm->conn_keys = g_slist_append(search.vm->conn_keys,
                 strdup(args->pkt->conn->key));
         g_rw_lock_writer_unlock(&(search.vm->lock));
@@ -409,55 +404,6 @@ mod_result_t mod_vmi_pick(struct mod_args *args) {
     return result;
 }
 
-//void mod_vmi_back(struct mod_args *args) {
-/*	printerr("%s VMI Back Module called\n", H(args->pkt->conn->id));
-
- GTimeVal t;
- g_get_current_time(&t);
- gint now = (t.tv_sec);
-
- // Check if IP is banned (exceeded allowed time-frame)
- gchar **key_src;
- key_src = g_strsplit( args->pkt->key_src, ":", 0);
- gint *start=(gint *)g_tree_lookup(bannedIPs, key_src[0]);
- g_strfreev(key_src);
-
- if(start!=NULL && now-(*start)>ATTACK_TIMEOUT) {
- args->node->result = 0;
- return;
- }
-
- int n=write(vmi_sock, "free\n", strlen("free\n"));
-
- if(n<=0) { args->node->result = 0; return; }
-
- char buf[100];
- bzero(buf,100);
- n=read(vmi_sock,buf,100);
-
- if(n<=0) { args->node->result = 0; return; }
-
- char *nl = strrchr(buf, '\r');
- if (nl) *nl = '\0';
- nl = strrchr(buf, '\n');
- if (nl) *nl = '\0';
-
- int free=atoi(buf);
-
- if(free>0) {
- args->node->result = 1;
-
- key_src = g_strsplit( args->pkt->key_src, ":", 0);
- char *attacker=strdup(key_src[0]);
- g_strfreev(key_src);
- gint *startTime=malloc(sizeof(gint));
- *startTime=now;
-
- g_tree_insert(bannedIPs, (gpointer)attacker, (gpointer)startTime);
- }
- else		args->node->result = 0;
- */
-//}
 gboolean control_check_attacker(__attribute__((unused))  gpointer unused,
         gpointer value, gpointer data) {
     struct vmi_vm *vm = (struct vmi_vm *) value;
@@ -507,7 +453,7 @@ mod_result_t mod_vmi_control(struct mod_args *args) {
     printdbg("%s VMI Control Module called\n", H(args->pkt->conn->id));
 
     mod_result_t result = REJECT;
-    /*! get the IP address from the packet */
+    // get the IP address from the packet
     gchar **key_dst;
     //key_src = g_strsplit( args->pkt->key_src, ":", 0);
     key_dst = g_strsplit(args->pkt->key_dst, ":", 2);
@@ -561,10 +507,10 @@ mod_result_t mod_vmi_control(struct mod_args *args) {
 mod_result_t mod_vmi(struct mod_args *args) {
 
     gchar *mode;
-    /*! get the backup file for this module */
+    // get the backup file for this module
     if (NULL
             == (mode = (gchar *) g_hash_table_lookup(args->node->config, "mode"))) {
-        /*! We can't decide */
+        // We can't decide
         printdbg("%s mandatory argument 'mode' undefined (back/control)!\n",
                 H(args->pkt->conn->id));
         return DEFER;
@@ -695,18 +641,18 @@ int init_mod_vmi() {
 
     printdbg("%s Init mod vmi\n", H(22));
 
-    /* socket: create the socket */
+    // socket: create the socket
     vmi_sock = socket(AF_INET, SOCK_STREAM, 0);
     if (vmi_sock < 0)
         errx(1, "%s: ERROR opening socket", __func__);
 
-    /* build the server's Internet address */
+    // build the server's Internet address
     bzero(&vmi_addr, sizeof(vmi_addr));
     vmi_addr.sin_family = AF_INET;
     vmi_addr.sin_addr.s_addr = inet_addr(vmi_server_ip);
     vmi_addr.sin_port = htons(atoi(vmi_server_port));
 
-    /* connect: create a connection with the server */
+    // connect: create a connection with the server
     if (connect(vmi_sock, (struct sockaddr *) &vmi_addr, sizeof(vmi_addr)) < 0)
         errx(1, "%s: ERROR connecting", __func__);
 
@@ -740,3 +686,4 @@ int init_mod_vmi() {
 
     return 0;
 }
+*/

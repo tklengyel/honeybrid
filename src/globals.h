@@ -70,8 +70,6 @@ GHashTable *module;
 /*! \brief global hash table to hold module paramaters */
 GHashTable *links;
 
-uint32_t link_count;
-
 /*! \brief global hash table that contain the dynamic correspondance between HIH services et LIH services  */
 GHashTable *high_redirection_table;
 
@@ -94,7 +92,7 @@ GTree *flow_tree;
 
 /*! \brief security writing lock for the Binary Tree
  */
-GRWLock connlock;
+GMutex connlock;
 
 /*! \def list of module to save
  */

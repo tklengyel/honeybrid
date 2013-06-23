@@ -56,11 +56,6 @@ struct target {
 
 void free_target(struct target *t);
 
-struct related_conn {
-    uint32_t reference_count;
-    struct target *target;
-};
-
 /*!
  \def ethernet_hdr
  \brief memory structure to hold ethernet header (14 bytes)
@@ -152,14 +147,15 @@ struct interface {
     char *name; // like "eth0"
     char *tag; // like "main"
     char *filter;
-
     int promisc;
-    int id;
 
     struct addr ip;
     bpf_u_int32 netmask; /* subnet mask  */
     bpf_u_int32 ip_network; /* ip network */
     struct addr mac;
+
+    // only if the iface is set as a target's default route
+    struct target *target;
 
     pcap_t *pcap;
     GThread *pcap_looper;
@@ -176,12 +172,12 @@ void free_interface(struct interface *iface);
  */
 struct hih_struct {
     int hihID;
-    struct addr *addr;
+    struct addr *ip;
+    struct addr *mac;
     struct interface *iface;
     uint16_t port;
     unsigned lih_syn_seq;
     unsigned delta;
-    struct addr *lih_addr;
     char *redirect_key;
 };
 
@@ -232,6 +228,11 @@ struct custom_conn_data {
     const char* (*data_print)(gpointer data); // define function to print data in log (if any)
 };
 
+struct keys {
+    struct addr ip;
+    uint16_t port;
+};
+
 /*! conn_struct
  \brief The meta informations of a connection stored in the main Binary Tree
 
@@ -249,10 +250,9 @@ struct custom_conn_data {
  \param hih, hih info
  */
 struct conn_struct {
-    char *key;
-    char *key_with_port;
-    char *key_ext_with_port;
-    char *key_lih_with_port;
+    struct keys keys;
+
+    GMutex lock;
 
     uint8_t protocol;
     GString *start_timestamp;
@@ -272,7 +272,6 @@ struct conn_struct {
     uint32_t count_data_pkt_from_intruder;
     GSList *BUFFER;
     struct expected_data_struct expected_data;
-    GRWLock lock;
 
     origin_t initiator; // who initiated the conn? EXT/LIH/HIH
 
@@ -313,11 +312,25 @@ unsigned int dionaeaDownloadTime;
 }__attribute__ ((packed));
 
 struct nat {
-    nat_t type;
-    struct addr *src_mac;
     struct addr *src_ip;
     struct addr *dst_mac;
     struct addr *dst_ip;
+};
+
+struct raw_pcap {
+    struct interface *iface;
+    struct pcap_pkthdr *header;
+    u_char *packet;
+    gboolean last; // last packet to be pushed in the queue
+};
+void free_raw_pcap(struct raw_pcap *raw);
+
+struct headers {
+    struct ether_header *eth;
+    struct vlan_ethhdr *vlan;
+    struct iphdr *ip;
+    struct tcphdr *tcp;
+    struct udphdr *udp;
 };
 
 /*! pkt_struct
@@ -330,6 +343,7 @@ struct nat {
  */
 struct pkt_struct {
     struct packet packet;
+    struct headers original_headers;
     origin_t origin;
     int data;
     uint32_t size;
@@ -338,13 +352,13 @@ struct pkt_struct {
 
     struct nat nat;
 
-    char *key_src;
-    char *key_dst;
-    char *key_src_with_port;
-    char *key_dst_with_port;
+    char *src;
+    char *dst;
+    char *src_with_port;
+    char *dst_with_port;
 
-    char *key;
-    char *key_with_port;
+    struct keys keys;
+
     int position; // position in the connection queue
 
     __be16 vlan_in;
@@ -352,8 +366,6 @@ struct pkt_struct {
 
     struct interface *in;
     struct interface *out;
-
-    gboolean last; // last packet to be pushed in the queue
 
     //TODO: Deprecate
     uint32_t vlan;
@@ -418,6 +430,25 @@ struct log_event {
     int level;
     unsigned id;
     char *curtime;
+};
+
+struct attacker_pin {
+    struct addr ip;
+    GTree *port_tree;
+    struct target *target;
+};
+void free_attacker_pin(struct attacker_pin *pin);
+
+struct expire_conn_port {
+    gpointer delay;
+    struct addr *key_ip;
+};
+
+struct expire_conn {
+    struct addr *key_ip;
+    uint16_t key_port;
+    int delay;
+    struct conn_struct *conn;
 };
 
 #endif /* __STRUCTS_H_ */

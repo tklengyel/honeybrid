@@ -391,18 +391,36 @@ status_t log_csv(const struct conn_struct *conn, const char *proto,
         const char *status, GString **status_info, gdouble duration,
         output_t output) {
 
-    gchar **tuple;
-    tuple = g_strsplit(conn->key_with_port, ":", 0);
+    char src[INET_ADDRSTRLEN];
+    char dst[INET_ADDRSTRLEN];
+    uint16_t src_port;
+    uint16_t dst_port;
+
+    if (conn->initiator == EXT) {
+        inet_ntop(AF_INET, &(conn->first_pkt_src_ip.addr_ip), src,
+                INET_ADDRSTRLEN);
+        inet_ntop(AF_INET, &(conn->first_pkt_dst_ip.addr_ip), dst,
+                INET_ADDRSTRLEN);
+        src_port = conn->first_pkt_src_port;
+        dst_port = conn->first_pkt_dst_port;
+    } else {
+        inet_ntop(AF_INET, &(conn->first_pkt_dst_ip.addr_ip), src,
+                INET_ADDRSTRLEN);
+        inet_ntop(AF_INET, &(conn->first_pkt_src_ip.addr_ip), dst,
+                INET_ADDRSTRLEN);
+        src_port = conn->first_pkt_dst_port;
+        dst_port = conn->first_pkt_src_port;
+    }
 
     int log_size = snprintf(NULL, 0,
 #ifdef HAVE_XMPP
-            "%s,%.3f,%d,%s,%s,%s,%s,%s,%d,%d,%s,%d,%s,%s,%s,%s,%s,%s,%i,%i\n",
+            "%s,%.3f,%d,%s,%s,%u,%s,%u,%d,%d,%s,%d,%s,%s,%s,%s,%s,%s,%i,%i\n",
 #else
-            "%s,%.3f,%d,%s,%s,%s,%s,%s,%d,%d,%s,%d,%s,%s,%s,%s,%s,%s\n",
+            "%s,%.3f,%d,%s,%s,%u,%s,%u,%d,%d,%s,%d,%s,%s,%s,%s,%s,%s\n",
 #endif
-            conn->start_timestamp->str, duration, conn->uplink_vlan, proto,
-            tuple[0], tuple[1], tuple[2], tuple[3], conn->total_packet,
-            conn->total_byte, status, conn->id,
+            conn->start_timestamp->str, duration, conn->uplink_vlan, proto, src,
+            src_port, dst, dst_port, conn->total_packet, conn->total_byte,
+            status, conn->id,
             //status_info[INVALID]->str,
             status_info[INIT]->str, status_info[DECISION]->str,
             status_info[REPLAY]->str, status_info[FORWARD]->str,
@@ -419,13 +437,13 @@ status_t log_csv(const struct conn_struct *conn, const char *proto,
 
     sprintf(logbuf,
 #ifdef HAVE_XMPP
-            "%s,%.3f,%d,%s,%s,%s,%s,%s,%d,%d,%s,%d,%s,%s,%s,%s,%s,%s,%i,%i\n",
+            "%s,%.3f,%d,%s,%s,%u,%s,%u,%d,%d,%s,%d,%s,%s,%s,%s,%s,%s,%i,%i\n",
 #else
-            "%s,%.3f,%d,%s,%s,%s,%s,%s,%d,%d,%s,%d,%s,%s,%s,%s,%s,%s\n",
+            "%s,%.3f,%d,%s,%s,%u,%s,%u,%d,%d,%s,%d,%s,%s,%s,%s,%s,%s\n",
 #endif
-            conn->start_timestamp->str, duration, conn->uplink_vlan, proto,
-            tuple[0], tuple[1], tuple[2], tuple[3], conn->total_packet,
-            conn->total_byte, status, conn->id,
+            conn->start_timestamp->str, duration, conn->uplink_vlan, proto, src,
+            src_port, dst, dst_port, conn->total_packet, conn->total_byte,
+            status, conn->id,
             //status_info[INVALID]->str,
             status_info[INIT]->str, status_info[DECISION]->str,
             status_info[REPLAY]->str, status_info[FORWARD]->str,
@@ -442,7 +460,6 @@ status_t log_csv(const struct conn_struct *conn, const char *proto,
     else if (output == OUTPUT_LOGFILES) fprintf(logfd, "%s", logbuf);
 
     free(logbuf);
-    g_strfreev(tuple);
 
     return OK;
 }
@@ -456,14 +473,18 @@ status_t log_std(const struct conn_struct *conn, const char *proto,
     uint16_t src_port;
     uint16_t dst_port;
 
-    if(conn->initiator==EXT) {
-        inet_ntop(AF_INET, &(conn->first_pkt_src_ip.addr_ip), src, INET_ADDRSTRLEN);
-        inet_ntop(AF_INET, &(conn->first_pkt_dst_ip.addr_ip), dst, INET_ADDRSTRLEN);
+    if (conn->initiator == EXT) {
+        inet_ntop(AF_INET, &(conn->first_pkt_src_ip.addr_ip), src,
+                INET_ADDRSTRLEN);
+        inet_ntop(AF_INET, &(conn->first_pkt_dst_ip.addr_ip), dst,
+                INET_ADDRSTRLEN);
         src_port = conn->first_pkt_src_port;
         dst_port = conn->first_pkt_dst_port;
     } else {
-        inet_ntop(AF_INET, &(conn->first_pkt_dst_ip.addr_ip), src, INET_ADDRSTRLEN);
-        inet_ntop(AF_INET, &(conn->first_pkt_src_ip.addr_ip), dst, INET_ADDRSTRLEN);
+        inet_ntop(AF_INET, &(conn->first_pkt_dst_ip.addr_ip), src,
+                INET_ADDRSTRLEN);
+        inet_ntop(AF_INET, &(conn->first_pkt_src_ip.addr_ip), dst,
+                INET_ADDRSTRLEN);
         src_port = conn->first_pkt_dst_port;
         dst_port = conn->first_pkt_src_port;
     }
@@ -471,13 +492,13 @@ status_t log_std(const struct conn_struct *conn, const char *proto,
     int log_size =
             snprintf(NULL, 0,
 #ifdef HAVE_XMPP
-                    "%s %.3f %d %s %s:%u -> %s:%u %d %d %s ** %d %s %s %s %s %s [%s] | %i %i\n",
+                    "%s %.3f %d %s %s:%u <-> %s:%u %d %d %s ** %d %s %s %s %s %s [%s] | %i %i\n",
 #else
-                    "%s %.3f %s %s:%u -> %s:%u %d %d %s ** %d %s %s %s %s %s [%s]\n",
+                    "%s %.3f %s %s:%u <-> %s:%u %d %d %s ** %d %s %s %s %s %s [%s]\n",
 #endif
-                    conn->start_timestamp->str, duration, proto, src,
-                    src_port, dst, dst_port, conn->total_packet,
-                    conn->total_byte, status, conn->id,
+                    conn->start_timestamp->str, duration, proto, src, src_port,
+                    dst, dst_port, conn->total_packet, conn->total_byte, status,
+                    conn->id,
                     //status_info[INVALID]->str,
                     status_info[INIT]->str, status_info[DECISION]->str,
                     status_info[REPLAY]->str, status_info[FORWARD]->str,
@@ -564,14 +585,32 @@ status_t log_mysql(const struct conn_struct *conn, const char *proto,
 
     if (init_mysql_log() == 0) {
 
-        gchar **tuple;
-        tuple = g_strsplit(conn->key_with_port, ":", 0);
+        char src[INET_ADDRSTRLEN];
+        char dst[INET_ADDRSTRLEN];
+        uint16_t src_port;
+        uint16_t dst_port;
+
+        if (conn->initiator == EXT) {
+            inet_ntop(AF_INET, &(conn->first_pkt_src_ip.addr_ip), src,
+                    INET_ADDRSTRLEN);
+            inet_ntop(AF_INET, &(conn->first_pkt_dst_ip.addr_ip), dst,
+                    INET_ADDRSTRLEN);
+            src_port = conn->first_pkt_src_port;
+            dst_port = conn->first_pkt_dst_port;
+        } else {
+            inet_ntop(AF_INET, &(conn->first_pkt_dst_ip.addr_ip), src,
+                    INET_ADDRSTRLEN);
+            inet_ntop(AF_INET, &(conn->first_pkt_src_ip.addr_ip), dst,
+                    INET_ADDRSTRLEN);
+            src_port = conn->first_pkt_dst_port;
+            dst_port = conn->first_pkt_src_port;
+        }
 
         int log_size = snprintf(NULL, 0, "INSERT INTO honeybrid VALUES ("
                 "'',"
                 "%.3f, %.3f, %i,"
-                "'%s', '%s', '%s',"
-                "'%s', '%s', %d,"
+                "'%s', '%s', '%u',"
+                "'%s', '%u', %d,"
                 "%d, '%s', %d,"
                 "'%s', '%s', '%s',"
                 "'%s', '%s',"
@@ -581,9 +620,9 @@ status_t log_mysql(const struct conn_struct *conn, const char *proto,
 #endif
                 ");",
 
-        conn->start_microtime, duration, (int) conn->uplink_vlan, proto,
-                tuple[0], tuple[1], tuple[2], tuple[3], conn->total_packet,
-                conn->total_byte, status, conn->id, status_info[INIT]->str,
+        conn->start_microtime, duration, (int) conn->uplink_vlan, proto, src,
+                src_port, dst, dst_port, conn->total_packet, conn->total_byte,
+                status, conn->id, status_info[INIT]->str,
                 status_info[DECISION]->str, status_info[REPLAY]->str,
                 status_info[FORWARD]->str, status_info[PROXY]->str,
                 (conn->custom_data ? custom_conn_data(conn->custom_data) : "-")
@@ -597,8 +636,8 @@ status_t log_mysql(const struct conn_struct *conn, const char *proto,
         sprintf(logbuf, "INSERT INTO honeybrid VALUES ("
                 "'',"
                 "%.3f, %.3f, %i,"
-                "'%s', '%s', '%s',"
-                "'%s', '%s', %d,"
+                "'%s', '%s', '%u',"
+                "'%s', '%u', %d,"
                 "%d, '%s', %d,"
                 "'%s', '%s', '%s',"
                 "'%s', '%s',"
@@ -607,11 +646,10 @@ status_t log_mysql(const struct conn_struct *conn, const char *proto,
                 ",%i,%i"
 #endif
                 ");", conn->start_microtime, duration, (int) conn->uplink_vlan,
-                proto, tuple[0], tuple[1], tuple[2], tuple[3],
-                conn->total_packet, conn->total_byte, status, conn->id,
-                status_info[INIT]->str, status_info[DECISION]->str,
-                status_info[REPLAY]->str, status_info[FORWARD]->str,
-                status_info[PROXY]->str,
+                proto, src, src_port, dst, dst_port, conn->total_packet,
+                conn->total_byte, status, conn->id, status_info[INIT]->str,
+                status_info[DECISION]->str, status_info[REPLAY]->str,
+                status_info[FORWARD]->str, status_info[PROXY]->str,
                 (conn->custom_data ? custom_conn_data(conn->custom_data) : "-")
 #ifdef HAVE_XMPP
                 ,conn->dionaeaDownload, conn->dionaeaDownloadTime
@@ -622,8 +660,6 @@ status_t log_mysql(const struct conn_struct *conn, const char *proto,
             g_printerr("Logging to MySQL failed: %s\n", mysql_error(mysqlConn));
             ret = NOK;
         }
-
-        g_strfreev(tuple);
 
     }
 
