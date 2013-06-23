@@ -320,11 +320,11 @@ void init_variables() {
             __func__);
 
     /*! create the redirection table */
-    if (NULL
+    /*if (NULL
             == (high_redirection_table = g_hash_table_new_full(g_str_hash,
                     g_str_equal, g_free, g_free))) errx(1,
             "%s: Fatal error while creating high_redirection_table hash table.\n",
-            __func__);
+            __func__);*/
 
     /* set debug file */
     fdebug = -1;
@@ -369,12 +369,6 @@ void init_pcap() {
                     "%s Couldn't get network interface information on %s: %s!\n",
                     __func__, iface->name, pcapErr);
         }
-
-        /*printdbg(
-         "%s Starting pcap_looper on interface %s (%s): ", H(4), iface->name, iface->tag);
-         printdbg("ip %s ", addr_ntoa(iface->ip));
-         printdbg("netmask %s ", inet_ntoa(*(struct in_addr *)&iface->netmask));
-         printdbg("hw %s\n", addr_ntoa(iface->mac));*/
 
         iface->pcap = pcap_open_live(iface->name, BUFSIZE, iface->promisc, -1,
                 pcapErr);
@@ -452,12 +446,12 @@ int close_hash() {
     /*! Destroy hash tables
      */
 
-    if (high_redirection_table != NULL) {
+    /*if (high_redirection_table != NULL) {
         printdbg("%s: Destroying table high_redirection_table\n", H(0));
         g_rw_lock_writer_lock(&hihredirlock);
         g_hash_table_destroy(high_redirection_table);
         high_redirection_table = NULL;
-    }
+    }*/
 
     if (config != NULL) {
         printdbg("%s: Destroying table config\n", H(0));

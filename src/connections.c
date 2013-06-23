@@ -407,7 +407,7 @@ status_t switch_state(struct conn_struct *conn, int new_state) {
 
 status_t conn_lookup(struct pkt_struct *pkt, struct conn_struct **conn) {
 
-    status_t ret = OK;
+    status_t ret = NOK;
     *conn = NULL;
 
     g_rw_lock_reader_lock(&connlock);
@@ -416,44 +416,25 @@ status_t conn_lookup(struct pkt_struct *pkt, struct conn_struct **conn) {
             "%s Looking for connection %s <-> %s with key %s!\n", H(0), pkt->key_src_with_port, pkt->key_dst_with_port, pkt->key_with_port);
 
     /* Check first if a structure already exists */
-    if (FALSE
+    if (TRUE
             == g_tree_lookup_extended(conn_tree, pkt->key_with_port, NULL,
                     (gpointer *) conn)) {
-        char *value = NULL;
 
-        /* Nothing found, looking up in the redirection table */
-        g_rw_lock_reader_lock(&hihredirlock);
-        value = g_hash_table_lookup(high_redirection_table, pkt->key);
-        g_rw_lock_reader_unlock(&hihredirlock);
-
-        if (value != NULL) {
-            printdbg(
-                    "%s ~~~~ This packet is part of a replayed connection ~~~~~\n", H(0));
-
-            pkt->origin = HIH;
-
-            if (FALSE
-                    == g_tree_lookup_extended(conn_tree, pkt->key, NULL,
-                            (gpointer *) conn)) {
-                printdbg(
-                        "%s ~~~~ Error! Related connection structure can't be found with key %s ~~~~~\n", H(0), pkt->key);
-                ret = NOK;
-            }
-        }
-    } else {
         // Connection found, update origin if its still unknown internal
         if (pkt->origin == INT) {
-            if(pkt->in == (*conn)->target->front_handler->iface) {
+            if (pkt->in == (*conn)->target->front_handler->iface) {
                 pkt->origin = LIH;
             } else {
                 pkt->origin = HIH;
             }
         }
+
+        ret = OK;
     }
 
     g_rw_lock_reader_unlock(&connlock);
 
-    if (ret == OK && *conn && pkt->packet.ip->protocol == IPPROTO_TCP) {
+    if (ret == OK && pkt->packet.ip->protocol == IPPROTO_TCP) {
         // Both sides sent TCP-FIN already
         // We need to expire this connection and start a new one.
         if ((*conn)->tcp_fin_in && (*conn)->tcp_fin_out
@@ -551,7 +532,7 @@ status_t create_conn(struct pkt_struct *pkt, struct conn_struct **conn,
 
     /*! this packet is for an unconfigured target, we drop it */
     printdbg(
-            "%s No honeypot IP found for this address (%s), pkt key: %s, skipping for now.\n", H(0), inet_ntoa(*(struct in_addr*) &pkt->packet.ip->daddr), pkt->key);
+            "%s No honeypot IP found for this address (%s), pkt key: %s, skipping for now.\n", H(0), pkt->key_dst, pkt->key);
     goto done;
 
     /*! initialize connection */
@@ -587,6 +568,8 @@ status_t create_conn(struct pkt_struct *pkt, struct conn_struct **conn,
     conn_init->total_packet = 1;
     conn_init->total_byte = pkt->size;
     conn_init->decision_rule = g_string_new("");
+
+    conn_init->last_pkt = pkt;
 
     addr_pack(&conn_init->first_pkt_src_mac, ADDR_TYPE_ETH, 0,
             &pkt->packet.eth->ether_shost, ETH_ALEN);
@@ -659,6 +642,7 @@ status_t update_conn(struct pkt_struct *pkt, struct conn_struct *conn,
 
     g_rw_lock_writer_lock(&(conn->lock));
     /*! statistics */
+    conn->last_pkt = pkt;
     conn->stat_time[state] = microtime;
     conn->stat_packet[state] += 1;
     conn->stat_byte[state] += pkt->size;
@@ -743,8 +727,9 @@ status_t init_conn(struct pkt_struct *pkt, struct conn_struct **conn) {
     microtime += (((gdouble) t.tv_usec) / 1000000.0);
 
     if (OK == conn_lookup(pkt, conn)) {
-        if (*conn) return update_conn(pkt, *conn, microtime);
-        else return create_conn(pkt, conn, microtime);
+        return update_conn(pkt, *conn, microtime);
+    } else {
+        return create_conn(pkt, conn, microtime);
     }
 
     return NOK;
@@ -797,6 +782,19 @@ void free_conn(gpointer key, __attribute__((unused))      gpointer unused) {
             current = g_slist_next(current);
         }
         g_slist_free(conn->custom_data);
+
+        /*if(conn->replay_id) {
+            g_rw_lock_writer_lock(&hihredirlock);
+            GHashTable *hih_redir_list = (GHashTable *)g_hash_table_lookup(high_redirection_table, conn->key);
+            if(hih_redir_list) {
+                g_hash_table_remove(hih_redir_list, conn->key_with_port);
+                if(g_hash_table_size(hih_redir_list)==0) {
+                    g_hash_table_destroy(hih_redir_list);
+                    g_hash_table_remove(high_redirection_table, conn->key);
+                }
+            }
+            g_rw_lock_writer_unlock(&hihredirlock);
+        }*/
 
         g_free(conn->key);
         g_free(conn->key_with_port);
@@ -856,6 +854,8 @@ void clean() {
 status_t setup_redirection(struct conn_struct *conn, uint32_t hih_use) {
     /* Check if decision engine gave me wrong HIH ID */
     if (hih_use == 0) {
+        printdbg(
+                "%s [** Error, decision engine failed to specify which HIH to use**]\n", H(conn->id));
         return NOK;
     }
 
@@ -867,31 +867,29 @@ status_t setup_redirection(struct conn_struct *conn, uint32_t hih_use) {
 
     if (hihaddr != NULL) {
 
-        printdbg(
-                "%s [** HIH address: %s, port: %u **]\n", H(conn->id), addr_ntoa(hihaddr), conn->first_pkt_dst_port);
-
-        /*! we check for concurrent connections using the same HIH_IP:PORT <-> EXT_IP */
-        GString *key_hih_ext = g_string_new("");
-        g_string_printf(key_hih_ext, "%s:%u:%s", addr_ntoa(hihaddr),
-                conn->first_pkt_dst_port, addr_ntoa(&conn->first_pkt_src_ip));
+        /*GHashTable *hih_redir_list = NULL;
 
         g_rw_lock_writer_lock(&hihredirlock);
-        if (g_hash_table_lookup(high_redirection_table,
-                key_hih_ext->str) == NULL) {
 
-            g_hash_table_insert(high_redirection_table,
-                    g_strdup(key_hih_ext->str),
-                    g_strdup(addr_ntoa(conn->target->front_handler->ip)));
-            printdbg(
-                    "%s [** high_redirection_table updated: key %s value %s **]\n", H(conn->id), key_hih_ext->str, addr_ntoa(conn->target->front_handler->ip));
-
-        } else {
-            g_string_free(key_hih_ext, TRUE);
-            printdbg(
-                    "%s [** HIH already busy with the same tuple, can't proceed **]\n", H(conn->id));
-            return NOK;
+        if ((hih_redir_list = g_hash_table_lookup(high_redirection_table,
+                conn->key)) == NULL) {
+            if (NULL
+                    == (links = g_hash_table_new_full(g_str_hash, g_str_equal,
+                            g_free, NULL))) errx(1,
+                    "%s: Fatal error while creating nested redirection hash table.\n",
+                    __func__);
         }
-        g_rw_lock_writer_unlock(&hihredirlock);
+
+        g_hash_table_insert(hih_redir_list, g_strdup(conn->key_with_port),
+                GUINT_TO_POINTER(TRUE));
+
+        g_hash_table_insert(high_redirection_table, g_strdup(conn->key),
+                hih_redir_list);
+
+        printdbg(
+                "%s [** high_redirection_table updated: key %s value %s **]\n", H(conn->id), conn->key, conn->key_with_port);
+
+        g_rw_lock_writer_unlock(&hihredirlock);*/
 
         GTimeVal t;
         g_get_current_time(&t);
@@ -904,13 +902,10 @@ status_t setup_redirection(struct conn_struct *conn, uint32_t hih_use) {
         conn->hih.addr = hihaddr;
         conn->hih.lih_addr = conn->target->front_handler->ip;
         conn->hih.port = conn->first_pkt_dst_port;
-        conn->hih.redirect_key = g_strdup(key_hih_ext->str);
         /*! We then update the status of the connection structure */
         conn->stat_time[DECISION] = microtime;
 
         switch_state(conn, REPLAY);
-
-        g_string_free(key_hih_ext, TRUE);
 
         /*! We reset the LIH */
         reset_lih(conn);

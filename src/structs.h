@@ -283,6 +283,8 @@ struct conn_struct {
     uint16_t first_pkt_src_port;
     uint16_t first_pkt_dst_port;
 
+    struct pkt_struct *last_pkt;
+
     struct hih_struct hih;
 
     struct target *target;

@@ -266,7 +266,6 @@ void decide(struct decision_holder *decision) {
 
 static inline
 void get_decision(struct decision_holder *decision) {
-
     if (decision->node == NULL) {
         printdbg(
                 "%s rule is NULL for state %s on target %p\n", H(decision->pkt->conn->id), lookup_state(decision->pkt->conn->state), decision->pkt->conn->target);
@@ -279,16 +278,14 @@ void get_decision(struct decision_holder *decision) {
     }
 }
 
-int get_decision_backend(gpointer key, struct handler * back_handler, struct decision_holder * decision) {
-    //struct decision_holder *decision = (struct decision_holder *) data;
-    //struct handler *back_handler = (struct handler *) value;
-    decision->backend_test = *(uint32_t *) key;
+int get_decision_backend(uint32_t *key, struct handler * back_handler, struct decision_holder * decision) {
+    decision->backend_test = *key;
     decision->node = back_handler->rule;
     get_decision(decision);
 
     /* Stop searching on the first accept */
-    if (decision->result == 1) {
-        decision->backend_use = *(uint32_t *) key;
+    if (decision->result == DE_ACCEPT) {
+        decision->backend_use = *key;
         return TRUE;
     } else {
         return FALSE;

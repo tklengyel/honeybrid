@@ -372,10 +372,9 @@ rule: 	{
     	g_tree_insert($$->back_handlers, key, back_handler);
     	g_hash_table_insert($$->unique_backend_ips, back_handler->ip_str, NULL);
         
-       char *mac = addr_ntoa(back_handler->mac);
+        char *mac = addr_ntoa(back_handler->mac);
         g_printerr("\tBackend #%u defined at %s hw %s on '%s' with rule: %s\n", *key, back_handler->ip_str,
-        mac
-        , $4, $10->str);
+        	mac, $4, $10->str);
                 
         g_string_free($10, TRUE);
         g_free($4);
