@@ -310,15 +310,8 @@ void init_variables() {
             "%s: Fatal error while creating links hash table.\n", __func__);
 
     /* create the main B-Tree to store meta informations of active connections */
-    if (NULL
-            == (conn_tree = g_tree_new_full((GCompareDataFunc) g_strcmp0, NULL,
-                    g_free, g_free))) {
+    if (NULL == (conn_tree = g_tree_new((GCompareFunc) g_strcmp0))) {
         errx(1, "%s: Fatal error while creating conn_tree.\n", __func__);
-    }
-
-    /* create the main B-Tree to store meta informations of active connections */
-    if (NULL == (flow_tree = g_tree_new((GCompareFunc) g_strcmp0))) {
-        errx(1, "%s: Fatal error while creating flow_tree.\n", __func__);
     }
 
     /*! create the hash table for the log engine */
@@ -500,7 +493,7 @@ int close_hash() {
 
 /*! close_conn_tree function
  \brief Function to free memory taken by conn_tree */
-int close_conn_trees() {
+int close_conn_tree() {
 
     printdbg("%s: Destroying connection tree\n", H(0));
 
@@ -513,7 +506,7 @@ int close_conn_trees() {
     g_rw_lock_writer_lock(&connlock);
 
     /*! call the clean function for each value, delete the value if TRUE is returned */
-    g_tree_foreach(flow_tree, (GTraverseFunc) expire_conn, &delay);
+    g_tree_foreach(conn_tree, (GTraverseFunc) expire_conn, &delay);
 
     /*! remove each key listed from the btree */
     g_ptr_array_foreach(entrytoclean, (GFunc) free_conn, NULL);
@@ -522,11 +515,7 @@ int close_conn_trees() {
     g_ptr_array_free(entrytoclean, TRUE);
     entrytoclean = NULL;
 
-    g_tree_destroy(flow_tree);
-    flow_tree = NULL;
-
     g_tree_destroy(conn_tree);
-
     conn_tree = NULL;
 
     return 0;
@@ -540,7 +529,7 @@ void close_all(void) {
             "%s: Error when waiting for threads to close\n", H(0));
 
     /*! delete conn_tree */
-    if (close_conn_trees() < 0) g_printerr("%s: Error when closing conn_tree\n",
+    if (close_conn_tree() < 0) g_printerr("%s: Error when closing conn_tree\n",
             H(0));
 
     /*! delete lock file */

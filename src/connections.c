@@ -385,7 +385,7 @@ status_t switch_state(struct conn_struct *conn, int new_state) {
  sprintf(key, "%s:%s:%s", pkt->key_src, ip, split[1]);
 
  if (TRUE
- == g_tree_lookup_extended(flow_tree, key, NULL,
+ == g_tree_lookup_extended(conn_tree, key, NULL,
  (gpointer *) conn)
  && (*conn)->initiator == HIH) {
  printdbg(
@@ -417,7 +417,7 @@ status_t conn_lookup(struct pkt_struct *pkt, struct conn_struct **conn) {
 
     /* Check first if a structure already exists */
     if (FALSE
-            == g_tree_lookup_extended(flow_tree, pkt->key_with_port, NULL,
+            == g_tree_lookup_extended(conn_tree, pkt->key_with_port, NULL,
                     (gpointer *) conn)) {
         char *value = NULL;
 
@@ -433,7 +433,7 @@ status_t conn_lookup(struct pkt_struct *pkt, struct conn_struct **conn) {
             pkt->origin = HIH;
 
             if (FALSE
-                    == g_tree_lookup_extended(flow_tree, pkt->key, NULL,
+                    == g_tree_lookup_extended(conn_tree, pkt->key, NULL,
                             (gpointer *) conn)) {
                 printdbg(
                         "%s ~~~~ Error! Related connection structure can't be found with key %s ~~~~~\n", H(0), pkt->key);
@@ -628,10 +628,10 @@ status_t create_conn(struct pkt_struct *pkt, struct conn_struct **conn,
             (int) tv.tv_usec);
 
     /*! insert entry in B-Tree */
-    g_tree_insert(flow_tree, conn_init->key_with_port, conn_init);
+    g_tree_insert(conn_tree, conn_init->key_with_port, conn_init);
 
     printdbg(
-            "%s Key '%s' inserted to flow_tree with uplink mark %u and downlink mark %u\n", H(0), conn_init->key_with_port, conn_init->uplink_vlan, conn_init->downlink_vlan);
+            "%s Key '%s' inserted to conn_tree with uplink mark %u and downlink mark %u\n", H(0), conn_init->key_with_port, conn_init->uplink_vlan, conn_init->downlink_vlan);
 
     /*! store new entry in current struct */
     pkt->conn = conn_init;
@@ -708,7 +708,7 @@ status_t expire_conn(gpointer key, struct conn_struct *conn,
 
     int delay = *expiration_delay;
 
-    if (NULL != g_tree_lookup(flow_tree, (char *) key)
+    if (NULL != g_tree_lookup(conn_tree, (char *) key)
             && ((curtime - conn->access_time > delay) || conn->state < INIT)) {
 
         printdbg(
@@ -759,24 +759,11 @@ void free_conn(gpointer key, __attribute__((unused))      gpointer unused) {
 
     g_rw_lock_writer_lock(&connlock);
 
-    struct conn_struct *conn = (struct conn_struct *) g_tree_lookup(flow_tree,
+    struct conn_struct *conn = (struct conn_struct *) g_tree_lookup(conn_tree,
             key);
 
     if (conn) {
-        g_tree_steal(flow_tree, key);
-
-        // Decrement the related conn reference count
-        struct related_conn *related = (struct related_conn *) g_tree_lookup(
-                conn_tree, conn->key);
-        if (related) {
-            related->reference_count--;
-
-            // If this is the last one, free memory
-            if (related->reference_count == 0) {
-                g_tree_remove(conn_tree, conn->key);
-                related = NULL;
-            }
-        }
+        g_tree_steal(conn_tree, key);
     }
 
     g_rw_lock_writer_unlock(&connlock);
@@ -812,6 +799,7 @@ void free_conn(gpointer key, __attribute__((unused))      gpointer unused) {
         g_slist_free(conn->custom_data);
 
         g_free(conn->key);
+        g_free(conn->key_with_port);
         g_free(conn->hih.redirect_key);
         g_string_free(conn->start_timestamp, TRUE);
         g_string_free(conn->decision_rule, TRUE);
@@ -845,7 +833,7 @@ void clean() {
 
             /*! call the clean function for each value */
             g_rw_lock_reader_lock(&connlock);
-            g_tree_foreach(flow_tree, (GTraverseFunc) expire_conn, &delay);
+            g_tree_foreach(conn_tree, (GTraverseFunc) expire_conn, &delay);
             g_rw_lock_reader_unlock(&connlock);
 
             /*! remove each key listed from the btree */
