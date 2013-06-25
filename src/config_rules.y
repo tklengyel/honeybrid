@@ -44,7 +44,7 @@ char* int_append(char * root, int num);
 %token OPEN END SEMICOLON QUOTE DOT
 
 /* Honeybrid configuration keywords */
-%token MODULE FILTER FRONTEND BACKEND BACKPICK LIMIT CONFIGURATION TARGET LINK HW
+%token MODULE FILTER FRONTEND BACKEND BACKPICK LIMIT CONFIGURATION TARGET LINK HW VLAN
 
 /* Content Variables */
 %token <number> NUMBER
@@ -288,7 +288,23 @@ rule: 	{
         char *mac = addr_ntoa($$->front_handler->mac);
 		g_printerr("\tFrontend defined at %s hw %s on '%s'\n", addr_ntoa($6), mac, $4);
 		g_free($4);	
-	} 
+	}
+	| rule FRONTEND QUOTE WORD QUOTE honeynet HW mac VLAN NUMBER SEMICOLON {
+		$$->front_handler = g_malloc0(sizeof(struct handler));
+		$$->front_handler->iface = g_hash_table_lookup(links, $4);
+		
+		if($$->front_handler->iface == NULL) {
+			yyerror("Front handler interface is undefined!\n");
+		}
+		
+		$$->front_handler->ip=$6;
+		$$->front_handler->mac=$8;
+		$$->front_handler->vlan.vid = $10;
+		
+        char *mac = addr_ntoa($$->front_handler->mac);
+		g_printerr("\tFrontend defined at %s hw %s VLAN %u on '%s'\n", addr_ntoa($6), mac, $10, $4);
+		g_free($4);	
+	}
 	| rule FRONTEND QUOTE WORD QUOTE honeynet HW mac QUOTE equation QUOTE SEMICOLON {
 	
 		$$->front_handler = g_malloc0(sizeof(struct handler));
@@ -309,6 +325,28 @@ rule: 	{
 		g_printerr("\tFrontend defined at %s hw %s on '%s' with rule: %s\n", $$->front_handler->ip_str, mac, $4, $10->str);
 		g_free($4);
 		g_string_free($10, TRUE);
+	}
+	| rule FRONTEND QUOTE WORD QUOTE honeynet HW mac VLAN NUMBER QUOTE equation QUOTE SEMICOLON {
+	
+		$$->front_handler = g_malloc0(sizeof(struct handler));
+		$$->front_handler->iface = g_hash_table_lookup(links, $4);
+		
+		if($$->front_handler->iface == NULL) {
+			yyerror("Front handler interface is undefined!\n");
+		}
+		
+		$$->front_handler->ip=$6;
+		$$->front_handler->mac=$8;
+		$$->front_handler->vlan.vid = $10;
+		$$->front_handler->rule = DE_create_tree($12->str);
+		
+		$$->front_handler->ip_str=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($6)) + 1);
+        sprintf($$->front_handler->ip_str, "%s", addr_ntoa($6));
+		
+        char *mac = addr_ntoa($$->front_handler->mac);
+		g_printerr("\tFrontend defined at %s hw %s VLAN %u on '%s' with rule: %s\n", $$->front_handler->ip_str, mac, $10, $4, $12->str);
+		g_free($4);
+		g_string_free($12, TRUE);
 	}
 	| rule BACKPICK QUOTE equation QUOTE SEMICOLON {
         g_printerr("\tCreating backend picking rule: %s\n", $4->str);
@@ -347,6 +385,39 @@ rule: 	{
     		
     	g_free($4);
     }
+	| rule BACKEND QUOTE WORD QUOTE honeynet HW mac VLAN NUMBER SEMICOLON {
+    	if($$->back_picker == NULL) {
+    		yyerror("Backend needs a rule if no backend picking rule is defined!\n");
+    	}
+    		
+    	struct interface *iface = g_hash_table_lookup(links, $4);
+    	if(iface == NULL) {
+    		yyerror("Back handler interface is undefined!\n");
+    	}	
+    		
+    	// This will be freed automatically when the tree is destroyed
+    	$$->back_handler_count++;
+    	uint32_t *key=malloc(sizeof(uint32_t));
+    	*key=$$->back_handler_count;
+    		
+    	struct handler *back_handler = g_malloc0(sizeof(struct handler));
+    	back_handler->iface=iface;
+    
+        back_handler->ip=$6;
+        back_handler->ip_str=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($6)) + 1);
+       	back_handler->mac = $8;
+       	back_handler->vlan.vid = $10;
+        sprintf(back_handler->ip_str, "%s", addr_ntoa($6));
+    
+    	g_tree_insert($$->back_handlers, key, back_handler);
+    	g_hash_table_insert($$->unique_backend_ips, back_handler->ip_str, NULL);
+    		
+        char *mac = addr_ntoa(back_handler->mac);
+    	g_printerr("\tBackend #%u defined at %s hw %s VLAN %u on '%s' copied to handler without rule\n",
+    		*key, back_handler->ip_str, mac, $10, $4);
+    		
+    	g_free($4);
+    }
 	| rule BACKEND QUOTE WORD QUOTE honeynet HW mac QUOTE equation QUOTE SEMICOLON {
 
 		struct interface *iface = g_hash_table_lookup(links, $4);
@@ -378,63 +449,38 @@ rule: 	{
         g_string_free($10, TRUE);
         g_free($4);
     }
-//TODO
-/*
-	| rule BACKEND QUOTE equation QUOTE honeynet QUOTE equation QUOTE SEMICOLON {
+	| rule BACKEND QUOTE WORD QUOTE honeynet HW mac VLAN NUMBER QUOTE equation QUOTE SEMICOLON {
 
-            // This will be freed automatically when the tree is destroyed
-            $$->backends++;
-            uint32_t *key=malloc(sizeof(uint32_t));
-            *key=$$->backends;
+		struct interface *iface = g_hash_table_lookup(links, $4);
+    	if(iface == NULL) {
+    		yyerror("Back handler interface is undefined!\n");
+    	}
+    	
+    	// This will be freed automatically when the tree is destroyed
+        $$->back_handler_count++;
+        uint32_t *key=malloc(sizeof(uint32_t));
+        *key=$$->back_handler_count;
             
-            struct backend *back_handler = g_malloc0(sizeof(struct backend));
-            back_handler->iface=g_malloc0(sizeof(struct interface));
-
-            back_handler->iface->tag=g_strdup($4->str);
-		    back_handler->iface->name=g_strdup($8->str);
-		    back_handler->iface->mark=*key; // Automatically assign iptables mark
-		    back_handler->iface->ip=$6;
-		    //back_handler->iface->ip_str=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($6)) + 1);
-		    //sprintf(back_handler->iface->ip_str, "%s", addr_ntoa($6));
-		    
-            g_printerr("\tBackend #%u at %s on interface %s and tag %s: no rule\n",
-                *key, back_handler->iface->ip_str, back_handler->iface->name, back_handler->iface->tag);
-
-            g_tree_insert($$->back_handlers, key, back_handler);
-            g_hash_table_insert($$->unique_backend_ips, back_handler->iface->ip_str, NULL);
+        struct handler *back_handler = g_malloc0(sizeof(struct handler));
+        back_handler->iface=g_hash_table_lookup(links, $4);
+    
+        back_handler->ip=$6;
+        back_handler->mac = $8;
+        back_handler->vlan.vid = $10;
+        back_handler->rule=DE_create_tree($12->str);
+        back_handler->ip_str=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($6)) + 1);
+        sprintf(back_handler->ip_str, "%s", addr_ntoa($6));
+    
+    	g_tree_insert($$->back_handlers, key, back_handler);
+    	g_hash_table_insert($$->unique_backend_ips, back_handler->ip_str, NULL);
+        
+        char *mac = addr_ntoa(back_handler->mac);
+        g_printerr("\tBackend #%u defined at %s hw %s VLAN %u on '%s' with rule: %s\n", *key, back_handler->ip_str,
+        	mac, $10, $4, $12->str);
                 
-            g_string_free($4, TRUE);
-		    g_string_free($8, TRUE);
-        }
-	| rule BACKEND QUOTE equation QUOTE honeynet QUOTE equation QUOTE QUOTE equation QUOTE SEMICOLON {
-              
-             // This will be freed automatically when the tree is destroyed
-            $$->backends++;
-            uint32_t *key=malloc(sizeof(uint32_t));
-            *key=$$->backends;
-            
-            struct backend *back_handler = g_malloc0(sizeof(struct backend));
-            back_handler->iface=g_malloc0(sizeof(struct interface));
-            
-            back_handler->iface->tag=g_strdup($4->str);
-		    back_handler->iface->name=g_strdup($8->str);
-		    back_handler->iface->mark=*key; // Automatically assign iptables mark
-		    back_handler->iface->ip=$6;
-		    //back_handler->iface->ip_str=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($6)) + 1);
-            //sprintf(back_handler->iface->ip_str, "%s", addr_ntoa($6));
-            
-            g_printerr("\tBackend #%u at IP %s on interface %s and tag %s: %s\n", 
-                *key, back_handler->iface->ip_str, back_handler->iface->name, back_handler->iface->tag, $11->str);
-            
-            back_handler->rule=DE_create_tree($11->str);
-            
-            g_tree_insert($$->back_handlers, key, back_handler);
-            g_hash_table_insert($$->unique_backend_ips, back_handler->iface->ip_str, NULL);
-
-            g_string_free($4, TRUE);
-		    g_string_free($8, TRUE);
-		    g_string_free($11, TRUE);
-        }*/
+        g_string_free($12, TRUE);
+        g_free($4);
+    }
 	| rule LIMIT QUOTE equation QUOTE SEMICOLON {
 		$$->control_rule = DE_create_tree($4->str);
 		g_string_free($4, TRUE);

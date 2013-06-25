@@ -430,6 +430,30 @@ static inline void nat(struct pkt_struct* pkt) {
                     ETH_ALEN);
             memcpy(&pkt->packet.ip->saddr, &pkt->nat.src_ip->addr_ip,
                     sizeof(ip_addr_t));
+
+            // Uplink is a VLAN
+            if(pkt->conn->uplink_vlan.vid) {
+                // Packet is from a VLAN too
+                if(ntohs(pkt->packet.eth->ether_type) == ETHERTYPE_VLAN) {
+                    pkt->packet.vlan->h_vlan_TCI = pkt->conn->uplink_vlan;
+                } else {
+                    // Regular ethernet headers are not at the start of FRAME
+                    // to save space for this scenario, so we just move it there
+                    memmove(pkt->packet.FRAME, pkt->packet.eth, ETHER_HDR_LEN);
+                    pkt->packet.vlan = (struct vlan_ethhdr *)pkt->packet.FRAME;
+                    pkt->packet.vlan->h_vlan_proto = htons(ETHERTYPE_VLAN);
+                    pkt->packet.vlan->h_vlan_encapsulated_proto = htons(ETHERTYPE_IP);
+                    pkt->packet.vlan->h_vlan_TCI = pkt->conn->uplink_vlan;
+                    pkt->size += VLAN_HLEN;
+                }
+            } else if(ntohs(pkt->packet.eth->ether_type) == ETHERTYPE_VLAN) {
+                // But packet has a VLAN header, strip it
+                memmove(pkt->packet.FRAME + (VLAN_ETH_HLEN-ETHER_HDR_LEN), pkt->packet.FRAME, ETHER_HDR_LEN);
+                pkt->packet.eth = (struct ether_header *)(pkt->packet.FRAME + VLAN_HLEN);
+                pkt->packet.eth->ether_type = htons(ETHERTYPE_IP);
+                pkt->size -= VLAN_HLEN;
+            }
+
             break;
             //DNAT
         case EXT:
@@ -438,6 +462,30 @@ static inline void nat(struct pkt_struct* pkt) {
                     ETH_ALEN);
             memcpy(&pkt->packet.ip->daddr, &pkt->nat.dst_ip->addr_ip,
                     sizeof(ip_addr_t));
+
+            // Downlink is a VLAN
+            if(pkt->conn->downlink_vlan.vid) {
+                // Packet is from a VLAN too
+                if(ntohs(pkt->packet.eth->ether_type) == ETHERTYPE_VLAN) {
+                    pkt->packet.vlan->h_vlan_TCI = pkt->conn->downlink_vlan;
+                } else {
+                    // Regular ethernet headers are not at the start of FRAME
+                    // to save space for this scenario, so we just move it there
+                    memmove(pkt->packet.FRAME, pkt->packet.eth, ETHER_HDR_LEN);
+                    pkt->packet.vlan = (struct vlan_ethhdr *)pkt->packet.FRAME;
+                    pkt->packet.vlan->h_vlan_proto = htons(ETHERTYPE_VLAN);
+                    pkt->packet.vlan->h_vlan_encapsulated_proto = htons(ETHERTYPE_IP);
+                    pkt->packet.vlan->h_vlan_TCI = pkt->conn->downlink_vlan;
+                    pkt->size += VLAN_HLEN;
+                }
+            } else if(ntohs(pkt->packet.eth->ether_type) == ETHERTYPE_VLAN) {
+                // Downlink isn't a VLAN but packet has a VLAN header, strip it
+                memmove(pkt->packet.FRAME + VLAN_HLEN, pkt->packet.FRAME, ETHER_HDR_LEN);
+                pkt->packet.eth = (struct ether_header *)(pkt->packet.FRAME + VLAN_HLEN);
+                pkt->packet.eth->ether_type = htons(ETHERTYPE_IP);
+                pkt->size -= (VLAN_ETH_HLEN-ETHER_HDR_LEN);
+            }
+
             break;
     }
 

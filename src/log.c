@@ -414,11 +414,11 @@ status_t log_csv(const struct conn_struct *conn, const char *proto,
 
     int log_size = snprintf(NULL, 0,
 #ifdef HAVE_XMPP
-            "%s,%.3f,%d,%s,%s,%u,%s,%u,%d,%d,%s,%d,%s,%s,%s,%s,%s,%s,%i,%i\n",
+            "%s,%.3f,%s,%s,%u,%s,%u,%d,%d,%s,%d,%s,%s,%s,%s,%s,%s,%i,%i\n",
 #else
-            "%s,%.3f,%d,%s,%s,%u,%s,%u,%d,%d,%s,%d,%s,%s,%s,%s,%s,%s\n",
+            "%s,%.3f,%s,%s,%u,%s,%u,%d,%d,%s,%d,%s,%s,%s,%s,%s,%s\n",
 #endif
-            conn->start_timestamp->str, duration, conn->uplink_vlan, proto, src,
+            conn->start_timestamp->str, duration, proto, src,
             src_port, dst, dst_port, conn->total_packet, conn->total_byte,
             status, conn->id,
             //status_info[INVALID]->str,
@@ -437,11 +437,11 @@ status_t log_csv(const struct conn_struct *conn, const char *proto,
 
     sprintf(logbuf,
 #ifdef HAVE_XMPP
-            "%s,%.3f,%d,%s,%s,%u,%s,%u,%d,%d,%s,%d,%s,%s,%s,%s,%s,%s,%i,%i\n",
+            "%s,%.3f,%s,%s,%u,%s,%u,%d,%d,%s,%d,%s,%s,%s,%s,%s,%s,%i,%i\n",
 #else
-            "%s,%.3f,%d,%s,%s,%u,%s,%u,%d,%d,%s,%d,%s,%s,%s,%s,%s,%s\n",
+            "%s,%.3f,%s,%s,%u,%s,%u,%d,%d,%s,%d,%s,%s,%s,%s,%s,%s\n",
 #endif
-            conn->start_timestamp->str, duration, conn->uplink_vlan, proto, src,
+            conn->start_timestamp->str, duration, proto, src,
             src_port, dst, dst_port, conn->total_packet, conn->total_byte,
             status, conn->id,
             //status_info[INVALID]->str,
@@ -608,7 +608,7 @@ status_t log_mysql(const struct conn_struct *conn, const char *proto,
 
         int log_size = snprintf(NULL, 0, "INSERT INTO honeybrid VALUES ("
                 "'',"
-                "%.3f, %.3f, %i,"
+                "%.3f, %.3f,"
                 "'%s', '%s', '%u',"
                 "'%s', '%u', %d,"
                 "%d, '%s', %d,"
@@ -620,7 +620,7 @@ status_t log_mysql(const struct conn_struct *conn, const char *proto,
 #endif
                 ");",
 
-        conn->start_microtime, duration, (int) conn->uplink_vlan, proto, src,
+        conn->start_microtime, duration, proto, src,
                 src_port, dst, dst_port, conn->total_packet, conn->total_byte,
                 status, conn->id, status_info[INIT]->str,
                 status_info[DECISION]->str, status_info[REPLAY]->str,
@@ -635,7 +635,7 @@ status_t log_mysql(const struct conn_struct *conn, const char *proto,
 
         sprintf(logbuf, "INSERT INTO honeybrid VALUES ("
                 "'',"
-                "%.3f, %.3f, %i,"
+                "%.3f, %.3f,"
                 "'%s', '%s', '%u',"
                 "'%s', '%u', %d,"
                 "%d, '%s', %d,"
@@ -645,7 +645,7 @@ status_t log_mysql(const struct conn_struct *conn, const char *proto,
 #ifdef HAVE_XMPP
                 ",%i,%i"
 #endif
-                ");", conn->start_microtime, duration, (int) conn->uplink_vlan,
+                ");", conn->start_microtime, duration,
                 proto, src, src_port, dst, dst_port, conn->total_packet,
                 conn->total_byte, status, conn->id, status_info[INIT]->str,
                 status_info[DECISION]->str, status_info[REPLAY]->str,

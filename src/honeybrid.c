@@ -642,7 +642,7 @@ status_t process_packet(struct interface *iface,
     if (init_pkt(iface, ethertype, header, packet, pkt) == NOK) {
         printdbg("%s Packet structure couldn't be initialized\n", H(0));
 
-        pkt = NULL;
+        *pkt = NULL;
         return NOK;
 
     }

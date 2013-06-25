@@ -60,20 +60,24 @@ status_t init_pkt(struct interface *iface, uint16_t ethertype,
     pkt->size = header->caplen;
     pkt->in = iface;
 
-    /* Save the packet */
-    pkt->packet.FRAME = malloc(pkt->size);
-    memcpy(pkt->packet.FRAME, packet, pkt->size);
-
-    pkt->packet.eth = (struct ether_header *) pkt->packet.FRAME;
-
     /*! Assign the packet IP header and payload to the packet structure */
     if (ethertype == ETHERTYPE_IP) {
+
+        /* Save the packet with enough room to add a VLAN header if needed */
+        pkt->packet.FRAME = malloc(pkt->size + VLAN_HLEN);
+        memcpy(pkt->packet.FRAME + VLAN_HLEN, packet, pkt->size);
+        pkt->packet.eth = (struct ether_header *) (pkt->packet.FRAME + VLAN_HLEN);
+
         pkt->original_headers.eth = g_memdup(pkt->packet.eth, ETHER_HDR_LEN);
-        pkt->packet.ip = (struct iphdr *) (pkt->packet.FRAME + ETHER_HDR_LEN);
+        pkt->packet.ip = (struct iphdr *) ((char *)pkt->packet.eth + ETHER_HDR_LEN);
     } else if (ethertype == ETHERTYPE_VLAN) {
-        pkt->original_headers.vlan = g_memdup(pkt->packet.vlan_eth, VLAN_ETH_HLEN);
-        pkt->vlan_in = pkt->packet.vlan_eth->h_vlan_TCI;
-        pkt->packet.ip = (struct iphdr *) (pkt->packet.FRAME + VLAN_ETH_HLEN);
+
+        pkt->packet.FRAME = malloc(pkt->size);
+        memcpy(pkt->packet.FRAME, packet, pkt->size);
+        pkt->packet.vlan = (struct vlan_ethhdr *) (pkt->packet.FRAME);
+
+        pkt->original_headers.vlan = g_memdup(pkt->packet.vlan, VLAN_ETH_HLEN);
+        pkt->packet.ip = (struct iphdr *) ((char *)pkt->packet.vlan + VLAN_ETH_HLEN);
     }
 
     pkt->original_headers.ip = g_memdup(pkt->packet.ip, (pkt->packet.ip->ihl << 2));
@@ -113,16 +117,12 @@ status_t init_pkt(struct interface *iface, uint16_t ethertype,
         pkt->packet.payload = (char*) pkt->packet.tcp
                 + (pkt->packet.tcp->doff << 2);
 
-        /*! key_src_with_port is the tuple with the source information
-         * {Source IP}:{Source Port} */
         pkt->src_with_port = g_malloc0(
                 snprintf(NULL, 0, "%s:%d", pkt->src,
                         ntohs(pkt->packet.tcp->source)) + 1);
         sprintf(pkt->src_with_port, "%s:%d", pkt->src,
                 ntohs(pkt->packet.tcp->source));
 
-        /*! key_dst_with_port is the one with the destination information
-         * {Dest IP}:{Dest Port} */
         pkt->dst_with_port = g_malloc0(
                 snprintf(NULL, 0, "%s:%d", pkt->dst,
                         ntohs(pkt->packet.tcp->dest)) + 1);
@@ -139,18 +139,17 @@ status_t init_pkt(struct interface *iface, uint16_t ethertype,
 
         pkt->packet.payload = (char*) pkt->packet.udp + UDP_HDR_LEN;
         /*! Process UDP packet */
-        /*! key_src */
         pkt->src_with_port = g_malloc0(
                 snprintf(NULL, 0, "%s:%d", pkt->src,
                         ntohs(pkt->packet.udp->source)) + 1);
         sprintf(pkt->src_with_port, "%s:%u", pkt->src,
                 ntohs(pkt->packet.udp->source));
-        /*! key_dst */
         pkt->dst_with_port = g_malloc0(
                 snprintf(NULL, 0, "%s:%d", pkt->dst,
                         ntohs(pkt->packet.udp->dest)) + 1);
         sprintf(pkt->dst_with_port, "%s:%u", pkt->dst,
                 ntohs(pkt->packet.udp->dest));
+
         /* The volume of data is the value of udp->ulen minus the size of the UPD header (always 8 bytes) */
         pkt->data = pkt->packet.udp->len - UDP_HDR_LEN;
     } else {
@@ -166,7 +165,7 @@ status_t init_pkt(struct interface *iface, uint16_t ethertype,
     }
 
     // Check if the packet comes from a target interface
-    if (g_hash_table_lookup(targets, pkt->in->tag)) {
+    if (pkt->in->target) {
         pkt->origin = EXT;
 
         addr_pack(&pkt->keys.ip, ADDR_TYPE_IP, 0, &pkt->packet.ip->saddr,
@@ -209,19 +208,17 @@ status_t init_pkt(struct interface *iface, uint16_t ethertype,
  \param[in] pkt: struct pkt_struct to free
  */
 void free_pkt(struct pkt_struct *pkt) {
-    if (pkt != NULL) {
-        g_free(pkt->original_headers.eth);
-        g_free(pkt->original_headers.vlan);
-        g_free(pkt->original_headers.ip);
-        g_free(pkt->original_headers.tcp);
-        g_free(pkt->original_headers.udp);
-        g_free(pkt->packet.FRAME);
-        g_free(pkt->src);
-        g_free(pkt->dst);
-        g_free(pkt->src_with_port);
-        g_free(pkt->dst_with_port);
-        g_free(pkt);
-    }
+    g_free(pkt->original_headers.eth);
+    g_free(pkt->original_headers.vlan);
+    g_free(pkt->original_headers.ip);
+    g_free(pkt->original_headers.tcp);
+    g_free(pkt->original_headers.udp);
+    g_free(pkt->packet.FRAME);
+    g_free(pkt->src);
+    g_free(pkt->dst);
+    g_free(pkt->src_with_port);
+    g_free(pkt->dst_with_port);
+    g_free(pkt);
 }
 
 /*! store_pkt function
@@ -254,25 +251,6 @@ status_t store_pkt(struct conn_struct *conn, struct pkt_struct *pkt) {
     if (ret == OK) {
         printdbg(
                 "%s\t Packet stored in memory for connection %u\n", H(conn->id), conn->id);
-    }
-
-    return ret;
-}
-
-status_t init_mark(struct pkt_struct *pkt, const struct conn_struct *conn) {
-    status_t ret = OK;
-
-    switch (pkt->origin) {
-        case HIH:
-            if (conn->uplink_vlan) pkt->vlan = conn->uplink_vlan;
-            break;
-        case EXT:
-            if (conn->downlink_vlan) pkt->vlan = conn->downlink_vlan;
-            break;
-        case LIH:
-        default:
-            ret = NOK;
-            break;
     }
 
     return ret;
@@ -454,8 +432,9 @@ int conn_lookup(struct pkt_struct *pkt, struct attacker_pin **pin,
         // Let's see if this packet is of the right target if its coming from EXT
         if (pkt->origin == EXT && (*pin)->target->default_route != pkt->in) {
             printdbg(
-                    "%s Attacker %s is attacking multiple targets which is currently not supported. Skipping.", H(3), pkt->src);
+                    "%s Attacker %s is attacking multiple targets which is currently not supported. Skipping.", H(3), pkt->src_with_port);
             ret = -1;
+            goto done;
         } else if (TRUE
                 == g_tree_lookup_extended((*pin)->port_tree, &pkt->keys.port,
                         NULL, (gpointer *) conn)) {
@@ -464,6 +443,7 @@ int conn_lookup(struct pkt_struct *pkt, struct attacker_pin **pin,
                 printdbg(
                         "%s This connection is supposed to be %s but packet is %s. Skipping (TODO?)", H(3), lookup_proto((*conn)->protocol), lookup_proto(pkt->packet.ip->protocol));
                 ret = -1;
+                goto done;
             }
 
             g_mutex_lock(&(*conn)->lock);
@@ -483,6 +463,9 @@ int conn_lookup(struct pkt_struct *pkt, struct attacker_pin **pin,
         }
     }
 
+    //TODO: Expire TCP connections if FINs were sent and then a new connection
+    //      is reestablished with the same ports
+
     /*if (ret == 1 && pkt->packet.ip->protocol == IPPROTO_TCP) {
      // Both sides sent TCP-FIN already
      // We need to expire this connection and start a new one.
@@ -492,7 +475,6 @@ int conn_lookup(struct pkt_struct *pkt, struct attacker_pin **pin,
      printdbg("%s Expiring TCP connection manually.\n", H((*conn)->id));
      //gint expire = 0;
 
-     //TODO
      *conn = NULL;
      goto done;
 
@@ -524,9 +506,9 @@ int conn_lookup(struct pkt_struct *pkt, struct attacker_pin **pin,
      H((*conn)->id));
 
      }
-     }
+     }*/
 
-     done:*/
+    done:
     g_mutex_unlock(&connlock);
 
     return ret;
@@ -596,8 +578,6 @@ status_t create_conn(struct pkt_struct *pkt, struct attacker_pin *pin,
     /*! fill the structure */
     conn_init->target = target;
     conn_init->keys = pkt->keys;
-    //conn_init->key_ext_with_port = g_strdup(pkt->key_src_with_port);
-    //conn_init->key_lih_with_port = g_strdup(pkt->key_dst_with_port);
     conn_init->protocol = pkt->packet.ip->protocol;
     conn_init->access_time = microtime;
     conn_init->initiator = pkt->origin;
@@ -614,8 +594,6 @@ status_t create_conn(struct pkt_struct *pkt, struct attacker_pin *pin,
     conn_init->total_packet = 1;
     conn_init->total_byte = pkt->size;
     conn_init->decision_rule = g_string_new("");
-
-    conn_init->last_pkt = pkt;
 
     addr_pack(&conn_init->first_pkt_src_mac, ADDR_TYPE_ETH, 0,
             &pkt->packet.eth->ether_shost, ETH_ALEN);
@@ -700,7 +678,6 @@ status_t update_conn(struct pkt_struct *pkt, struct conn_struct *conn,
     }
 
     /*! statistics */
-    conn->last_pkt = pkt;
     conn->stat_time[state] = microtime;
     conn->stat_packet[state] += 1;
     conn->stat_byte[state] += pkt->size;
@@ -708,27 +685,36 @@ status_t update_conn(struct pkt_struct *pkt, struct conn_struct *conn,
     conn->total_byte += pkt->size;
     /*! We update the current connection access time */
     conn->access_time = microtime;
-    if (pkt->origin == EXT) {
-        conn->count_data_pkt_from_intruder += 1;
+    switch (pkt->origin) {
+        case EXT:
+            conn->count_data_pkt_from_intruder += 1;
 
-        // Take the mark from the packet (if any) IFF we don't have one set yet
-        if (pkt->vlan) {
-            if (!conn->uplink_vlan) conn->uplink_vlan = pkt->vlan;
-            else if (conn->uplink_vlan != pkt->vlan) {
-                printdbg(
-                        "%s Packet mark (%u) doesn't match uplink mark previously set on connection (%u)!\n", H(conn->id), pkt->vlan, conn->uplink_vlan);
+            // Take the VLAN from the packet (if any) IFF we don't have one set yet
+            if (pkt->original_headers.vlan) {
+                if (!conn->uplink_vlan.vid) {
+                    conn->uplink_vlan = pkt->original_headers.vlan->h_vlan_TCI;
+                } else if (conn->uplink_vlan.vid
+                        != pkt->original_headers.vlan->h_vlan_TCI.vid) {
+                    printdbg(
+                            "%s Packet VLAN (%u) doesn't match uplink mark previously set on connection (%u)!\n",
+                            H(conn->id), pkt->original_headers.vlan->h_vlan_TCI.vid, conn->uplink_vlan.vid);
+                }
             }
-        }
-
-    } else if (pkt->origin == HIH) {
-        // Take the mark from the packet (if any) IFF we don't have one set yet
-        if (pkt->vlan) {
-            if (!conn->downlink_vlan) conn->downlink_vlan = pkt->vlan;
-            else if (conn->downlink_vlan != pkt->vlan) {
-                printdbg(
-                        "%s Packet mark (%u) doesn't match uplink mark previously set on connection (%u)!\n", H(conn->id), pkt->vlan, conn->uplink_vlan);
+            break;
+        default:
+            // Take the VLAN from the packet (if any) IFF we don't have one set yet
+            if (pkt->original_headers.vlan) {
+                if (!conn->downlink_vlan.vid) {
+                    conn->downlink_vlan =
+                            pkt->original_headers.vlan->h_vlan_TCI;
+                } else if (conn->downlink_vlan.vid
+                        != pkt->original_headers.vlan->h_vlan_TCI.vid) {
+                    printdbg(
+                            "%s Packet mark (%u) doesn't match uplink mark previously set on connection (%u)!\n",
+                            H(conn->id), pkt->original_headers.vlan->h_vlan_TCI.vid, conn->uplink_vlan.vid);
+                }
             }
-        }
+            break;
     }
 
     pkt->conn = conn;

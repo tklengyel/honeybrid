@@ -28,6 +28,7 @@ backpick	{ return BACKPICK; }
 link	    { return LINK; }
 filter	    { return FILTER; }
 hw			{ return HW; }
+vlan		{ return VLAN; }
 
 
 

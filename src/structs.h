@@ -26,18 +26,46 @@
 
 #include "types.h"
 
+/*! vlan_tci
+ * VLAN Tag Control Information
+ */
+struct vlan_tci {
+    __be16 pcp : 3;  // Priority Code Point (QoS)
+    __be16 dei : 1;  // Drop Eligible Indicator
+    __be16 vid : 12; // VLAN Identifier
+} __attribute__ ((__packed__));
+
+/*! vlan_ethhdr
+ * Stolen from the Linux kernel header linux/if_vlan.h
+ * struct vlan_ethhdr - vlan ethernet header (ethhdr + vlan_hdr)
+ *      @h_dest: destination ethernet address
+ *      @h_source: source ethernet address
+ *      @h_vlan_proto: ethernet protocol (always 0x8100)
+ *      @h_vlan_TCI: priority and VLAN ID
+ *      @h_vlan_encapsulated_proto: packet type ID or len
+ */
+#define VLAN_HLEN       4
+#define VLAN_ETH_HLEN   18      /* Total octets in header.   */
+struct vlan_ethhdr {
+    unsigned char   h_dest[ETH_ALEN];
+    unsigned char   h_source[ETH_ALEN];
+    __be16          h_vlan_proto;
+    struct vlan_tci h_vlan_TCI;
+    __be16          h_vlan_encapsulated_proto;
+} __attribute__ ((__packed__));
+
 /*!
  \def handler
  \brief structure to hold target handler information (decision rule and interface information)
  */
 struct handler {
+    struct vlan_tci vlan;
     struct addr *ip;
     char *ip_str;
     struct addr *mac;
     struct node *rule;
     struct interface *iface;
 };
-
 void free_handler(struct handler *);
 
 /*!
@@ -76,9 +104,10 @@ struct ethernet_hdr {
  *
  */
 struct packet {
+    // The headers all point to a location inside FRAME
     union {
         struct ether_header *eth;
-        struct vlan_ethhdr *vlan_eth;
+        struct vlan_ethhdr *vlan;
     };
     union {
         struct iphdr *ip;
@@ -92,7 +121,7 @@ struct packet {
 
     char *payload;
 
-    char *FRAME; // This holds all the packet data
+    char *FRAME;
 };
 
 /*!
@@ -197,24 +226,6 @@ struct expected_data_struct {
     const char* payload;
 };
 
-/*! vlan_ethhdr
- * Stolen from the Linux kernel header linux/if_vlan.h
- * struct vlan_ethhdr - vlan ethernet header (ethhdr + vlan_hdr)
- *      @h_dest: destination ethernet address
- *      @h_source: source ethernet address
- *      @h_vlan_proto: ethernet protocol (always 0x8100)
- *      @h_vlan_TCI: priority and VLAN ID
- *      @h_vlan_encapsulated_proto: packet type ID or len
- */
-#define VLAN_ETH_HLEN   18      /* Total octets in header.   */
-struct vlan_ethhdr {
-    unsigned char   h_dest[ETH_ALEN];
-    unsigned char   h_source[ETH_ALEN];
-    __be16          h_vlan_proto;
-    __be16          h_vlan_TCI;
-    __be16          h_vlan_encapsulated_proto;
-} __attribute__ ((__packed__));
-
 /*! custom_conn_data
  \brief Extra information to be attached to a conn_struct by a module
 
@@ -299,8 +310,8 @@ struct conn_struct {
     replay_problem_t replay_problem;
     int invalid_problem; //unused
 
-    uint32_t uplink_vlan; // adding support for multiple uplinks
-    uint32_t downlink_vlan; // adding support for multiple backends on separate bridges
+    struct vlan_tci uplink_vlan;
+    struct vlan_tci downlink_vlan;
 
     GSList *custom_data; // allow custom data to be assigned to the connection by modules
                          // the list elements have to point to struct custom_conn_data
@@ -361,14 +372,12 @@ struct pkt_struct {
 
     int position; // position in the connection queue
 
-    __be16 vlan_in;
-    __be16 vlan_out;
+    struct vlan_tci vlan_in;
+    struct vlan_tci vlan_out;
 
     struct interface *in;
     struct interface *out;
 
-    //TODO: Deprecate
-    uint32_t vlan;
 }__attribute__ ((packed));
 
 /*! \brief Structure to pass arguments to the Decision Engine
