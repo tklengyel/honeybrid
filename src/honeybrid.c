@@ -539,6 +539,7 @@ void pcap_cb(u_char *input, const struct pcap_pkthdr *header,
         return;
     }
 
+    struct interface *iface = (struct interface *) input;
     struct iphdr *ip = NULL;
     struct vlan_ethhdr *veth = NULL;
     uint16_t ethertype = ntohs(((struct ether_header *)packet)->ether_type);
@@ -548,6 +549,13 @@ void pcap_cb(u_char *input, const struct pcap_pkthdr *header,
             ip = (struct iphdr *) (packet + ETHER_HDR_LEN);
             break;
         case ETHERTYPE_VLAN:
+
+            // Uplink VLANs have to be configured with 8021q kernel module
+            if(iface->target) {
+                printdbg(
+                        "%s Packet is from an uplink VLAN. Skipped.\n", H(4));
+                return;
+            }
 
             veth = (struct vlan_ethhdr *) packet;
 
@@ -578,10 +586,10 @@ void pcap_cb(u_char *input, const struct pcap_pkthdr *header,
     struct raw_pcap *raw = malloc(sizeof(struct raw_pcap));
     raw->header = g_memdup(header, sizeof(struct pcap_pkthdr));
     raw->packet = g_memdup(packet, header->caplen);
-    raw->iface = (struct interface *) input;
+    raw->iface = iface;
     raw->last = FALSE;
 
-    uint32_t queue_id = IP2QUEUEID(raw->iface, ip);
+    uint32_t queue_id = IP2QUEUEID(iface, ip);
 
     printdbg(
             "%s** RAW packet of size %u pushed to queue %u **\n", H(0), header->len, queue_id);

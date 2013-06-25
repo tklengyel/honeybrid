@@ -270,9 +270,6 @@ rule: 	{
 		// This tree holds the main backend structures
 		$$->back_handlers = g_tree_new_full((GCompareDataFunc)intcmp, NULL, g_free, (GDestroyNotify)free_handler);
 		
-		// This table just contains the unique backend IP's
-		// The key (char *ip) lives in the struct allocated for back_handlers so don't free it here
-		$$->unique_backend_ips = g_tree_new_full((GCompareDataFunc)g_strcmp0, NULL, g_free, NULL);
 	}
 	| rule FRONTEND QUOTE WORD QUOTE honeynet HW mac SEMICOLON {
 		$$->front_handler = g_malloc0(sizeof(struct handler));
@@ -299,7 +296,7 @@ rule: 	{
 		
 		$$->front_handler->ip=$6;
 		$$->front_handler->mac=$8;
-		$$->front_handler->vlan.vid = $10;
+		$$->front_handler->vlan.i = htons($10 & ((1 << 12)-1));
 		
         char *mac = addr_ntoa($$->front_handler->mac);
 		g_printerr("\tFrontend defined at %s hw %s VLAN %u on '%s'\n", addr_ntoa($6), mac, $10, $4);
@@ -337,7 +334,7 @@ rule: 	{
 		
 		$$->front_handler->ip=$6;
 		$$->front_handler->mac=$8;
-		$$->front_handler->vlan.vid = $10;
+        $$->front_handler->vlan.i = htons($10 & ((1 << 12)-1));
 		$$->front_handler->rule = DE_create_tree($12->str);
 		
 		$$->front_handler->ip_str=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($6)) + 1);
@@ -373,16 +370,8 @@ rule: 	{
     
         back_handler->ip=$6;
        	back_handler->mac=$8;
-       	
-       	char *unique_ip_key = malloc(INET_ADDRSTRLEN);
-       	inet_ntop(AF_INET, &back_handler->ip->addr_ip, unique_ip_key, INET_ADDRSTRLEN);
-    
+       	    
     	g_tree_insert($$->back_handlers, key, back_handler);
-    	if(!g_tree_lookup($$->unique_backend_ips, unique_ip_key)) {
-    		g_tree_insert($$->unique_backend_ips, unique_ip_key, GUINT_TO_POINTER(TRUE));
-    	} else {
-    		free(unique_ip_key);
-    	}
     		
         char *mac = addr_ntoa(back_handler->mac);
     	g_printerr("\tBackend #%u defined at %s hw %s on '%s' copied to handler without rule\n",
@@ -410,17 +399,9 @@ rule: 	{
     
         back_handler->ip=$6;
        	back_handler->mac = $8;
-       	back_handler->vlan.vid = $10;
-    
-       	char *unique_ip_key = malloc(INET_ADDRSTRLEN);
-       	inet_ntop(AF_INET, &back_handler->ip->addr_ip, unique_ip_key, INET_ADDRSTRLEN);
-    
+       	back_handler->vlan.i = htons($10 & ((1 << 12)-1));
+        
     	g_tree_insert($$->back_handlers, key, back_handler);
-    	if(!g_tree_lookup($$->unique_backend_ips, unique_ip_key)) {
-    		g_tree_insert($$->unique_backend_ips, unique_ip_key, GUINT_TO_POINTER(TRUE));
-    	} else {
-    		free(unique_ip_key);
-    	}
     		
         char *mac = addr_ntoa(back_handler->mac);
     	g_printerr("\tBackend #%u defined at %s hw %s VLAN %u on '%s' copied to handler without rule\n",
@@ -447,15 +428,7 @@ rule: 	{
         back_handler->mac = $8;
         back_handler->rule=DE_create_tree($10->str);
     
-       	char *unique_ip_key = malloc(INET_ADDRSTRLEN);
-       	inet_ntop(AF_INET, &back_handler->ip->addr_ip, unique_ip_key, INET_ADDRSTRLEN);
-    
     	g_tree_insert($$->back_handlers, key, back_handler);
-    	if(!g_tree_lookup($$->unique_backend_ips, unique_ip_key)) {
-    		g_tree_insert($$->unique_backend_ips, unique_ip_key, GUINT_TO_POINTER(TRUE));
-    	} else {
-    		free(unique_ip_key);
-    	}
         
         char *mac = addr_ntoa(back_handler->mac);
         g_printerr("\tBackend #%u defined at %s hw %s on '%s' with rule: %s\n", *key, back_handler->ip_str,
@@ -481,18 +454,10 @@ rule: 	{
     
         back_handler->ip=$6;
         back_handler->mac = $8;
-        back_handler->vlan.vid = $10;
+       	back_handler->vlan.i = htons($10 & ((1 << 12)-1));
         back_handler->rule=DE_create_tree($12->str);
-    
-       	char *unique_ip_key = malloc(INET_ADDRSTRLEN);
-       	inet_ntop(AF_INET, &back_handler->ip->addr_ip, unique_ip_key, INET_ADDRSTRLEN);
-    
+        
     	g_tree_insert($$->back_handlers, key, back_handler);
-    	if(!g_tree_lookup($$->unique_backend_ips, unique_ip_key)) {
-    		g_tree_insert($$->unique_backend_ips, unique_ip_key, GUINT_TO_POINTER(TRUE));
-    	} else {
-    		free(unique_ip_key);
-    	}
         
         char *mac = addr_ntoa(back_handler->mac);
         g_printerr("\tBackend #%u defined at %s hw %s VLAN %u on '%s' with rule: %s\n", *key, back_handler->ip_str,

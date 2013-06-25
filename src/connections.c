@@ -355,58 +355,19 @@ status_t switch_state(struct conn_struct *conn, conn_status_t new_state) {
     return OK;
 }
 
-/*! check_pre_dnat_routing
- \brief checking if the packet is a response for a connection initiated from a hih (required for clone routing)
- \param[in] pkt: the packet
- \param[in/out] conn: pointer to a *conn_struct, updated if the corresponding conn is found
- \param[in] uplink_ip: the uplink ip to check for
- \return: NOK on error, OK otherwise
- */
-/*status_t check_pre_dnat_routing(struct pkt_struct *pkt,
- struct conn_struct **conn, const char *uplink_ip) {
+gboolean find_hih(uint64_t *hihID, struct handler *back_handler,
+        struct pkt_struct *pkt) {
 
- char **split = g_strsplit(pkt->key_dst, ":", 0);
+    if (back_handler && back_handler->iface == pkt->in
+            && back_handler->ip->addr_ip == pkt->packet.ip->saddr
+            && pkt->packet.vlan->h_vlan_TCI.v.vid == back_handler->vlan.v.vid) {
 
- if (!strcmp(split[0], uplink_ip)) {
- // uplink match, let's see if connection originally came from one of the HIHs
-
- uint32_t i;
- for (i = 0; i < targets->len; i++) {
- struct target *t = g_ptr_array_index(targets,i);
-
- const char *ip = NULL;
- char *key = NULL;
- struct backend *back_handler = NULL;
- GHashTableIter i;
- ghashtable_foreach(t->unique_backend_ips, &i, &ip, &back_handler)
- {
-
- key = g_malloc0(
- snprintf(NULL, 0, "%s:%s:%s", pkt->key_src, ip,
- split[1]) + 1);
-
- sprintf(key, "%s:%s:%s", pkt->key_src, ip, split[1]);
-
- if (TRUE
- == g_tree_lookup_extended(conn_tree, key, NULL,
- (gpointer *) conn)
- && (*conn)->initiator == HIH) {
- printdbg(
- "Connection initiated from backend found with mark: %u\n", (*conn)->downlink_vlan);
-
- pkt->key = key;
-
- break;
- } else {
- free(key);
- }
- }
- }
- }
-
- g_strfreev(split);
- return OK;
- }*/
+        pkt->origin = HIH;
+        pkt->hihID = *hihID;
+        return TRUE;
+    }
+    return FALSE;
+}
 
 int conn_lookup(struct pkt_struct *pkt, struct attacker_pin **pin,
         struct conn_struct **conn) {
@@ -533,7 +494,11 @@ status_t create_conn(struct pkt_struct *pkt, struct attacker_pin *pin,
 
     if (pkt->origin == EXT) {
         target = g_hash_table_lookup(targets, pkt->in->tag);
-        goto conn_init;
+        if(target) {
+            goto conn_init;
+        } else {
+            goto done;
+        }
     }
 
     // We need to loop the targets to find the Honeypot where this packet came from
@@ -553,10 +518,9 @@ status_t create_conn(struct pkt_struct *pkt, struct attacker_pin *pin,
 
         printdbg("%s Looking for HIH %s\n", H(0), tmp);
 
-        if (g_tree_lookup(target->unique_backend_ips, &tmp) != NULL) {
-            printdbg(
-                    "%s This packet matches a HIH honeypot IP address of target with default route %s\n", H(0), target->default_route->tag);
-            pkt->origin = HIH;
+        g_tree_foreach(target->back_handlers, (GTraverseFunc) find_hih, pkt);
+
+        if(pkt->origin==HIH) {
             goto conn_init;
         }
     }
@@ -616,13 +580,17 @@ status_t create_conn(struct pkt_struct *pkt, struct attacker_pin *pin,
 
     if (pkt->origin == EXT) {
         conn_init->state = INIT;
-        conn_init->uplink_vlan = pkt->vlan_in;
     } else if (pkt->origin == LIH) {
         conn_init->state = CONTROL;
-        conn_init->downlink_vlan = pkt->vlan_in;
     } else if (pkt->origin == HIH) {
         conn_init->state = INIT;
-        conn_init->downlink_vlan = pkt->vlan_in;
+        struct handler *back_handler = (struct handler *) g_tree_lookup(
+                conn_init->target->back_handlers, &pkt->hihID);
+        conn_init->hih.hihID = pkt->hihID;
+        conn_init->hih.iface = back_handler->iface;
+        conn_init->hih.ip = back_handler->ip;
+        conn_init->hih.mac = back_handler->mac;
+        conn_init->hih.vlan = &back_handler->vlan;
     }
 
     struct tm *tm;
@@ -687,36 +655,8 @@ status_t update_conn(struct pkt_struct *pkt, struct conn_struct *conn,
     conn->total_byte += pkt->size;
     /*! We update the current connection access time */
     conn->access_time = microtime;
-    switch (pkt->origin) {
-        case EXT:
-            conn->count_data_pkt_from_intruder += 1;
-
-            // Take the VLAN from the packet (if any) IFF we don't have one set yet
-            if (pkt->original_headers.vlan) {
-                if (!conn->uplink_vlan.vid) {
-                    conn->uplink_vlan = pkt->original_headers.vlan->h_vlan_TCI;
-                } else if (conn->uplink_vlan.vid
-                        != pkt->original_headers.vlan->h_vlan_TCI.vid) {
-                    printdbg(
-                            "%s Packet VLAN (%u) doesn't match uplink mark previously set on connection (%u)!\n",
-                            H(conn->id), pkt->original_headers.vlan->h_vlan_TCI.vid, conn->uplink_vlan.vid);
-                }
-            }
-            break;
-        default:
-            // Take the VLAN from the packet (if any) IFF we don't have one set yet
-            if (pkt->original_headers.vlan) {
-                if (!conn->downlink_vlan.vid) {
-                    conn->downlink_vlan =
-                            pkt->original_headers.vlan->h_vlan_TCI;
-                } else if (conn->downlink_vlan.vid
-                        != pkt->original_headers.vlan->h_vlan_TCI.vid) {
-                    printdbg(
-                            "%s Packet mark (%u) doesn't match uplink mark previously set on connection (%u)!\n",
-                            H(conn->id), pkt->original_headers.vlan->h_vlan_TCI.vid, conn->uplink_vlan.vid);
-                }
-            }
-            break;
+    if (pkt->origin == EXT) {
+        conn->count_data_pkt_from_intruder += 1;
     }
 
     pkt->conn = conn;
@@ -948,6 +888,7 @@ status_t setup_redirection(struct conn_struct *conn, uint32_t hih_use) {
         conn->hih.iface = back_handler->iface;
         conn->hih.ip = back_handler->ip;
         conn->hih.mac = back_handler->mac;
+        conn->hih.vlan = &back_handler->vlan;
         conn->hih.port = conn->first_pkt_dst_port;
         /*! We then update the status of the connection structure */
         conn->stat_time[DECISION] = microtime;

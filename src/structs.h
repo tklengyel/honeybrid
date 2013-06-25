@@ -30,10 +30,15 @@
  * VLAN Tag Control Information
  */
 struct vlan_tci {
-    __be16 pcp : 3;  // Priority Code Point (QoS)
-    __be16 dei : 1;  // Drop Eligible Indicator
-    __be16 vid : 12; // VLAN Identifier
-} __attribute__ ((__packed__));
+    union {
+        struct v {
+            __be16 pcp :3;  // Priority Code Point (QoS)
+            __be16 dei :1;  // Drop Eligible Indicator
+            __be16 vid :12; // VLAN Identifier
+        } v;
+        __be16 i;
+    };
+}__attribute__ ((__packed__));
 
 /*! vlan_ethhdr
  * Stolen from the Linux kernel header linux/if_vlan.h
@@ -76,8 +81,7 @@ struct target {
     struct interface *default_route; /* Default interface to send upstream packets on */
     struct handler *front_handler;
     GTree *back_handlers; /* Honeypot backends handling the second response with key: hihID, value: struct handler */
-    GTree *unique_backend_ips; /* Unique backend IPs of back_handlers */
-    uint32_t back_handler_count; /* Number of backends defined in the GTree */
+    uint64_t back_handler_count; /* Number of backends defined in the GTree */
     struct node *back_picker; /* Rule(s) to pick which backend to use (such as VM name, etc.) */
     struct node *control_rule; /* Rules of decision modules to limit outbound packets from honeypots */
 };
@@ -200,10 +204,11 @@ void free_interface(struct interface *iface);
  \param port, port
  */
 struct hih_struct {
-    int hihID;
+    uint64_t hihID;
     struct addr *ip;
     struct addr *mac;
     struct interface *iface;
+    struct vlan_tci *vlan;
     uint16_t port;
     unsigned lih_syn_seq;
     unsigned delta;
@@ -286,6 +291,7 @@ struct conn_struct {
 
     origin_t initiator; // who initiated the conn? EXT/LIH/HIH
 
+    struct vlan_tci first_pkt_vlan;
     struct addr first_pkt_src_mac;
     struct addr first_pkt_dst_mac;
     struct addr first_pkt_src_ip;
@@ -310,9 +316,6 @@ struct conn_struct {
     replay_problem_t replay_problem;
     int invalid_problem; //unused
 
-    struct vlan_tci uplink_vlan;
-    struct vlan_tci downlink_vlan;
-
     GSList *custom_data; // allow custom data to be assigned to the connection by modules
                          // the list elements have to point to struct custom_conn_data
 
@@ -326,6 +329,7 @@ struct nat {
     struct addr *src_ip;
     struct addr *dst_mac;
     struct addr *dst_ip;
+    struct vlan_tci *dst_vlan;
 };
 
 struct raw_pcap {
@@ -369,11 +373,9 @@ struct pkt_struct {
     char *dst_with_port;
 
     struct keys keys;
+    uint64_t hihID;
 
     int position; // position in the connection queue
-
-    struct vlan_tci vlan_in;
-    struct vlan_tci vlan_out;
 
     struct interface *in;
     struct interface *out;
