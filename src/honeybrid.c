@@ -540,25 +540,39 @@ void pcap_cb(u_char *input, const struct pcap_pkthdr *header,
     }
 
     struct iphdr *ip = NULL;
+    struct vlan_ethhdr *veth = NULL;
+    uint16_t ethertype = ntohs(((struct ether_header *)packet)->ether_type);
 
-    /*! Catch TCP and UDP packets */
-
-    switch (ntohs(((struct ether_header *) packet)->ether_type)) {
+    switch (ethertype) {
         case ETHERTYPE_IP:
             ip = (struct iphdr *) (packet + ETHER_HDR_LEN);
             break;
         case ETHERTYPE_VLAN:
-            if (ntohs(((struct vlan_ethhdr *) packet)->h_vlan_encapsulated_proto) == ETHERTYPE_IP) {
-                ip = (struct iphdr *) (packet + VLAN_ETH_HLEN);
-            } else {
-                printdbg(
-                        "%s Invalid encapsulated VLAN ethernet type. Skipped.\n", H(4));
-                return;
+
+            veth = (struct vlan_ethhdr *) packet;
+
+            switch (ntohs(veth->h_vlan_encapsulated_proto)) {
+                case ETHERTYPE_IP:
+                    ip = (struct iphdr *) (packet + VLAN_ETH_HLEN);
+                    break;
+                case ETHERTYPE_ARP:
+                    send_arp_reply(ethertype, (struct interface *)input, packet);
+                    return;
+                    break;
+                default:
+                    printdbg(
+                            "%s Invalid encapsulated VLAN ethernet type: %u. Skipped.\n", H(4), ntohs(veth->h_vlan_encapsulated_proto));
+                    return;
+                    break;
+
             }
+
             break;
         default:
-            printdbg( "%s Invalid ethernet type. Skipped.\n", H(4));
+            printdbg(
+                    "%s Invalid ethernet type: %u. Skipped.\n", H(4), ethertype);
             return;
+            break;
     }
 
     struct raw_pcap *raw = malloc(sizeof(struct raw_pcap));
@@ -601,23 +615,22 @@ status_t process_packet(struct interface *iface,
     struct iphdr *ip = NULL;
 
     /*! Catch TCP and UDP packets */
-
-    if (ethertype == ETHERTYPE_IP) {
-        ip = (struct iphdr *) (packet + ETHER_HDR_LEN);
-    } else if (ethertype == ETHERTYPE_VLAN) {
-
-        struct vlan_ethhdr *veth = (struct vlan_ethhdr *) packet;
-
-        if (ntohs(veth->h_vlan_encapsulated_proto) == ETHERTYPE_IP) {
-            ip = (struct iphdr *) (packet + VLAN_ETH_HLEN);
-        } else {
-            printdbg(
-                    "%s Invalid encapsulated VLAN ethernet type: %u. Skipped.\n", H(4), ntohs(veth->h_vlan_encapsulated_proto));
+    switch (ntohs(((struct ether_header *) packet)->ether_type)) {
+        case ETHERTYPE_IP:
+            ip = (struct iphdr *) (packet + ETHER_HDR_LEN);
+            break;
+        case ETHERTYPE_VLAN:
+            if (ntohs(((struct vlan_ethhdr *) packet)->h_vlan_encapsulated_proto) == ETHERTYPE_IP) {
+                ip = (struct iphdr *) (packet + VLAN_ETH_HLEN);
+            } else {
+                printdbg(
+                        "%s Invalid encapsulated VLAN ethernet type. Skipped.\n", H(4));
+                return NOK;
+            }
+            break;
+        default:
+            printdbg( "%s Invalid ethernet type. Skipped.\n", H(4));
             return NOK;
-        }
-    } else {
-        printdbg( "%s Invalid ethernet type: %u. Skipped.\n", H(4), ethertype);
-        return NOK;
     }
 
     if (ip->protocol != IPPROTO_TCP && ip->protocol != IPPROTO_UDP) {
@@ -661,20 +674,20 @@ void de_thread(gpointer data) {
 
         printdbg("%s Got a RAW packet from queue %u\n", H(0), thread_id);
 
+        struct pkt_struct *pkt = NULL;
+        struct conn_struct *conn = NULL;
+
         // Exit the thread
         if (raw->last) {
             printdbg("%s Shutting down thread %u\n", H(1), thread_id);
             return;
         }
 
-        struct pkt_struct *pkt = NULL;
         if (process_packet(raw->iface, raw->header, raw->packet, &pkt) == NOK) {
             free_raw_pcap(raw);
             goto done;
         }
         free_raw_pcap(raw);
-
-        struct conn_struct *conn = NULL;
 
         /*! Initialize the connection structure (into conn) and get the state of the connection */
         if (init_conn(pkt, &conn) == NOK) {

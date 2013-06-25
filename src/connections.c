@@ -420,7 +420,7 @@ int conn_lookup(struct pkt_struct *pkt, struct attacker_pin **pin,
     printdbg(
             "%s Looking for connection %s%s <-> %s%s!\n",
             H(0), pkt->src_with_port, pkt->in->target?" (TARGET)":"",
-            pkt->dst_with_port, pkt->in->target?" (TARGET)":"");
+            pkt->dst_with_port, pkt->in->target?"":" (TARGET)");
 
     /* Check first if the attacker is pinned to a target already */
     if (TRUE
@@ -551,7 +551,9 @@ status_t create_conn(struct pkt_struct *pkt, struct attacker_pin *pin,
             goto conn_init;
         }
 
-        if (g_hash_table_lookup(target->unique_backend_ips, tmp) != NULL) {
+        printdbg("%s Looking for HIH %s\n", H(0), tmp);
+
+        if (g_tree_lookup(target->unique_backend_ips, &tmp) != NULL) {
             printdbg(
                     "%s This packet matches a HIH honeypot IP address of target with default route %s\n", H(0), target->default_route->tag);
             pkt->origin = HIH;

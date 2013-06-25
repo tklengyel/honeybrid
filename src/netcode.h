@@ -47,6 +47,6 @@ status_t test_expected(struct conn_struct* connection_data, struct pkt_struct* p
 
 void set_iface_info(struct interface *iface);
 
-void send_arp_reply(struct interface *iface, const u_char *packet);
+void send_arp_reply(uint16_t ethertype, struct interface *iface, const u_char *packet);
 
 #endif // _NETCODE_H_

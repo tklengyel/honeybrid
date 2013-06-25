@@ -57,7 +57,7 @@ void free_handler(struct handler *handler) {
 void free_target(struct target *t) {
     free_handler(t->front_handler);
     g_tree_destroy(t->back_handlers);
-    g_hash_table_destroy(t->unique_backend_ips);
+    g_tree_destroy(t->unique_backend_ips);
     DE_destroy_tree(t->control_rule);
     g_free(t);
 }

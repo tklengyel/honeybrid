@@ -151,32 +151,45 @@ void set_iface_info(struct interface *iface) {
 
 /*
  * Sends ARP reply to all ARP requests with the receiving interface's MAC.
- * We don't reply to the interface's IP as that will be handled by the OS and no need to duplicate replies.
- *
- * This is a bit invasive and ettercap-like, so it's not very nice to use on a production lan..
  */
-void send_arp_reply(struct interface *iface, const u_char *packet) {
+void send_arp_reply(uint16_t ethertype, struct interface *iface, const u_char *packet) {
 
     //struct ether_header *eth = (struct ether_header *) packet;
-    struct ether_arp *request = (struct ether_arp *) (packet + ETHER_HDR_LEN);
+    struct ether_arp *request = NULL;
+    size_t psize = sizeof(struct ether_arp);
+
+    if(ethertype==ETHERTYPE_IP) {
+        request = (struct ether_arp *) (packet + ETHER_HDR_LEN);
+        psize += ETHER_HDR_LEN;
+    } else {
+        request = (struct ether_arp *) (packet + VLAN_ETH_HLEN);
+        psize += VLAN_ETH_HLEN;
+    }
 
     // Only reply to ARP requests that don't match our interface's IP
-    if (request->ea_hdr.ar_op == htons(ARPOP_REQUEST)
-            && *(ip_addr_t *) request->arp_tpa != iface->ip.addr_ip) {
+    if (request->ea_hdr.ar_op == htons(ARPOP_REQUEST)) {
 
-        unsigned char frame[ETHER_HDR_LEN + sizeof(struct ether_arp)];
+        unsigned char frame[psize];
+        struct ether_arp *reply = NULL;
 
-        // Construct Ethernet header.
+        // Construct Ethernet/VLAN header.
         struct ether_header *header = (struct ether_header *) frame;
-        header->ether_type = htons(ETH_P_ARP);
+        if(ethertype==ETHERTYPE_IP) {
+            header->ether_type = htons(ETHERTYPE_ARP);
+            reply = (struct ether_arp *) (frame + ETHER_HDR_LEN);
+        } else {
+            header->ether_type = htons(ETHERTYPE_VLAN);
+            // copy the vlan-only portion of the header
+            memcpy(frame+ETHER_HDR_LEN, packet+ETHER_HDR_LEN, VLAN_HLEN);
+            reply = (struct ether_arp *) (frame + VLAN_ETH_HLEN);
+        }
+
         memcpy(&header->ether_shost, &iface->mac.addr_eth,
                 sizeof(header->ether_shost));
         memcpy(&header->ether_dhost, &request->arp_sha,
                 sizeof(header->ether_dhost));
 
         // Construct ARP reply
-        struct ether_arp *reply = (struct ether_arp *) (frame + ETHER_HDR_LEN);
-        ;
         reply->arp_hrd = htons(ARPHRD_ETHER);
         reply->arp_pro = htons(ETH_P_IP);
         reply->arp_hln = ETHER_ADDR_LEN;

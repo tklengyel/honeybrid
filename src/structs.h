@@ -76,8 +76,8 @@ struct target {
     struct interface *default_route; /* Default interface to send upstream packets on */
     struct handler *front_handler;
     GTree *back_handlers; /* Honeypot backends handling the second response with key: hihID, value: struct handler */
+    GTree *unique_backend_ips; /* Unique backend IPs of back_handlers */
     uint32_t back_handler_count; /* Number of backends defined in the GTree */
-    GHashTable *unique_backend_ips; /* Unique backend IPs of back_handlers */
     struct node *back_picker; /* Rule(s) to pick which backend to use (such as VM name, etc.) */
     struct node *control_rule; /* Rules of decision modules to limit outbound packets from honeypots */
 };
@@ -241,7 +241,7 @@ struct custom_conn_data {
 
 struct keys {
     struct addr ip;
-    uint16_t port;
+    __be16 port;
 };
 
 /*! conn_struct
