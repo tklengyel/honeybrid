@@ -392,18 +392,6 @@ status_t DE_process_packet(struct pkt_struct *pkt) {
             /*! we leave the state unmodified (the rule probably needs more material to decide), and we release the packet */
             result = OK;
             break;
-        case DE_REJECT:
-            printdbg("%s Rule decides to reject\n", H(pkt->conn->id));
-            switch (pkt->conn->state) {
-                case DECISION:
-                    // The HIH rejected the packet so we keep it on the LIH
-                    switch_state(pkt->conn, PROXY);
-                    break;
-                default:
-                    switch_state(pkt->conn, DROP);
-                    break;
-            }
-            break;
         case DE_ACCEPT:
             printdbg("%s Rule decides to accept\n", H(pkt->conn->id));
             switch (pkt->conn->state) {
@@ -433,6 +421,22 @@ status_t DE_process_packet(struct pkt_struct *pkt) {
                 default:
                     break;
             }
+            break;
+        case DE_REJECT:
+            printdbg("%s Rule decides to reject\n", H(pkt->conn->id));
+            switch (pkt->conn->state) {
+                case DECISION:
+                    // The HIH rejected the packet so we keep it on the LIH
+                    switch_state(pkt->conn, PROXY);
+                    break;
+                default:
+                    switch_state(pkt->conn, DROP);
+                    break;
+            }
+            break;
+        case DE_DROP:
+            printdbg("%s Rule decides to drop\n", H(pkt->conn->id));
+            switch_state(pkt->conn, DROP);
             break;
     }
 

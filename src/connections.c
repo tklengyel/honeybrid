@@ -406,7 +406,7 @@ int conn_lookup(struct pkt_struct *pkt, struct attacker_pin **pin,
             == g_tree_lookup_extended(conn_tree, &pkt->keys.ip, NULL,
                     (gpointer *) pin)) {
 
-        // Attacker is pinned to a target
+        // External IP is pinned to a target
 
         // Let's see if this packet is of the right target if its coming from EXT
         if (pkt->origin == EXT && (*pin)->target->default_route != pkt->in) {
@@ -507,8 +507,6 @@ status_t create_conn(struct pkt_struct *pkt, struct attacker_pin *pin,
     }
 
     struct target *target = NULL;
-
-    g_mutex_lock(&connlock);
 
     if (pkt->origin == EXT) {
         target = g_hash_table_lookup(targets, pkt->in->tag);
@@ -648,6 +646,8 @@ status_t create_conn(struct pkt_struct *pkt, struct attacker_pin *pin,
             (1 + tm->tm_mon), tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec,
             (int) tv.tv_usec);
 
+    g_mutex_lock(&connlock);
+
     /*! Pin this attacker to the target */
     if (!pin) {
         pin = g_malloc0(sizeof(struct attacker_pin));
@@ -664,6 +664,8 @@ status_t create_conn(struct pkt_struct *pkt, struct attacker_pin *pin,
 
     g_tree_insert(pin->port_tree, &conn_init->keys.port, conn_init);
 
+    g_mutex_unlock(&connlock);
+
     printdbg(
             "%s Connection inserted to attacker's port_tree with key %u\n", H(0), conn_init->keys.port);
 
@@ -673,7 +675,7 @@ status_t create_conn(struct pkt_struct *pkt, struct attacker_pin *pin,
 
     result = OK;
 
-    done: g_mutex_unlock(&connlock);
+    done:
     return result;
 
 }
@@ -918,7 +920,12 @@ status_t setup_redirection(struct conn_struct *conn, uint64_t hih_use) {
          g_mutex_lock(&active_hih_lock);
          struct active_hih_struct *active=g_tree_lookup(active_hihs, &hih_use);
          if(active) {
-             active->conn_count++;
+             if(active->target != conn->target) {
+                 printdbg("%s Can't redirect to this HIH as it is already active on a different target!\n", H(1));
+                 return NOK;
+             } else {
+                 active->conn_count++;
+             }
          } else {
              active = malloc(sizeof(struct active_hih_struct));
              active->conn_count++;

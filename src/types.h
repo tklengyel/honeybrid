@@ -122,7 +122,8 @@ typedef enum {
 	DE_NO_RULE,
 	DE_DEFER,
 	DE_REJECT,
-	DE_ACCEPT
+	DE_ACCEPT,
+	DE_DROP
 } decision_t;
 
 typedef enum {
