@@ -356,14 +356,32 @@ status_t switch_state(struct conn_struct *conn, conn_status_t new_state) {
 }
 
 gboolean find_hih(uint64_t *hihID, struct handler *back_handler,
-        struct pkt_struct *pkt) {
+        struct hih_search *s) {
 
-    if (back_handler && back_handler->iface == pkt->in
-            && back_handler->ip->addr_ip == pkt->packet.ip->saddr
-            && pkt->packet.vlan->h_vlan_TCI.v.vid == back_handler->vlan.v.vid) {
+    if (back_handler && back_handler->iface == s->pkt->in
+            && back_handler->ip->addr_ip == s->pkt->packet.ip->saddr
+            && back_handler->vlan.v.vid == s->pkt->packet.vlan->h_vlan_TCI.v.vid) {
 
-        pkt->origin = HIH;
-        pkt->hihID = *hihID;
+        s->found = TRUE;
+        s->hihID = *hihID;
+        s->active = FALSE;
+        s->back_handler = back_handler;
+        return TRUE;
+    }
+    return FALSE;
+}
+
+gboolean find_active_hih(uint64_t *hihID, struct active_hih_struct *active, struct hih_search *s) {
+    if (active->back_handler->iface == s->pkt->in
+            && active->back_handler->ip->addr_ip == s->pkt->packet.ip->saddr
+            && active->back_handler->vlan.v.vid == s->pkt->packet.vlan->h_vlan_TCI.v.vid) {
+
+        s->found=TRUE;
+        s->hihID = *hihID;
+        s->target = active->target;
+        s->back_handler = active->back_handler;
+        s->active = TRUE;
+        active->conn_count++;
         return TRUE;
     }
     return FALSE;
@@ -380,8 +398,8 @@ int conn_lookup(struct pkt_struct *pkt, struct attacker_pin **pin,
 
     printdbg(
             "%s Looking for connection %s%s <-> %s%s!\n",
-            H(0), pkt->src_with_port, pkt->in->target?" (TARGET)":"",
-            pkt->dst_with_port, pkt->in->target?"":" (TARGET)");
+            H(0), pkt->src_with_port, pkt->in->target?" (KEY)":"",
+            pkt->dst_with_port, pkt->in->target?"":" (KEY)");
 
     /* Check first if the attacker is pinned to a target already */
     if (TRUE
@@ -501,6 +519,23 @@ status_t create_conn(struct pkt_struct *pkt, struct attacker_pin *pin,
         }
     }
 
+    // Check if its an active hih thats pinned to a target
+
+    struct hih_search search;
+    bzero(&search, sizeof(struct hih_search));
+    search.found = FALSE;
+    search.pkt = pkt;
+
+    g_mutex_lock(&active_hih_lock);
+    g_tree_foreach(active_hihs, (GTraverseFunc) find_active_hih, &search);
+    g_mutex_unlock(&active_hih_lock);
+
+    if(search.found) {
+        target = search.target;
+        pkt->origin = HIH;
+        goto conn_init;
+    }
+
     // We need to loop the targets to find the Honeypot where this packet came from
 
     char tmp[INET_ADDRSTRLEN];
@@ -511,16 +546,18 @@ status_t create_conn(struct pkt_struct *pkt, struct attacker_pin *pin,
     ghashtable_foreach(targets, i, target_if, target) {
         if (pkt->packet.ip->saddr==target->front_handler->ip->addr_ip) {
             printdbg(
-                    "%s This packet matches a LIH honeypot IP address of target with default route %s\n", H(0), target->default_route->tag);
+                    "%s This packet matches a LIH honeypot IP address of target with default route %s\n",
+                    H(0), target->default_route->tag);
             pkt->origin = LIH;
             goto conn_init;
         }
 
         printdbg("%s Looking for HIH %s\n", H(0), tmp);
 
-        g_tree_foreach(target->back_handlers, (GTraverseFunc) find_hih, pkt);
+        g_tree_foreach(target->back_handlers, (GTraverseFunc) find_hih, &search);
 
-        if(pkt->origin==HIH) {
+        if(search.found) {
+            pkt->origin = HIH;
             goto conn_init;
         }
     }
@@ -584,13 +621,20 @@ status_t create_conn(struct pkt_struct *pkt, struct attacker_pin *pin,
         conn_init->state = CONTROL;
     } else if (pkt->origin == HIH) {
         conn_init->state = INIT;
-        struct handler *back_handler = (struct handler *) g_tree_lookup(
-                conn_init->target->back_handlers, &pkt->hihID);
-        conn_init->hih.hihID = pkt->hihID;
-        conn_init->hih.iface = back_handler->iface;
-        conn_init->hih.ip = back_handler->ip;
-        conn_init->hih.mac = back_handler->mac;
-        conn_init->hih.vlan = &back_handler->vlan;
+        conn_init->hih.hihID = search.hihID;
+        conn_init->hih.iface = search.back_handler->iface;
+        conn_init->hih.ip = search.back_handler->ip;
+        conn_init->hih.mac = search.back_handler->mac;
+        conn_init->hih.vlan = &search.back_handler->vlan;
+
+        if(!search.active) {
+            struct active_hih_struct *active = malloc(sizeof(struct active_hih_struct));
+            active->conn_count++;
+            active->hihID = search.hihID;
+            active->target = conn_init->target;
+            active->back_handler = search.back_handler;
+            g_tree_insert(active_hihs, &active->hihID, active);
+        }
     }
 
     struct tm *tm;
@@ -785,6 +829,23 @@ void free_conn(struct conn_struct *conn) {
 
             current = g_slist_next(current);
         }
+
+        if (conn->hih.hihID) {
+            g_mutex_lock(&active_hih_lock);
+            struct active_hih_struct *active =
+                    (struct active_hih_struct *) g_tree_lookup(active_hihs,
+                            &conn->hih.hihID);
+
+            if(active) {
+                active->conn_count--;
+                if(active->conn_count == 0) {
+                    g_tree_remove(active_hihs,
+                            &conn->hih.hihID);
+                }
+            }
+            g_mutex_unlock(&active_hih_lock);
+        }
+
         g_slist_free(conn->custom_data);
         g_mutex_clear(&conn->lock);
         g_free(conn->hih.redirect_key);
@@ -840,7 +901,7 @@ void clean() {
  \param[in] conn: redirected connection metadata
  \return OK when done, NOK in case of failure
  */
-status_t setup_redirection(struct conn_struct *conn, uint32_t hih_use) {
+status_t setup_redirection(struct conn_struct *conn, uint64_t hih_use) {
     /* Check if decision engine gave me wrong HIH ID */
     if (hih_use == 0) {
         printdbg(
@@ -854,29 +915,19 @@ status_t setup_redirection(struct conn_struct *conn, uint32_t hih_use) {
 
     if (back_handler->ip) {
 
-        /*GHashTable *hih_redir_list = NULL;
-
-         g_rw_lock_writer_lock(&hihredirlock);
-
-         if ((hih_redir_list = g_hash_table_lookup(high_redirection_table,
-         conn->key)) == NULL) {
-         if (NULL
-         == (links = g_hash_table_new_full(g_str_hash, g_str_equal,
-         g_free, NULL))) errx(1,
-         "%s: Fatal error while creating nested redirection hash table.\n",
-         __func__);
+         g_mutex_lock(&active_hih_lock);
+         struct active_hih_struct *active=g_tree_lookup(active_hihs, &hih_use);
+         if(active) {
+             active->conn_count++;
+         } else {
+             active = malloc(sizeof(struct active_hih_struct));
+             active->conn_count++;
+             active->hihID = hih_use;
+             active->target = conn->target;
+             active->back_handler = back_handler;
+             g_tree_insert(active_hihs, &active->hihID, active);
          }
-
-         g_hash_table_insert(hih_redir_list, g_strdup(conn->key_with_port),
-         GUINT_TO_POINTER(TRUE));
-
-         g_hash_table_insert(high_redirection_table, g_strdup(conn->key),
-         hih_redir_list);
-
-         printdbg(
-         "%s [** high_redirection_table updated: key %s value %s **]\n", H(conn->id), conn->key, conn->key_with_port);
-
-         g_rw_lock_writer_unlock(&hihredirlock);*/
+         g_mutex_unlock(&active_hih_lock);
 
         GTimeVal t;
         g_get_current_time(&t);

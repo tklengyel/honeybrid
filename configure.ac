@@ -135,12 +135,6 @@ AC_FUNC_REALLOC
 AC_FUNC_VPRINTF
 AC_CHECK_FUNCS([dup2 gettimeofday inet_ntoa memset socket strdup strerror strstr])
 
-AC_CHECK_LIB(ev, ev_default_loop, [], [AC_MSG_NOTICE([Libev not found])])
-
-AC_CHECK_LIB(nfnetlink, nfnl_fd, [], [AC_ERROR([libnfnetlink library is missing nfnl_fd, try to compile it from source!])])
-AC_CHECK_LIB(netfilter_queue, [nfq_set_verdict2], 
-	[],
-	[AC_ERROR([libnetfilter_queue is too old. Please upgrade it to 1.0.0 or later!])])
 AC_CHECK_LIB(pcap, pcap_compile_nopcap, [], [AC_ERROR(PCAP library missing)])
 AC_CHECK_LIB(dumbnet, addr_ntoa, [], [AC_ERROR(Dumbnet library missing)])
 

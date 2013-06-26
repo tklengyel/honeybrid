@@ -300,6 +300,12 @@ void init_variables() {
                     (GDestroyNotify) free_interface))) errx(1,
             "%s: Fatal error while creating links hash table.\n", __func__);
 
+    /*! create the tree that locks active hih connections to the same target */
+    if (NULL
+            == (active_hihs = g_tree_new_full((GCompareDataFunc) intcmp, NULL,
+                    g_free, NULL))) errx(1,
+            "%s: Fatal error while creating links hash table.\n", __func__);
+
     /* create the main B-Tree to store meta informations of active connections */
     if (NULL == (conn_tree = g_tree_new((GCompareFunc) addr_cmp))) {
         errx(1, "%s: Fatal error while creating conn_tree.\n", __func__);

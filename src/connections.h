@@ -49,6 +49,6 @@ status_t init_mark(struct pkt_struct *pkt, const struct conn_struct *conn);
 
 void clean();
 
-status_t setup_redirection(struct conn_struct *conn, uint32_t hih_id);
+status_t setup_redirection(struct conn_struct *conn, uint64_t hih_id);
 
 #endif /* __CONNECTIONS_H_ */

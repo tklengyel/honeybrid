@@ -216,6 +216,25 @@ struct hih_struct {
     char *redirect_key;
 };
 
+/*! active_hih_struct
+ \brief number of connections active on the HIH on the target
+ */
+struct active_hih_struct {
+    uint64_t hihID;
+    struct target *target;
+    uint32_t conn_count;
+    struct handler *back_handler;
+};
+
+struct hih_search {
+    gboolean found;
+    gboolean active;
+    struct pkt_struct *pkt;
+    uint64_t hihID;
+    struct target *target;
+    struct handler *back_handler;
+};
+
 /*! expected_data_struct
  \brief expected_data_struct info
 
@@ -431,8 +450,8 @@ struct node {
 struct decision_holder {
     struct pkt_struct *pkt;
     struct node *node;
-    uint32_t backend_test;
-    uint32_t backend_use;
+    uint64_t backend_test;
+    uint64_t backend_use;
     decision_t result;
 };
 

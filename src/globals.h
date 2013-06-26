@@ -70,13 +70,12 @@ GHashTable *module;
 /*! \brief global hash table to hold module paramaters */
 GHashTable *links;
 
-/*! \brief global hash table that contain the dynamic correspondance between HIH services et LIH services  */
-GHashTable *high_redirection_table;
+/*! \brief global tree containing the active hih to target mapping (struct active_hih_struct)  */
+GTree *active_hihs;
 
 /*! \brief security writing lock for the dynamic high interaction redirection table
  */
-GRWLock hihredirlock;
-
+GMutex active_hih_lock;
 
 /*! \brief Balanced Binary Tree that keep meta informations about active connections
  *

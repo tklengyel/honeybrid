@@ -330,7 +330,7 @@ status_t DE_process_packet(struct pkt_struct *pkt) {
                 if (decision.result == DE_ACCEPT && decision.backend_use != 0) {
                     // Back picker gave us a HIH, run it's test (if any)
                     printdbg(
-                            "%s Global backend rule gave us a HIH: %u\n", H(pkt->conn->id), decision.backend_use);
+                            "%s Global backend rule gave us a HIH: %lu\n", H(pkt->conn->id), decision.backend_use);
 
                     struct handler *back_handler =
                             (struct handler *) g_tree_lookup(
@@ -419,7 +419,7 @@ status_t DE_process_packet(struct pkt_struct *pkt) {
                     break;
                 case DECISION:
                     printdbg(
-                            "%s Redirecting to HIH: %u\n", H(pkt->conn->id), decision.backend_use);
+                            "%s Redirecting to HIH: %lu\n", H(pkt->conn->id), decision.backend_use);
                     if (NOK
                             == setup_redirection(pkt->conn,
                                     decision.backend_use)) {
