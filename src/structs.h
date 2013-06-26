@@ -79,9 +79,10 @@ void free_handler(struct handler *);
  */
 struct target {
     struct interface *default_route; /* Default interface to send upstream packets on */
-    struct handler *front_handler;
+    struct addr *default_route_mac; /* Default MAC address to send upstream packets to */
+    struct handler *front_handler; /* Honeypot frontend handling the first response */
     GTree *back_handlers; /* Honeypot backends handling the second response with key: hihID, value: struct handler */
-    uint64_t back_handler_count; /* Number of backends defined in the GTree */
+    uint64_t back_handler_count; /* Number of backends defined in the GTree, used to generate hihIDs */
     struct node *back_picker; /* Rule(s) to pick which backend to use (such as VM name, etc.) */
     struct node *control_rule; /* Rules of decision modules to limit outbound packets from honeypots */
 };

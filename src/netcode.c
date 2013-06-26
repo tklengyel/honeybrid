@@ -555,9 +555,14 @@ status_t proxy_int(struct pkt_struct* pkt) {
     pkt->out = pkt->conn->target->default_route;
 
     //SNAT
-    pkt->nat.src_ip = &pkt->conn->first_pkt_dst_ip;
-    pkt->nat.dst_mac = &pkt->conn->first_pkt_src_mac;
-    pkt->nat.dst_ip = &pkt->conn->first_pkt_src_ip;
+    if(pkt->conn->initiator == EXT) {
+        pkt->nat.src_ip = &pkt->conn->first_pkt_dst_ip;
+        pkt->nat.dst_mac = &pkt->conn->first_pkt_src_mac;
+        pkt->nat.dst_ip = &pkt->conn->first_pkt_src_ip;
+    } else {
+        pkt->nat.src_ip = &pkt->conn->target->default_route->ip;
+        pkt->nat.dst_mac = pkt->conn->target->default_route_mac;
+    }
 
     nat(pkt);
 

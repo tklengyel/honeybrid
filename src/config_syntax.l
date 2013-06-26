@@ -29,7 +29,9 @@ link	    { return LINK; }
 filter	    { return FILTER; }
 hw			{ return HW; }
 vlan		{ return VLAN; }
-
+default		{ return DEFAULT; }
+route		{ return ROUTE; }
+via			{ return VIA; }
 
 
 	/* Delimiters */

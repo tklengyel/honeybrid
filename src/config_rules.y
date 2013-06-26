@@ -44,7 +44,7 @@ char* int_append(char * root, int num);
 %token OPEN END SEMICOLON QUOTE DOT
 
 /* Honeybrid configuration keywords */
-%token MODULE FILTER FRONTEND BACKEND BACKPICK LIMIT CONFIGURATION TARGET LINK HW VLAN
+%token MODULE FILTER FRONTEND BACKEND BACKPICK LIMIT CONFIGURATION TARGET LINK HW VLAN DEFAULT ROUTE VIA
 
 /* Content Variables */
 %token <number> NUMBER
@@ -245,7 +245,7 @@ module_settings: {
 	}
 	;
 
-target: TARGET QUOTE WORD QUOTE OPEN rule END {
+target: TARGET QUOTE WORD QUOTE DEFAULT ROUTE VIA mac OPEN rule END {
 
 		struct interface *iface = g_hash_table_lookup(links, $3);
 		if(iface == NULL) {
@@ -256,11 +256,12 @@ target: TARGET QUOTE WORD QUOTE OPEN rule END {
 			yyerror("\tThis link is already assigned to a target!\n");
 		}
 		
-		iface->target = $6;
-		$6->default_route=iface;
+		iface->target = $10;
+		iface->target->default_route=iface;
+		iface->target->default_route_mac=$8;
 		
 		printdbg("\tAdding target with default link '%s'\n", $3);
-		g_hash_table_insert(targets, $3, $6);
+		g_hash_table_insert(targets, $3, $10);
 	}
 	;
 
@@ -470,6 +471,7 @@ rule: 	{
 		$$->control_rule = DE_create_tree($4->str);
 		g_string_free($4, TRUE);
 	}
+	;
 
 honeynet: EXPR {
         $$ = (struct addr *)g_malloc0(sizeof(struct addr));
