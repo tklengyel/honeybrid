@@ -371,6 +371,9 @@ rule: 	{
     
         back_handler->ip=$6;
        	back_handler->mac=$8;
+       	
+       	back_handler->ip_str=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($6)) + 1);
+        sprintf(back_handler->ip_str, "%s", addr_ntoa($6));
        	    
     	g_tree_insert($$->back_handlers, key, back_handler);
     		
@@ -401,6 +404,9 @@ rule: 	{
         back_handler->ip=$6;
        	back_handler->mac = $8;
        	back_handler->vlan.i = htons($10 & ((1 << 12)-1));
+       	
+       	back_handler->ip_str=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($6)) + 1);
+        sprintf(back_handler->ip_str, "%s", addr_ntoa($6));
         
     	g_tree_insert($$->back_handlers, key, back_handler);
     		
@@ -428,6 +434,9 @@ rule: 	{
         back_handler->ip=$6;
         back_handler->mac = $8;
         back_handler->rule=DE_create_tree($10->str);
+        
+        back_handler->ip_str=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($6)) + 1);
+        sprintf(back_handler->ip_str, "%s", addr_ntoa($6));
     
     	g_tree_insert($$->back_handlers, key, back_handler);
         
@@ -457,6 +466,9 @@ rule: 	{
         back_handler->mac = $8;
        	back_handler->vlan.i = htons($10 & ((1 << 12)-1));
         back_handler->rule=DE_create_tree($12->str);
+        
+        back_handler->ip_str=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($6)) + 1);
+        sprintf(back_handler->ip_str, "%s", addr_ntoa($6));
         
     	g_tree_insert($$->back_handlers, key, back_handler);
         

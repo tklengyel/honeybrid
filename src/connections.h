@@ -39,9 +39,9 @@ status_t store_pkt(struct conn_struct *conn, struct pkt_struct *pkt);
 
 status_t init_conn(struct pkt_struct *pkt, struct conn_struct **conn);
 
-gboolean expire_conn(struct addr *ip, struct attacker_pin *pin, gpointer delay);
+gboolean expire_conn(char *key, struct conn_struct *conn, gpointer delay);
 
-void remove_conn(struct expire_conn *expire, gpointer data);
+void remove_conn(struct conn_struct *conn, gpointer data);
 
 void free_conn(struct conn_struct *conn);
 

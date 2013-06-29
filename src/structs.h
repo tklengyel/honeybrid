@@ -64,12 +64,13 @@ struct vlan_ethhdr {
  \brief structure to hold target handler information (decision rule and interface information)
  */
 struct handler {
-    struct vlan_tci vlan;
+    struct addr *mac;
     struct addr *ip;
     char *ip_str;
-    struct addr *mac;
-    struct node *rule;
+    struct addr *netmask;
+    struct vlan_tci vlan;
     struct interface *iface;
+    struct node *rule;
 };
 void free_handler(struct handler *);
 
@@ -206,14 +207,11 @@ void free_interface(struct interface *iface);
  */
 struct hih_struct {
     uint64_t hihID;
-    struct addr *ip;
-    struct addr *mac;
-    struct interface *iface;
-    struct vlan_tci *vlan;
+    struct handler *back_handler;
     uint16_t port;
     unsigned lih_syn_seq;
     unsigned delta;
-    char *redirect_key;
+    char *redirected_int_key;
 };
 
 /*! active_hih_struct
@@ -286,7 +284,9 @@ struct keys {
  \param hih, hih info
  */
 struct conn_struct {
-    struct keys keys;
+
+    char *ext_key; //key to dnat_tree1 or snat_tree2
+    char *int_key; //key to dnat_tree2 or snat_tree1
 
     GMutex lock;
 
@@ -296,10 +296,10 @@ struct conn_struct {
     gint access_time;
 
     int64_t tcp_ts_diff;
-    gboolean tcp_fin_in; // TRUE if a incoming side of the TCP connection has received a FIN flag
+    //gboolean tcp_fin_in; // TRUE if a incoming side of the TCP connection has received a FIN flag
                          // The connection can still send ACKs after it sent a FIN
                          // but nothing else. Anything else is part of a new TCP connection.
-    gboolean tcp_fin_out; // TRUE if a outgoing side of the TCP connection has sent a FIN flag
+    //gboolean tcp_fin_out; // TRUE if a outgoing side of the TCP connection has sent a FIN flag
 
     conn_status_t state;
     uint32_t id;
@@ -389,11 +389,10 @@ struct pkt_struct {
 
     char *src;
     char *dst;
+    char *src_port;
+    char *dst_port;
     char *src_with_port;
     char *dst_with_port;
-
-    struct keys keys;
-    uint64_t hihID;
 
     int position; // position in the connection queue
 
@@ -461,25 +460,6 @@ struct log_event {
     int level;
     unsigned id;
     char *curtime;
-};
-
-struct attacker_pin {
-    struct addr ip;
-    GTree *port_tree;
-    struct target *target;
-};
-void free_attacker_pin(struct attacker_pin *pin);
-
-struct expire_conn_port {
-    gpointer delay;
-    struct addr *key_ip;
-};
-
-struct expire_conn {
-    struct addr *key_ip;
-    uint16_t key_port;
-    int delay;
-    struct conn_struct *conn;
 };
 
 #endif /* __STRUCTS_H_ */

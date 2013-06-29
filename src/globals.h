@@ -70,24 +70,18 @@ GHashTable *module;
 /*! \brief global hash table to hold module paramaters */
 GHashTable *links;
 
-/*! \brief global tree containing the active hih to target mapping (struct active_hih_struct)  */
-GTree *active_hihs;
-
-/*! \brief security writing lock for the dynamic high interaction redirection table
- */
-GMutex active_hih_lock;
-
-/*! \brief Balanced Binary Tree that keep meta informations about active connections
- *
- \param key, each entry is represented by the tuple of the connection (sourceIP+destIP)
- \param value, the associated value of an entry is a related_conn structure  */
-GTree *conn_tree;
-
-/*! \brief Balanced Binary Tree that keep meta informations about active connections (flows)
- *
- \param key, each entry is represented by the tuple of the connection (sourceIP+sourcePort+destIP+destPort)
- \param value, the associated value of an entry is a conn_struct structure  */
-GTree *flow_tree;
+// NEW: Protocol:externalSrcIP:externalSrcPort:targetDstIP:targetDstPort
+GTree *dnat_tree1;
+// REPLY: Protocol:internalSrcIP:internalSrcPort:externalDstIP:externalDstPort:VLAN
+GTree *dnat_tree2;
+// NEW: Protocol:internalSrcIP:internalSrcPort:externalDstIP:externalDstPort:VLAN
+GTree *snat_tree1;
+// REPLY: Protocol:externalSrcIP:externalSrcPort:targetDstIP:targetDstPort
+GTree *snat_tree2;
+// Map VLAN:internalSrcIP:externalDstIP -> targetDstIP
+GTree *comm_pin_tree;
+// Map VLAN:internalSrcIP -> targetDstIP
+GTree *target_pin_tree;
 
 /*! \brief security writing lock for the Binary Tree
  */
@@ -151,16 +145,5 @@ gboolean debug;
  \Def file descriptor to log debug output
  */
 int fdebug;
-
-/*!
- \def udp_rsd
- \def tcp_rsd
- *
- \brief Raw socket descriptor for TCP and UDP raw sockets
- *
- */
-int udp_rsd, tcp_rsd;
-
-/* -------------------------------------------------- */
 
 #endif //__GLOBALS_H__

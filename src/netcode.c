@@ -171,6 +171,7 @@ void send_arp_reply(uint16_t ethertype, struct interface *iface, const u_char *p
     if (request->ea_hdr.ar_op == htons(ARPOP_REQUEST)) {
 
         unsigned char frame[psize];
+        bzero(&frame, psize);
         struct ether_arp *reply = NULL;
 
         // Construct Ethernet/VLAN header.
@@ -529,10 +530,10 @@ status_t proxy_ext(struct pkt_struct* pkt) {
             pkt->nat.dst_vlan = &pkt->conn->target->front_handler->vlan;
             break;
         case HIH:
-            pkt->out = pkt->conn->hih.iface;
-            pkt->nat.dst_mac = pkt->conn->hih.mac;
-            pkt->nat.dst_ip = pkt->conn->hih.ip;
-            pkt->nat.dst_vlan = pkt->conn->hih.vlan;
+            pkt->out = pkt->conn->hih.back_handler->iface;
+            pkt->nat.dst_mac = pkt->conn->hih.back_handler->mac;
+            pkt->nat.dst_ip = pkt->conn->hih.back_handler->ip;
+            pkt->nat.dst_vlan = &pkt->conn->hih.back_handler->vlan;
             break;
         default:
             return NOK;
@@ -580,16 +581,16 @@ status_t proxy_int(struct pkt_struct* pkt) {
  */
 status_t forward_ext(struct pkt_struct* pkt) {
 
-    pkt->out=pkt->conn->hih.iface;
+    pkt->out=pkt->conn->hih.back_handler->iface;
 
     memcpy(&pkt->packet.eth->ether_shost, &pkt->out->mac.addr_eth,
                 ETH_ALEN);
-    memcpy(&pkt->packet.eth->ether_dhost, &pkt->conn->hih.mac->addr_eth,
+    memcpy(&pkt->packet.eth->ether_dhost, &pkt->conn->hih.back_handler->mac->addr_eth,
             ETH_ALEN);
-    memcpy(&pkt->packet.ip->daddr, &pkt->conn->hih.ip->addr_ip,
+    memcpy(&pkt->packet.ip->daddr, &pkt->conn->hih.back_handler->ip->addr_ip,
             sizeof(ip_addr_t));
 
-    if (pkt->conn->hih.vlan) {
+    if (pkt->conn->hih.back_handler->vlan.i) {
         if(pkt->packet.eth->ether_type != htons(ETHERTYPE_VLAN)) {
             // Regular ethernet headers are not at the start of FRAME
             // to save space for this scenario, so we just move it there
@@ -600,7 +601,7 @@ status_t forward_ext(struct pkt_struct* pkt) {
         pkt->packet.vlan = (struct vlan_ethhdr *) pkt->packet.FRAME;
         pkt->packet.vlan->h_vlan_proto = htons(ETHERTYPE_VLAN);
         pkt->packet.vlan->h_vlan_encapsulated_proto = htons(ETHERTYPE_IP);
-        pkt->packet.vlan->h_vlan_TCI = *(pkt->conn->hih.vlan);
+        pkt->packet.vlan->h_vlan_TCI = pkt->conn->hih.back_handler->vlan;
     }
 
     printdbg(
@@ -710,6 +711,7 @@ void reply_reset(struct pkt_struct *pkt, struct interface *iface) {
 
         uint32_t size;
         unsigned char frame[VLAN_ETH_HLEN + sizeof(struct tcp_packet)];
+        bzero(&frame, VLAN_ETH_HLEN + sizeof(struct tcp_packet));
         struct ether_header *eth = (struct ether_header *) frame;
         struct tcp_packet *rst;
 
@@ -717,10 +719,14 @@ void reply_reset(struct pkt_struct *pkt, struct interface *iface) {
             size = VLAN_ETH_HLEN + sizeof(struct tcp_packet);
             struct vlan_ethhdr *vlan = (struct vlan_ethhdr *) frame;
             *vlan = *(pkt->original_headers.vlan);
+            memcpy(&vlan->h_source, &pkt->original_headers.vlan->h_dest, ETH_ALEN);
+            memcpy(&vlan->h_dest, &pkt->original_headers.vlan->h_source, ETH_ALEN);
             rst = (struct tcp_packet *) (frame + VLAN_ETH_HLEN);
         } else {
             size = ETHER_HDR_LEN + sizeof(struct tcp_packet);
-            *eth = *(pkt->original_headers.eth);
+            memcpy(&eth->ether_shost, &pkt->original_headers.eth->ether_dhost, ETH_ALEN);
+            memcpy(&eth->ether_dhost, &pkt->original_headers.eth->ether_shost, ETH_ALEN);
+            eth->ether_type = htons(ETHERTYPE_IP);
             rst = (struct tcp_packet *) (frame + ETHER_HDR_LEN);
         }
 

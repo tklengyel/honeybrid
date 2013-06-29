@@ -61,13 +61,6 @@ void free_target(struct target *t) {
     g_free(t);
 }
 
-void free_attacker_pin(struct attacker_pin *pin) {
-    if(pin) {
-        if(pin->port_tree) g_tree_destroy(pin->port_tree);
-        free(pin);
-    }
-}
-
 void free_raw_pcap(struct raw_pcap *raw) {
     free(raw->header);
     free(raw->packet);

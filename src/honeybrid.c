@@ -300,28 +300,41 @@ void init_variables() {
                     (GDestroyNotify) free_interface))) errx(1,
             "%s: Fatal error while creating links hash table.\n", __func__);
 
-    /*! create the tree that locks active hih connections to the same target */
+    /*! create the trees that track connections */
     if (NULL
-            == (active_hihs = g_tree_new_full((GCompareDataFunc) intcmp, NULL,
-                    g_free, NULL))) errx(1,
-            "%s: Fatal error while creating links hash table.\n", __func__);
+            == (dnat_tree1 = g_tree_new_full((GCompareDataFunc) g_strcmp0, NULL,
+                    NULL, NULL))) errx(1,
+            "%s: Fatal error while creating tree.\n", __func__);
 
-    /* create the main B-Tree to store meta informations of active connections */
-    if (NULL == (conn_tree = g_tree_new((GCompareFunc) addr_cmp))) {
-        errx(1, "%s: Fatal error while creating conn_tree.\n", __func__);
-    }
+    if (NULL
+            == (dnat_tree2 = g_tree_new_full((GCompareDataFunc) g_strcmp0, NULL,
+                    NULL, NULL))) errx(1,
+            "%s: Fatal error while creating tree.\n", __func__);
+
+    if (NULL
+            == (snat_tree1 = g_tree_new_full((GCompareDataFunc) g_strcmp0, NULL,
+                    NULL, NULL))) errx(1,
+            "%s: Fatal error while creating tree.\n", __func__);
+
+    if (NULL
+            == (snat_tree2 = g_tree_new_full((GCompareDataFunc) g_strcmp0, NULL,
+                    NULL, NULL))) errx(1,
+            "%s: Fatal error while creating tree.\n", __func__);
+
+    if (NULL
+            == (comm_pin_tree = g_tree_new_full((GCompareDataFunc) g_strcmp0, NULL,
+                    g_free, g_free))) errx(1,
+            "%s: Fatal error while creating tree.\n", __func__);
+
+    if (NULL
+            == (target_pin_tree = g_tree_new_full((GCompareDataFunc) g_strcmp0, NULL,
+                    g_free, g_free))) errx(1,
+            "%s: Fatal error while creating tree.\n", __func__);
 
     /*! create the hash table for the log engine */
     if (NULL == (module_to_save = g_hash_table_new(g_str_hash, g_str_equal))) errx(
             1, "%s: Fatal error while creating module_to_save hash table.\n",
             __func__);
-
-    /*! create the redirection table */
-    /*if (NULL
-     == (high_redirection_table = g_hash_table_new_full(g_str_hash,
-     g_str_equal, g_free, g_free))) errx(1,
-     "%s: Fatal error while creating high_redirection_table hash table.\n",
-     __func__);*/
 
     /* set debug file */
     fdebug = -1;
@@ -486,22 +499,28 @@ int close_conn_tree() {
      * traverse the B-Tree to remove the singly linked lists and then destroy the B-Tree
      */
     int delay = 0;
-    entrytoclean = g_ptr_array_new_with_free_func(g_free);
+    entrytoclean = g_ptr_array_new();
 
     g_mutex_lock(&connlock);
 
-    /*! call the clean function for each value, delete the value if TRUE is returned */
-    g_tree_foreach(conn_tree, (GTraverseFunc) expire_conn, GINT_TO_POINTER(delay));
+    // call the clean function for each value, delete the value if TRUE is returned
+    g_tree_foreach(dnat_tree1, (GTraverseFunc) expire_conn, GINT_TO_POINTER(delay));
+    g_tree_foreach(snat_tree1, (GTraverseFunc) expire_conn, GINT_TO_POINTER(delay));
 
-    /*! remove each key listed from the btree */
-    g_ptr_array_foreach(entrytoclean, (GFunc) remove_conn, NULL);
+    /// remove each key listed from the btree
+    g_ptr_array_foreach(entrytoclean, (GFunc) remove_conn, GINT_TO_POINTER(delay));
 
-    /*! free the array */
+    /// free the array
     g_ptr_array_free(entrytoclean, TRUE);
     entrytoclean = NULL;
 
-    g_tree_destroy(conn_tree);
-    conn_tree = NULL;
+    g_tree_destroy(dnat_tree1);
+    g_tree_destroy(dnat_tree2);
+    g_tree_destroy(snat_tree1);
+    g_tree_destroy(snat_tree2);
+
+    g_tree_destroy(comm_pin_tree);
+    g_tree_destroy(target_pin_tree);
 
     return 0;
 }
@@ -848,7 +867,7 @@ void de_thread(gpointer data) {
                             printdbg(
                                     "%s Packet from HIH at wrong state, so we reset\n", H(conn->id));
                             if (pkt->packet.ip->protocol == IPPROTO_TCP) {
-                                reply_reset(pkt, pkt->conn->hih.iface);
+                                reply_reset(pkt, pkt->conn->hih.back_handler->iface);
                             }
                             switch_state(conn, DROP);
                             free_pkt(pkt);
