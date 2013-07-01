@@ -302,39 +302,43 @@ void init_variables() {
 
     /*! create the trees that track connections */
     if (NULL
-            == (dnat_tree1 = g_tree_new_full((GCompareDataFunc) g_strcmp0, NULL,
-                    NULL, NULL))) errx(1,
+            == (dnat_tree1 = g_tree_new((GCompareFunc) g_strcmp0))) errx(1,
             "%s: Fatal error while creating tree.\n", __func__);
 
     if (NULL
-            == (dnat_tree2 = g_tree_new_full((GCompareDataFunc) g_strcmp0, NULL,
-                    NULL, NULL))) errx(1,
+            == (dnat_tree2 = g_tree_new((GCompareFunc) g_strcmp0))) errx(1,
             "%s: Fatal error while creating tree.\n", __func__);
 
     if (NULL
-            == (snat_tree1 = g_tree_new_full((GCompareDataFunc) g_strcmp0, NULL,
-                    NULL, NULL))) errx(1,
+            == (snat_tree1 = g_tree_new((GCompareFunc) g_strcmp0))) errx(1,
             "%s: Fatal error while creating tree.\n", __func__);
 
     if (NULL
-            == (snat_tree2 = g_tree_new_full((GCompareDataFunc) g_strcmp0, NULL,
-                    NULL, NULL))) errx(1,
+            == (snat_tree2 = g_tree_new((GCompareFunc) g_strcmp0))) errx(1,
             "%s: Fatal error while creating tree.\n", __func__);
 
     if (NULL
-            == (comm_pin_tree = g_tree_new_full((GCompareDataFunc) g_strcmp0, NULL,
-                    g_free, g_free))) errx(1,
+            == (comm_pin_tree = g_tree_new((GCompareFunc) g_strcmp0))) errx(1,
             "%s: Fatal error while creating tree.\n", __func__);
 
     if (NULL
-            == (target_pin_tree = g_tree_new_full((GCompareDataFunc) g_strcmp0, NULL,
-                    g_free, g_free))) errx(1,
+            == (target_pin_tree = g_tree_new((GCompareFunc) g_strcmp0))) errx(1,
             "%s: Fatal error while creating tree.\n", __func__);
 
     /*! create the hash table for the log engine */
     if (NULL == (module_to_save = g_hash_table_new(g_str_hash, g_str_equal))) errx(
             1, "%s: Fatal error while creating module_to_save hash table.\n",
             __func__);
+
+    if (ICONFIG("max_packet_buffer") > 0) {
+        max_packet_buffer = ICONFIG("max_packet_buffer");
+    } else {
+        max_packet_buffer = ULLONG_MAX;
+    }
+
+    deny_hih_init = ICONFIG("deny_hih_init");
+    reset_ext = ICONFIG("reset_ext");
+    exclusive_hih = ICONFIG("exclusive_hih");
 
     /* set debug file */
     fdebug = -1;
@@ -491,7 +495,7 @@ int close_hash() {
 
 /*! close_conn_tree function
  \brief Function to free memory taken by conn_tree */
-int close_conn_tree() {
+int close_conn_trees() {
 
     printdbg("%s: Destroying connection tree\n", H(0));
 
@@ -518,7 +522,6 @@ int close_conn_tree() {
     g_tree_destroy(dnat_tree2);
     g_tree_destroy(snat_tree1);
     g_tree_destroy(snat_tree2);
-
     g_tree_destroy(comm_pin_tree);
     g_tree_destroy(target_pin_tree);
 
@@ -533,7 +536,7 @@ void close_all(void) {
             "%s: Error when waiting for threads to close\n", H(0));
 
     /*! delete conn_tree */
-    if (close_conn_tree() < 0) g_printerr("%s: Error when closing conn_tree\n",
+    if (close_conn_trees() < 0) g_printerr("%s: Error when closing conn_tree\n",
             H(0));
 
     /*! delete lock file */
@@ -1036,15 +1039,6 @@ int main(int argc, char *argv[]) {
     init_parser(config_file_name);
     /*! initialize signal handlers */
     init_signal();
-
-    if (ICONFIG("max_packet_buffer") > 0) {
-        max_packet_buffer = ICONFIG("max_packet_buffer");
-    } else {
-        max_packet_buffer = ULLONG_MAX;
-    }
-
-    deny_hih_init = ICONFIG("deny_hih_init");
-    reset_ext = ICONFIG("reset_ext");
 
     output_t output = ICONFIG_REQUIRED("output");
 

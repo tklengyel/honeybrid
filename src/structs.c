@@ -66,3 +66,10 @@ void free_raw_pcap(struct raw_pcap *raw) {
     free(raw->packet);
     free(raw);
 }
+
+void free_pin(struct pin *pin) {
+    if(pin) {
+        g_free(pin->key);
+        free(pin);
+    }
+}

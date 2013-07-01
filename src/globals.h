@@ -56,7 +56,10 @@ uint64_t c_id;
 uint64_t max_packet_buffer;
 
 int deny_hih_init;
+
 int reset_ext;
+
+int exclusive_hih;
 
 /*! \brief global array of pointers to hold target structures */
 GHashTable *targets;

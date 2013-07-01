@@ -212,16 +212,7 @@ struct hih_struct {
     unsigned lih_syn_seq;
     unsigned delta;
     char *redirected_int_key;
-};
-
-/*! active_hih_struct
- \brief number of connections active on the HIH on the target
- */
-struct active_hih_struct {
-    uint64_t hihID;
-    struct target *target;
-    uint32_t conn_count;
-    struct handler *back_handler;
+    char *target_pin_key;
 };
 
 struct hih_search {
@@ -262,11 +253,6 @@ struct custom_conn_data {
     const char* (*data_print)(gpointer data); // define function to print data in log (if any)
 };
 
-struct keys {
-    struct addr ip;
-    __be16 port;
-};
-
 /*! conn_struct
  \brief The meta informations of a connection stored in the main Binary Tree
 
@@ -287,6 +273,7 @@ struct conn_struct {
 
     char *ext_key; //key to dnat_tree1 or snat_tree2
     char *int_key; //key to dnat_tree2 or snat_tree1
+    char *pin_key; //key to the pin tree that holds what target IP to bind this conn to
 
     GMutex lock;
 
@@ -324,6 +311,8 @@ struct conn_struct {
     struct hih_struct hih;
 
     struct target *target;
+
+    struct addr *pin_target_ip;
 
     /* statistics */
     gdouble stat_time[__MAX_CONN_STATUS ];
@@ -461,5 +450,12 @@ struct log_event {
     unsigned id;
     char *curtime;
 };
+
+struct pin {
+    char *key;
+    struct addr ip;
+    uint64_t count;
+};
+void free_pin(struct pin *pin);
 
 #endif /* __STRUCTS_H_ */

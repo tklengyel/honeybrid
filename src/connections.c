@@ -375,22 +375,6 @@ gboolean find_hih(uint64_t *hihID, struct handler *back_handler,
     return FALSE;
 }
 
-gboolean find_active_hih(uint64_t *hihID, struct active_hih_struct *active, struct hih_search *s) {
-    if (active->back_handler->iface == s->pkt->in
-            && active->back_handler->ip->addr_ip == s->pkt->packet.ip->saddr
-            && active->back_handler->vlan.v.vid == s->pkt->packet.vlan->h_vlan_TCI.v.vid) {
-
-        s->found=TRUE;
-        s->hihID = *hihID;
-        s->target = active->target;
-        s->back_handler = active->back_handler;
-        s->active = TRUE;
-        active->conn_count++;
-        return TRUE;
-    }
-    return FALSE;
-}
-
 int conn_lookup(struct pkt_struct *pkt, struct conn_struct **conn_out) {
 
     int ret = 0;
@@ -642,23 +626,31 @@ status_t create_conn(struct pkt_struct *pkt, struct conn_struct **conn, gdouble 
                 target->front_handler->ip_str, pkt->dst_port,
                 pkt->src_with_port, target->front_handler->vlan.v.vid);
 
-        char *comm_pin_key = g_malloc0(
+
+        struct pin *pin = NULL;
+        conn_init->pin_key = g_malloc0(
                 snprintf(NULL, 0, "%u:%s:%s", target->front_handler->vlan.v.vid,
                         target->front_handler->ip_str, pkt->src) + 1);
-        sprintf(comm_pin_key, "%u:%s:%s", target->front_handler->vlan.v.vid,
+        sprintf(conn_init->pin_key, "%u:%s:%s", target->front_handler->vlan.v.vid,
                 target->front_handler->ip_str, pkt->src);
 
         printdbg("%s Inserting new conn from EXT to dnat trees with keys %s and %s\n",
                 H(conn_init->id), conn_init->ext_key,conn_init->int_key);
 
         g_mutex_lock(&connlock);
-        g_tree_insert(dnat_tree1,conn_init->ext_key,conn_init);
-        g_tree_insert(dnat_tree2,conn_init->int_key,conn_init);
-        if(!g_tree_lookup(comm_pin_tree, comm_pin_key)) {
-            g_tree_insert(comm_pin_tree,comm_pin_key,g_strdup(pkt->dst));
-            printdbg("%s Pinning %s with key %s\n", H(conn_init->id), pkt->dst, comm_pin_key);
+        g_tree_insert(dnat_tree1, conn_init->ext_key, conn_init);
+        g_tree_insert(dnat_tree2, conn_init->int_key, conn_init);
+        if (!g_tree_lookup_extended(comm_pin_tree, conn_init->pin_key,
+                NULL, (gpointer *) &pin)) {
+            pin = malloc(sizeof(struct pin));
+            pin->key = g_strdup(conn_init->pin_key);
+            pin->count = 1;
+            pin->ip = conn_init->first_pkt_dst_ip;
+            g_tree_insert(comm_pin_tree, pin->key, pin);
+            printdbg(
+                    "%s Pinning %s with key %s\n", H(conn_init->id), pkt->dst, pin->key);
         } else {
-            free(comm_pin_key);
+            pin->count++;
         }
         g_mutex_unlock(&connlock);
 
@@ -672,11 +664,16 @@ status_t create_conn(struct pkt_struct *pkt, struct conn_struct **conn, gdouble 
         sprintf(comm_pin_key, "%u:%s:%s", target->front_handler->vlan.v.vid,
                 target->front_handler->ip_str, pkt->dst);
 
-        char tmp_snat_to[INET_ADDRSTRLEN];
-        char *snat_to = g_tree_lookup(comm_pin_tree,comm_pin_key);
-        if(!snat_to) {
-            inet_ntop(AF_INET, &(target->default_route->ip.addr_ip), (char *)&tmp_snat_to, INET_ADDRSTRLEN);
-            snat_to = (char *)&tmp_snat_to;
+        char snat_to[INET_ADDRSTRLEN];
+        struct pin *pin = g_tree_lookup(comm_pin_tree,comm_pin_key);
+        if(!pin) {
+            inet_ntop(AF_INET, &(target->default_route->ip.addr_ip), (char *)&snat_to, INET_ADDRSTRLEN);
+            free(comm_pin_key);
+        } else {
+            inet_ntop(AF_INET, &pin->ip.addr_ip, (char *)&snat_to, INET_ADDRSTRLEN);
+            pin->count++;
+            conn_init->pin_target_ip = &pin->ip;
+            conn_init->pin_key = comm_pin_key;
         }
 
         conn_init->ext_key = g_malloc0(
@@ -708,19 +705,54 @@ status_t create_conn(struct pkt_struct *pkt, struct conn_struct **conn, gdouble 
         conn_init->hih.hihID = hih_search.hihID;
         conn_init->hih.back_handler = hih_search.back_handler;
 
-        char *pin_key1 = g_malloc0(
-                snprintf(NULL, 0, "%u:%s", hih_search.back_handler->vlan.v.vid,
-                        hih_search.back_handler->ip_str) + 1);
+        char snat_to[INET_ADDRSTRLEN];
 
-        sprintf(pin_key1, "%u:%s", hih_search.back_handler->vlan.v.vid,
-                hih_search.back_handler->ip_str);
+        // With exclusive hihs we check the target_pin_tree
+        if (exclusive_hih == 1) {
+            char *pin_key = g_malloc0(
+                    snprintf(NULL, 0, "%u:%s",
+                            hih_search.back_handler->vlan.v.vid,
+                            hih_search.back_handler->ip_str) + 1);
 
-        char tmp_snat_to[INET_ADDRSTRLEN];
-        char *snat_to = g_tree_lookup(target_pin_tree, pin_key1);
-        if(!snat_to) {
-            // This is a HIH connection from a HIH to which nothing has been redirected to
-            inet_ntop(AF_INET, &(target->default_route->ip.addr_ip), (char *)&tmp_snat_to, INET_ADDRSTRLEN);
-            snat_to = (char *)&tmp_snat_to;
+            sprintf(pin_key, "%u:%s", hih_search.back_handler->vlan.v.vid,
+                    hih_search.back_handler->ip_str);
+
+            struct pin *pin = g_tree_lookup(target_pin_tree, pin_key);
+            if (!pin) {
+                // So this HIH is initiating a conn without redirection taking place first...
+                // We will just take the default route's IP for this but we don't pin it
+                inet_ntop(AF_INET, &(target->default_route->ip.addr_ip),
+                        (char *) &snat_to, INET_ADDRSTRLEN);
+                free(pin_key);
+            } else {
+                inet_ntop(AF_INET, &pin->ip.addr_ip, (char *) &snat_to,
+                        INET_ADDRSTRLEN);
+                pin->count++;
+                conn_init->pin_target_ip = &pin->ip;
+                conn_init->pin_key = pin_key;
+            }
+        } else {
+            // With non-exclusive HIHs, we check the comm_pin_tree
+
+            char *comm_pin_key = g_malloc0(
+                    snprintf(NULL, 0, "%u:%s:%s",
+                            target->front_handler->vlan.v.vid,
+                            target->front_handler->ip_str, pkt->dst) + 1);
+            sprintf(comm_pin_key, "%u:%s:%s", target->front_handler->vlan.v.vid,
+                    target->front_handler->ip_str, pkt->dst);
+
+            struct pin *pin = g_tree_lookup(comm_pin_tree, comm_pin_key);
+            if (!pin) {
+                inet_ntop(AF_INET, &(target->default_route->ip.addr_ip),
+                        (char *) &snat_to, INET_ADDRSTRLEN);
+                free(comm_pin_key);
+            } else {
+                inet_ntop(AF_INET, &pin->ip.addr_ip, (char *) &snat_to,
+                        INET_ADDRSTRLEN);
+                pin->count++;
+                conn_init->pin_target_ip = &pin->ip;
+                conn_init->pin_key = comm_pin_key;
+            }
         }
 
         conn_init->ext_key = g_malloc0(
@@ -805,6 +837,25 @@ void remove_conn(struct conn_struct *conn,
     } else {
         g_tree_remove(snat_tree2, conn->ext_key);
         g_tree_remove(snat_tree1, conn->int_key);
+    }
+
+    if (conn->pin_key) {
+        struct pin *pin = g_tree_lookup(comm_pin_tree, conn->pin_key);
+        if (pin) {
+            pin->count--;
+            if (pin->count == 0) {
+                g_tree_remove(comm_pin_tree, conn->pin_key);
+                free_pin(pin);
+            }
+        }
+
+        if (conn->hih.target_pin_key && (pin = g_tree_lookup(target_pin_tree, conn->hih.target_pin_key))) {
+            pin->count--;
+            if (pin->count == 0) {
+                g_tree_remove(target_pin_tree, conn->pin_key);
+                free_pin(pin);
+            }
+        }
     }
 
     connection_log(conn);
@@ -895,7 +946,9 @@ void free_conn(struct conn_struct *conn) {
         g_mutex_clear(&conn->lock);
         g_free(conn->int_key);
         g_free(conn->ext_key);
+        g_free(conn->pin_key);
         g_free(conn->hih.redirected_int_key);
+        g_free(conn->hih.target_pin_key);
         g_string_free(conn->start_timestamp, TRUE);
         g_string_free(conn->decision_rule, TRUE);
         g_free(conn);
@@ -973,23 +1026,42 @@ status_t setup_redirection(struct conn_struct *conn, uint64_t hih_use) {
         inet_ntop(AF_INET, &(conn->first_pkt_dst_ip.addr_ip), (char *) &tmp2,
                 INET_ADDRSTRLEN);
 
-        char *pin_key1 = g_malloc0(snprintf(NULL,0,"%u:%s", back_handler->vlan.v.vid, back_handler->ip_str)+1);
-        sprintf(pin_key1, "%u:%s", back_handler->vlan.v.vid, back_handler->ip_str);
+        // Exclusive HIH, only one attacker is allowed to interact with it at a time
+        if (exclusive_hih == 1) {
+            char *pin_key1 = g_malloc0(
+                    snprintf(NULL, 0, "%u:%s", back_handler->vlan.v.vid,
+                            back_handler->ip_str) + 1);
+            sprintf(pin_key1, "%u:%s", back_handler->vlan.v.vid,
+                    back_handler->ip_str);
 
-        char *pinned_to = g_tree_lookup(target_pin_tree, pin_key1);
-        if(pinned_to && strcmp(pinned_to, tmp2)) {
-            // This HIH is pinned to a different target IP
-            printdbg("%s Can't setup redirection. HIH is pinned to target IP %s but this connection is to target IP %s\n",
-                    H(conn->id), pinned_to, tmp2);
+            struct pin *pin = g_tree_lookup(target_pin_tree, pin_key1);
+            if (pin) {
+                if (pin->ip.addr_ip != conn->first_pkt_dst_ip.addr_ip) {
+                    // This HIH is pinned to a different target IP
+                    printdbg(
+                            "%s Can't setup redirection. HIH is pinned to another target IP \n",
+                            H(conn->id));
 
-            free(pin_key1);
-            return NOK;
-        }
+                    free(pin_key1);
+                    return NOK;
+                } else {
+                    pin->count++;
+                    conn->hih.target_pin_key = g_strdup(pin->key);
+                }
+            } else {
+                printdbg(
+                        "%s Inserting target pin %s to %s\n", H(conn->id), pin_key1, tmp2);
 
-        if(!pinned_to) {
-            printdbg("%s Inserting target pin %s to %s\n",
-                                H(conn->id), pin_key1, tmp2);
-            g_tree_insert(target_pin_tree, pin_key1, g_strdup(tmp2));
+                pin = malloc(sizeof(struct pin));
+                pin->key = pin_key1;
+                pin->count = 1;
+                pin->ip = conn->first_pkt_dst_ip;
+
+                conn->hih.target_pin_key = g_strdup(pin->key);
+
+                g_tree_insert(target_pin_tree, pin->key, pin);
+
+            }
         }
 
         GTimeVal t;

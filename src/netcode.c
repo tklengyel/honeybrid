@@ -511,9 +511,9 @@ static inline void nat(struct pkt_struct* pkt) {
     set_ip_checksum(pkt->packet.ip);
 }
 
-/*! proxy
+/*! proxy_ext
  *
- \brief proxy the packet to it's destination
+ \brief Proxy packet coming from EXT to INT (DNAT)
  \param[in] pkt, the packet metadata structure to forward
 
  \return OK if the packet has been succesfully sent
@@ -551,6 +551,13 @@ status_t proxy_ext(struct pkt_struct* pkt) {
     return NOK;
 }
 
+/*! proxy_int
+ *
+ \brief Proxy packet coming from INT to EXT (SNAT)
+ \param[in] pkt, the packet metadata structure to forward
+
+ \return OK if the packet has been succesfully sent
+ */
 status_t proxy_int(struct pkt_struct* pkt) {
 
     pkt->out = pkt->conn->target->default_route;
@@ -561,7 +568,11 @@ status_t proxy_int(struct pkt_struct* pkt) {
         pkt->nat.dst_mac = &pkt->conn->first_pkt_src_mac;
         pkt->nat.dst_ip = &pkt->conn->first_pkt_src_ip;
     } else {
-        pkt->nat.src_ip = &pkt->conn->target->default_route->ip;
+        if(pkt->conn->pin_target_ip) {
+            pkt->nat.src_ip = pkt->conn->pin_target_ip;
+        } else {
+            pkt->nat.src_ip = &pkt->conn->target->default_route->ip;
+        }
         pkt->nat.dst_mac = pkt->conn->target->default_route_mac;
     }
 
@@ -887,7 +898,12 @@ status_t test_expected(struct conn_struct* conn, struct pkt_struct* pkt) {
 
     if (pkt->packet.ip->protocol != conn->expected_data.ip_proto) {
         printdbg(
-                "%s Unexpected protocol: %s. Expected %s\n", H(conn->id), lookup_proto(pkt->packet.ip->protocol), lookup_proto(conn->expected_data.ip_proto));
+                "%s Unexpected protocol: %u (%s). Expected %u (%s) \n",
+                H(conn->id),
+                pkt->packet.ip->protocol,
+                lookup_proto(pkt->packet.ip->protocol),
+                conn->expected_data.ip_proto,
+                lookup_proto(conn->expected_data.ip_proto));
 
         conn->replay_problem |= REPLAY_UNEXPECTED_PROTOCOL;
 
