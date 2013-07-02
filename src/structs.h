@@ -31,14 +31,14 @@
  */
 struct vlan_tci {
     union {
-        struct v {
+        struct {
             __be16 pcp :3;  // Priority Code Point (QoS)
             __be16 dei :1;  // Drop Eligible Indicator
             __be16 vid :12; // VLAN Identifier
-        } v;
+        };
         __be16 i;
     };
-}__attribute__ ((__packed__));
+} __attribute__ ((__packed__));
 
 /*! vlan_ethhdr
  * Stolen from the Linux kernel header linux/if_vlan.h
@@ -68,6 +68,7 @@ struct handler {
     struct addr *ip;
     char *ip_str;
     struct addr *netmask;
+    struct addr *intra_target_ip;
     struct vlan_tci vlan;
     struct interface *iface;
     struct node *rule;
@@ -85,6 +86,7 @@ struct target {
     GTree *back_handlers; /* Honeypot backends handling the second response with key: hihID, value: struct handler */
     uint64_t back_handler_count; /* Number of backends defined in the GTree, used to generate hihIDs */
     struct node *back_picker; /* Rule(s) to pick which backend to use (such as VM name, etc.) */
+    GTree *intra_handlers; /* Honeypot intra handlers to handle internally initiated connections with */
     struct node *control_rule; /* Rules of decision modules to limit outbound packets from honeypots */
 };
 
@@ -217,11 +219,17 @@ struct hih_struct {
 
 struct hih_search {
     gboolean found;
-    gboolean active;
     struct pkt_struct *pkt;
     uint64_t hihID;
     struct target *target;
     struct handler *back_handler;
+};
+
+struct intra_search {
+    gboolean found;
+    struct pkt_struct *pkt;
+    struct target *target;
+    struct handler *intra_handler;
 };
 
 /*! expected_data_struct
@@ -274,6 +282,7 @@ struct conn_struct {
     char *ext_key; //key to dnat_tree1 or snat_tree2
     char *int_key; //key to dnat_tree2 or snat_tree1
     char *pin_key; //key to the pin tree that holds what target IP to bind this conn to
+    char *intra_key;
 
     GMutex lock;
 
@@ -296,7 +305,8 @@ struct conn_struct {
     GSList *BUFFER;
     struct expected_data_struct expected_data;
 
-    origin_t initiator; // who initiated the conn? EXT/LIH/HIH
+    role_t initiator; // who initiated the conn? EXT/LIH/HIH/INTRA
+    role_t destination; // where is the conn going? EXT/LIH/HIH/INTRA
 
     struct vlan_tci first_pkt_vlan;
     struct addr first_pkt_src_mac;
@@ -310,9 +320,11 @@ struct conn_struct {
 
     struct hih_struct hih;
 
+    struct handler *intra_handler;
+
     struct target *target;
 
-    struct addr *pin_target_ip;
+    struct addr *pin_ip; //impersonate (SNAT/DNAT) this IP
 
     /* statistics */
     gdouble stat_time[__MAX_CONN_STATUS ];
@@ -368,7 +380,8 @@ struct headers {
 struct pkt_struct {
     struct packet packet;
     struct headers original_headers;
-    origin_t origin;
+    role_t origin;
+    role_t destination;
     int data;
     uint32_t size;
     int DE;

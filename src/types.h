@@ -71,9 +71,10 @@ typedef enum {
     INT,
     LIH,
     HIH,
+    INTRA,
 
-    __MAX_ORIGIN
-} origin_t;
+    __MAX_ROLE
+} role_t;
 
 /*! \brief constants to define the status of a connection
  */

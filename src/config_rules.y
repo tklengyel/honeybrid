@@ -44,7 +44,11 @@ char* int_append(char * root, int num);
 %token OPEN END SEMICOLON QUOTE DOT
 
 /* Honeybrid configuration keywords */
-%token MODULE FILTER FRONTEND BACKEND BACKPICK LIMIT CONFIGURATION TARGET LINK HW VLAN DEFAULT ROUTE VIA
+%token MODULE FILTER FRONTEND BACKEND
+%token BACKPICK LIMIT CONFIGURATION 
+%token TARGET LINK HW VLAN DEFAULT 
+%token ROUTE VIA NETMASK INTERNAL
+%token WITH
 
 /* Content Variables */
 %token <number> NUMBER
@@ -58,6 +62,8 @@ char* int_append(char * root, int num);
 %type <gstring>  	equation 
 %type <addr>    	honeynet
 %type <addr> 		mac
+%type <addr> 		netmask
+%type <number>		vlan
 
 %union {
 	int    number;
@@ -196,7 +202,7 @@ module: MODULE QUOTE WORD QUOTE OPEN module_settings END {
 			backup = g_key_file_new();
 			g_key_file_set_list_separator(backup, '\t');
 			/*! We store a pointer to GKeyFile object in the module hash table */
-			g_hash_table_insert((GHashTable *)$6, "backup", backup);
+			g_hash_table_insert((GHashTable *)$6, g_strdup("backup"), backup);
 			g_printerr("\t%s: New GKeyFile %p created\n", __func__, backup);
 			/*! We then check if the file exists. Otherwise we create it */
 			if (FALSE == g_file_test(backup_file, G_FILE_TEST_IS_REGULAR)) {
@@ -270,9 +276,10 @@ rule: 	{
 		
 		// This tree holds the main backend structures
 		$$->back_handlers = g_tree_new_full((GCompareDataFunc)intcmp, NULL, g_free, (GDestroyNotify)free_handler);
+		$$->intra_handlers = g_tree_new_full((GCompareDataFunc)addr_cmp, NULL, NULL, (GDestroyNotify)free_handler);
 		
 	}
-	| rule FRONTEND QUOTE WORD QUOTE honeynet HW mac SEMICOLON {
+	| rule FRONTEND QUOTE WORD QUOTE honeynet mac netmask vlan SEMICOLON {
 		$$->front_handler = g_malloc0(sizeof(struct handler));
 		$$->front_handler->iface = g_hash_table_lookup(links, $4);
 		
@@ -281,29 +288,21 @@ rule: 	{
 		}
 		
 		$$->front_handler->ip=$6;
-		$$->front_handler->mac=$8;
+		$$->front_handler->mac=$7;
+		$$->front_handler->netmask = $8;
+        $$->front_handler->vlan.i = htons($9 & ((1 << 12)-1));
+        
+        $$->front_handler->ip_str=g_strdup(addr_ntoa($6));
 		
-        char *mac = addr_ntoa($$->front_handler->mac);
-		g_printerr("\tFrontend defined at %s hw %s on '%s'\n", addr_ntoa($6), mac, $4);
+        char *mac = g_strdup(addr_ntoa($$->front_handler->mac));
+               
+		g_printerr("\tFrontend defined at %s hw %s VLAN %u on '%s'\n", 
+			addr_ntoa($6), mac, $9, $4);
+			
 		g_free($4);	
+		free(mac);
 	}
-	| rule FRONTEND QUOTE WORD QUOTE honeynet HW mac VLAN NUMBER SEMICOLON {
-		$$->front_handler = g_malloc0(sizeof(struct handler));
-		$$->front_handler->iface = g_hash_table_lookup(links, $4);
-		
-		if($$->front_handler->iface == NULL) {
-			yyerror("Front handler interface is undefined!\n");
-		}
-		
-		$$->front_handler->ip=$6;
-		$$->front_handler->mac=$8;
-		$$->front_handler->vlan.i = htons($10 & ((1 << 12)-1));
-		
-        char *mac = addr_ntoa($$->front_handler->mac);
-		g_printerr("\tFrontend defined at %s hw %s VLAN %u on '%s'\n", addr_ntoa($6), mac, $10, $4);
-		g_free($4);	
-	}
-	| rule FRONTEND QUOTE WORD QUOTE honeynet HW mac QUOTE equation QUOTE SEMICOLON {
+	| rule FRONTEND QUOTE WORD QUOTE honeynet mac netmask vlan QUOTE equation QUOTE SEMICOLON {
 	
 		$$->front_handler = g_malloc0(sizeof(struct handler));
 		$$->front_handler->iface = g_hash_table_lookup(links, $4);
@@ -313,45 +312,28 @@ rule: 	{
 		}
 		
 		$$->front_handler->ip=$6;
-		$$->front_handler->mac=$8;
-		$$->front_handler->rule = DE_create_tree($10->str);
+		$$->front_handler->mac=$7;
+		$$->front_handler->netmask = $8;
+        $$->front_handler->vlan.i = htons($9 & ((1 << 12)-1));
+		$$->front_handler->rule = DE_create_tree($11->str);
 		
-		$$->front_handler->ip_str=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($6)) + 1);
-        sprintf($$->front_handler->ip_str, "%s", addr_ntoa($6));
+		$$->front_handler->ip_str=g_strdup(addr_ntoa($6));
 		
-        char *mac = addr_ntoa($$->front_handler->mac);
-		g_printerr("\tFrontend defined at %s hw %s on '%s' with rule: %s\n", $$->front_handler->ip_str, mac, $4, $10->str);
+        char *mac = g_strdup(addr_ntoa($$->front_handler->mac));
+                
+		g_printerr("\tFrontend defined at %s hw %s VLAN %u on '%s' with rule: %s\n", 
+			$$->front_handler->ip_str, mac, $9, $4, $11->str);
+			
 		g_free($4);
-		g_string_free($10, TRUE);
-	}
-	| rule FRONTEND QUOTE WORD QUOTE honeynet HW mac VLAN NUMBER QUOTE equation QUOTE SEMICOLON {
-	
-		$$->front_handler = g_malloc0(sizeof(struct handler));
-		$$->front_handler->iface = g_hash_table_lookup(links, $4);
-		
-		if($$->front_handler->iface == NULL) {
-			yyerror("Front handler interface is undefined!\n");
-		}
-		
-		$$->front_handler->ip=$6;
-		$$->front_handler->mac=$8;
-        $$->front_handler->vlan.i = htons($10 & ((1 << 12)-1));
-		$$->front_handler->rule = DE_create_tree($12->str);
-		
-		$$->front_handler->ip_str=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($6)) + 1);
-        sprintf($$->front_handler->ip_str, "%s", addr_ntoa($6));
-		
-        char *mac = addr_ntoa($$->front_handler->mac);
-		g_printerr("\tFrontend defined at %s hw %s VLAN %u on '%s' with rule: %s\n", $$->front_handler->ip_str, mac, $10, $4, $12->str);
-		g_free($4);
-		g_string_free($12, TRUE);
+		g_string_free($11, TRUE);
+		free(mac);
 	}
 	| rule BACKPICK QUOTE equation QUOTE SEMICOLON {
         g_printerr("\tCreating backend picking rule: %s\n", $4->str);
 		$$->back_picker = DE_create_tree($4->str);
 		g_string_free($4, TRUE);
     }
-	| rule BACKEND QUOTE WORD QUOTE honeynet HW mac SEMICOLON {
+	| rule BACKEND QUOTE WORD QUOTE honeynet mac netmask vlan SEMICOLON {
     	if($$->back_picker == NULL) {
     		yyerror("Backend needs a rule if no backend picking rule is defined!\n");
     	}
@@ -363,121 +345,127 @@ rule: 	{
     		
     	// This will be freed automatically when the tree is destroyed
     	$$->back_handler_count++;
-    	uint32_t *key=malloc(sizeof(uint32_t));
+    	uint64_t *key=malloc(sizeof(uint64_t));
     	*key=$$->back_handler_count;
     		
     	struct handler *back_handler = g_malloc0(sizeof(struct handler));
     	back_handler->iface=iface;
     
         back_handler->ip=$6;
-       	back_handler->mac=$8;
+       	back_handler->mac=$7;
+       	back_handler->netmask = $8;
+       	back_handler->vlan.i = htons($9 & ((1 << 12)-1));    	
        	
-       	back_handler->ip_str=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($6)) + 1);
-        sprintf(back_handler->ip_str, "%s", addr_ntoa($6));
+       	back_handler->ip_str=g_strdup(addr_ntoa($6));
        	    
     	g_tree_insert($$->back_handlers, key, back_handler);
     		
-        char *mac = addr_ntoa(back_handler->mac);
-    	g_printerr("\tBackend #%u defined at %s hw %s on '%s' copied to handler without rule\n",
-    		*key, addr_ntoa($6), mac, $4);
+        char *mac = g_strdup(addr_ntoa(back_handler->mac));
+        
+    	g_printerr("\tBackend #%lu defined at %s hw %s VLAN %u on '%s' copied to handler without a rule\n",
+    		*key, addr_ntoa($6), mac, $9, $4);
     		
     	g_free($4);
+    	free(mac);
     }
-	| rule BACKEND QUOTE WORD QUOTE honeynet HW mac VLAN NUMBER SEMICOLON {
-    	if($$->back_picker == NULL) {
-    		yyerror("Backend needs a rule if no backend picking rule is defined!\n");
+	| rule BACKEND QUOTE WORD QUOTE honeynet mac netmask vlan QUOTE equation QUOTE SEMICOLON {
+
+		struct interface *iface = g_hash_table_lookup(links, $4);
+    	if(iface == NULL) {
+    		yyerror("Back handler interface is undefined!\n");
     	}
+    	
+    	// This will be freed automatically when the tree is destroyed
+        $$->back_handler_count++;
+        uint64_t *key=malloc(sizeof(uint64_t));
+        *key=$$->back_handler_count;
+            
+        struct handler *back_handler = g_malloc0(sizeof(struct handler));
+        back_handler->iface=g_hash_table_lookup(links, $4);
+    
+        back_handler->ip=$6;
+       	back_handler->mac=$7;
+       	back_handler->netmask = $8;
+       	back_handler->vlan.i = htons($9 & ((1 << 12)-1));  
+        back_handler->rule=DE_create_tree($11->str);
+        
+        back_handler->ip_str=g_strdup(addr_ntoa($6));
+    
+    	g_tree_insert($$->back_handlers, key, back_handler);
+        
+        char *mac = g_strdup(addr_ntoa(back_handler->mac));
+        
+        g_printerr("\tBackend #%lu defined at %s hw %s VLAN %u on '%s' with rule: %s\n", *key, back_handler->ip_str,
+        	mac, $9, $4, $11->str);
+                
+        g_string_free($11, TRUE);
+        g_free($4);
+        free(mac);
+    }
+    
+	| rule INTERNAL QUOTE WORD QUOTE honeynet WITH honeynet mac netmask vlan SEMICOLON {
     		
     	struct interface *iface = g_hash_table_lookup(links, $4);
     	if(iface == NULL) {
-    		yyerror("Back handler interface is undefined!\n");
+    		yyerror("Intra handler interface is undefined!\n");
     	}	
     		
-    	// This will be freed automatically when the tree is destroyed
-    	$$->back_handler_count++;
-    	uint32_t *key=malloc(sizeof(uint32_t));
-    	*key=$$->back_handler_count;
-    		
-    	struct handler *back_handler = g_malloc0(sizeof(struct handler));
-    	back_handler->iface=iface;
+    	struct handler *intra_handler = g_malloc0(sizeof(struct handler));
+    	intra_handler->iface=iface;
     
-        back_handler->ip=$6;
-       	back_handler->mac = $8;
-       	back_handler->vlan.i = htons($10 & ((1 << 12)-1));
+    	intra_handler->intra_target_ip=$6;
+        intra_handler->ip=$8;
+       	intra_handler->mac=$9;
+       	intra_handler->netmask = $10;
+       	intra_handler->vlan.i = htons($11 & ((1 << 12)-1));    	
        	
-       	back_handler->ip_str=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($6)) + 1);
-        sprintf(back_handler->ip_str, "%s", addr_ntoa($6));
-        
-    	g_tree_insert($$->back_handlers, key, back_handler);
+       	intra_handler->ip_str=g_strdup(addr_ntoa($8));
+       	    
+    	g_tree_insert($$->intra_handlers, intra_handler->intra_target_ip, intra_handler);
     		
-        char *mac = addr_ntoa(back_handler->mac);
-    	g_printerr("\tBackend #%u defined at %s hw %s VLAN %u on '%s' copied to handler without rule\n",
-    		*key, back_handler->ip_str, mac, $10, $4);
+        char *mac = g_strdup(addr_ntoa(intra_handler->mac));
+        char *intra_ip_str = g_strdup(addr_ntoa(intra_handler->intra_target_ip));    
+        
+    	g_printerr("\tInternal target for %s defined at %s hw %s VLAN %u on '%s'\n",
+    		intra_ip_str, intra_handler->ip_str, mac, $11, $4);
     		
     	g_free($4);
+    	free(mac);
+    	free(intra_ip_str);
     }
-	| rule BACKEND QUOTE WORD QUOTE honeynet HW mac QUOTE equation QUOTE SEMICOLON {
+	| rule INTERNAL QUOTE WORD QUOTE honeynet WITH honeynet mac netmask vlan QUOTE equation QUOTE SEMICOLON {
 
 		struct interface *iface = g_hash_table_lookup(links, $4);
     	if(iface == NULL) {
-    		yyerror("Back handler interface is undefined!\n");
+    		yyerror("Intra handler interface is undefined!\n");
     	}
-    	
-    	// This will be freed automatically when the tree is destroyed
-        $$->back_handler_count++;
-        uint32_t *key=malloc(sizeof(uint32_t));
-        *key=$$->back_handler_count;
             
-        struct handler *back_handler = g_malloc0(sizeof(struct handler));
-        back_handler->iface=g_hash_table_lookup(links, $4);
+        struct handler *intra_handler = g_malloc0(sizeof(struct handler));
+        intra_handler->iface=g_hash_table_lookup(links, $4);
     
-        back_handler->ip=$6;
-        back_handler->mac = $8;
-        back_handler->rule=DE_create_tree($10->str);
+    	intra_handler->intra_target_ip = $6;
+        intra_handler->ip=$8;
+       	intra_handler->mac=$9;
+       	intra_handler->netmask = $10;
+       	intra_handler->vlan.i = htons($11 & ((1 << 12)-1));  
+        intra_handler->rule=DE_create_tree($13->str);
         
-        back_handler->ip_str=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($6)) + 1);
-        sprintf(back_handler->ip_str, "%s", addr_ntoa($6));
+        intra_handler->ip_str=g_strdup(addr_ntoa($8));
     
-    	g_tree_insert($$->back_handlers, key, back_handler);
+    	g_tree_insert($$->intra_handlers, intra_handler->intra_target_ip, intra_handler);
         
-        char *mac = addr_ntoa(back_handler->mac);
-        g_printerr("\tBackend #%u defined at %s hw %s on '%s' with rule: %s\n", *key, back_handler->ip_str,
-        	mac, $4, $10->str);
+        char *mac = g_strdup(addr_ntoa(intra_handler->mac));
+        char *intra_ip_str = g_strdup(addr_ntoa(intra_handler->intra_target_ip));
+        
+        g_printerr("\tInternal target for %s defined at %s hw %s VLAN %u on '%s' with rule: %s\n", 
+        	intra_ip_str, intra_handler->ip_str,
+        	mac, $11, $4, $13->str);
                 
-        g_string_free($10, TRUE);
+        g_string_free($13, TRUE);
         g_free($4);
-    }
-	| rule BACKEND QUOTE WORD QUOTE honeynet HW mac VLAN NUMBER QUOTE equation QUOTE SEMICOLON {
-
-		struct interface *iface = g_hash_table_lookup(links, $4);
-    	if(iface == NULL) {
-    		yyerror("Back handler interface is undefined!\n");
-    	}
-    	
-    	// This will be freed automatically when the tree is destroyed
-        $$->back_handler_count++;
-        uint32_t *key=malloc(sizeof(uint32_t));
-        *key=$$->back_handler_count;
-            
-        struct handler *back_handler = g_malloc0(sizeof(struct handler));
-        back_handler->iface=g_hash_table_lookup(links, $4);
-    
-        back_handler->ip=$6;
-        back_handler->mac = $8;
-       	back_handler->vlan.i = htons($10 & ((1 << 12)-1));
-        back_handler->rule=DE_create_tree($12->str);
+        free(mac);
+        free(intra_ip_str);
         
-        back_handler->ip_str=g_malloc0(snprintf(NULL, 0, "%s", addr_ntoa($6)) + 1);
-        sprintf(back_handler->ip_str, "%s", addr_ntoa($6));
-        
-    	g_tree_insert($$->back_handlers, key, back_handler);
-        
-        char *mac = addr_ntoa(back_handler->mac);
-        g_printerr("\tBackend #%u defined at %s hw %s VLAN %u on '%s' with rule: %s\n", *key, back_handler->ip_str,
-        	mac, $10, $4, $12->str);
-                
-        g_string_free($12, TRUE);
-        g_free($4);
     }
 	| rule LIMIT QUOTE equation QUOTE SEMICOLON {
 		$$->control_rule = DE_create_tree($4->str);
@@ -493,12 +481,32 @@ honeynet: EXPR {
         g_free($1);
 	}
 	
-mac: EXPR {
+mac: HW EXPR {
 		$$ = (struct addr *)g_malloc0(sizeof(struct addr));
-		if (addr_pton($1, $$) < 0) {
+		if (addr_pton($2, $$) < 0) {
             yyerror("\tIllegal MAC address");
         }
-        g_free($1);
+        g_free($2);
+	}
+	;
+	
+netmask: {
+		$$ = NULL;
+	}
+	| netmask NETMASK EXPR {
+		$$ = (struct addr *)g_malloc0(sizeof(struct addr));
+		if (addr_pton($3, $$) < 0) {
+            yyerror("\tIllegal IP address");
+        }
+        g_free($3);
+	}
+	;
+	
+vlan: {
+		$$ = 0;
+	}
+	| vlan VLAN NUMBER {
+		$$ = $3;
 	}
 	;
 

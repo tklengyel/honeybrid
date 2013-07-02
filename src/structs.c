@@ -49,6 +49,8 @@ void free_handler(struct handler *handler) {
         g_free(handler->ip);
         g_free(handler->ip_str);
         g_free(handler->mac);
+        g_free(handler->intra_target_ip);
+        g_free(handler->netmask);
         DE_destroy_tree(handler->rule);
         free(handler);
     }
@@ -56,7 +58,9 @@ void free_handler(struct handler *handler) {
 
 void free_target(struct target *t) {
     free_handler(t->front_handler);
+    g_free(t->default_route_mac);
     g_tree_destroy(t->back_handlers);
+    g_tree_destroy(t->intra_handlers);
     DE_destroy_tree(t->control_rule);
     g_free(t);
 }

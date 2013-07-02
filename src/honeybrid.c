@@ -140,9 +140,6 @@ static void term_signal_handler(int signal_nb, siginfo_t * siginfo,
     printdbg("* Fault address:\t%p\n", siginfo->si_addr);
     printdbg("* Exit value:   \t%d\n", siginfo->si_status);
 
-    /*! this will cause the queue loop to stop */
-    running = NOK;
-
     GHashTableIter i;
     char *key = NULL;
     struct interface *iface = NULL;
@@ -302,19 +299,19 @@ void init_variables() {
 
     /*! create the trees that track connections */
     if (NULL
-            == (dnat_tree1 = g_tree_new((GCompareFunc) g_strcmp0))) errx(1,
+            == (ext_tree1 = g_tree_new((GCompareFunc) g_strcmp0))) errx(1,
             "%s: Fatal error while creating tree.\n", __func__);
 
     if (NULL
-            == (dnat_tree2 = g_tree_new((GCompareFunc) g_strcmp0))) errx(1,
+            == (ext_tree2 = g_tree_new((GCompareFunc) g_strcmp0))) errx(1,
             "%s: Fatal error while creating tree.\n", __func__);
 
     if (NULL
-            == (snat_tree1 = g_tree_new((GCompareFunc) g_strcmp0))) errx(1,
+            == (int_tree1 = g_tree_new((GCompareFunc) g_strcmp0))) errx(1,
             "%s: Fatal error while creating tree.\n", __func__);
 
     if (NULL
-            == (snat_tree2 = g_tree_new((GCompareFunc) g_strcmp0))) errx(1,
+            == (int_tree2 = g_tree_new((GCompareFunc) g_strcmp0))) errx(1,
             "%s: Fatal error while creating tree.\n", __func__);
 
     if (NULL
@@ -323,6 +320,18 @@ void init_variables() {
 
     if (NULL
             == (target_pin_tree = g_tree_new((GCompareFunc) g_strcmp0))) errx(1,
+            "%s: Fatal error while creating tree.\n", __func__);
+
+    if (NULL
+            == (intra_tree1 = g_tree_new((GCompareFunc) g_strcmp0))) errx(1,
+            "%s: Fatal error while creating tree.\n", __func__);
+
+    if (NULL
+            == (intra_tree2 = g_tree_new((GCompareFunc) g_strcmp0))) errx(1,
+            "%s: Fatal error while creating tree.\n", __func__);
+
+    if (NULL
+            == (intra_pin_tree = g_tree_new((GCompareFunc) g_strcmp0))) errx(1,
             "%s: Fatal error while creating tree.\n", __func__);
 
     /*! create the hash table for the log engine */
@@ -348,9 +357,6 @@ void init_variables() {
 
     /*! Enable threads */
     threading = OK;
-
-    /*! Enable data processing */
-    running = OK;
 }
 
 
@@ -508,8 +514,9 @@ int close_conn_trees() {
     g_mutex_lock(&connlock);
 
     // call the clean function for each value, delete the value if TRUE is returned
-    g_tree_foreach(dnat_tree1, (GTraverseFunc) expire_conn, GINT_TO_POINTER(delay));
-    g_tree_foreach(snat_tree1, (GTraverseFunc) expire_conn, GINT_TO_POINTER(delay));
+    g_tree_foreach(ext_tree1, (GTraverseFunc) expire_conn, GINT_TO_POINTER(delay));
+    g_tree_foreach(int_tree2, (GTraverseFunc) expire_conn, GINT_TO_POINTER(delay));
+    g_tree_foreach(intra_tree1, (GTraverseFunc) expire_conn, GINT_TO_POINTER(delay));
 
     /// remove each key listed from the btree
     g_ptr_array_foreach(entrytoclean, (GFunc) remove_conn, GINT_TO_POINTER(delay));
@@ -518,12 +525,15 @@ int close_conn_trees() {
     g_ptr_array_free(entrytoclean, TRUE);
     entrytoclean = NULL;
 
-    g_tree_destroy(dnat_tree1);
-    g_tree_destroy(dnat_tree2);
-    g_tree_destroy(snat_tree1);
-    g_tree_destroy(snat_tree2);
+    g_tree_destroy(ext_tree1);
+    g_tree_destroy(ext_tree2);
+    g_tree_destroy(int_tree1);
+    g_tree_destroy(int_tree2);
     g_tree_destroy(comm_pin_tree);
     g_tree_destroy(target_pin_tree);
+    g_tree_destroy(intra_tree1);
+    g_tree_destroy(intra_tree2);
+    g_tree_destroy(intra_pin_tree);
 
     return 0;
 }
@@ -735,7 +745,7 @@ void de_thread(gpointer data) {
         }
 
         printdbg(
-                "%s Origin: %s %s, %u bytes with %u bytes of data\n", H(conn->id), lookup_origin(pkt->origin), lookup_state(conn->state), pkt->size, pkt->data);
+                "%s Origin: %s %s, %u bytes with %u bytes of data\n", H(conn->id), lookup_role(pkt->origin), lookup_state(conn->state), pkt->size, pkt->data);
 
         /*! Check that there was no problem getting the current connection structure
          *  and make sure the STATE is valid */
@@ -774,7 +784,7 @@ void de_thread(gpointer data) {
                             conn->hih.lih_syn_seq = ntohl(pkt->packet.tcp->seq);
                         }
 
-                        proxy_int(pkt);
+                        proxy_int2ext(pkt);
 
                         // Only store packets if there are backends
                         if (conn->target->back_handler_count > 0) {
@@ -790,7 +800,7 @@ void de_thread(gpointer data) {
                             conn->hih.lih_syn_seq = ntohl(pkt->packet.tcp->seq);
                         }
 
-                        proxy_int(pkt);
+                        proxy_int2ext(pkt);
 
                         // Only store packets if there are backends
                         if (conn->target->back_handler_count > 0) {
@@ -803,7 +813,7 @@ void de_thread(gpointer data) {
                     case PROXY:
                         printdbg(
                                 "%s Packet from LIH proxied directly to its destination\n", H(conn->id));
-                        proxy_int(pkt);
+                        proxy_int2ext(pkt);
                         free_pkt(pkt);
                         break;
                     case CONTROL:
@@ -813,7 +823,7 @@ void de_thread(gpointer data) {
                         }
 
                         if (DE_process_packet(pkt) == OK) {
-                            proxy_int(pkt);
+                            proxy_int2ext(pkt);
                         }
 
                         // Only store packets if there are backends
@@ -847,19 +857,26 @@ void de_thread(gpointer data) {
                         free_pkt(pkt);
                         break;
                     case FORWARD:
-                        forward_hih(pkt);
+                        forward_hih2ext(pkt);
                         free_pkt(pkt);
                         break;
                         /*! This one should never occur because PROXY are only between EXT and LIH... but we never know! */
                     case PROXY:
-                        printdbg(
-                                "%s Packet from HIH proxied directly to its destination\n", H(conn->id));
-                        proxy_int(pkt);
-                        free_pkt(pkt);
+                        if (pkt->conn->destination == EXT) {
+                            printdbg(
+                                    "%s Packet from HIH proxied directly to its EXT destination\n", H(conn->id));
+                            proxy_int2ext(pkt);
+                            free_pkt(pkt);
+                        } else if(pkt->conn->destination == INTRA) {
+                            printdbg(
+                                    "%s Packet from HIH proxied directly to its INTRA destination\n", H(conn->id));
+                            proxy_hih2intra(pkt);
+                            free_pkt(pkt);
+                        }
                         break;
                     case CONTROL:
                         if (DE_process_packet(pkt) == OK) {
-                            proxy_int(pkt);
+                            proxy_int2ext(pkt);
                         }
                         free_pkt(pkt);
                         break;
@@ -870,19 +887,41 @@ void de_thread(gpointer data) {
                             printdbg(
                                     "%s Packet from HIH at wrong state, so we reset\n", H(conn->id));
                             if (pkt->packet.ip->protocol == IPPROTO_TCP) {
-                                reply_reset(pkt, pkt->conn->hih.back_handler->iface);
+                                reply_reset(pkt,
+                                        pkt->conn->hih.back_handler->iface);
                             }
                             switch_state(conn, DROP);
                             free_pkt(pkt);
                         } else {
+
                             printdbg(
-                                    "%s Packet from HIH in a new connection, so we control it\n", H(conn->id));
+                                    "%s Packet from HIH is a new connection, so we control it\n", H(conn->id));
                             switch_state(conn, CONTROL);
+
                             if (DE_process_packet(pkt) == OK) {
-                                proxy_int(pkt);
+                                if (pkt->conn->destination == EXT) {
+                                    proxy_int2ext(pkt);
+                                } else if (pkt->conn->destination == INTRA) {
+                                    proxy_hih2intra(pkt);
+                                }
                             }
+
                             free_pkt(pkt);
                         }
+                        break;
+                }
+                break;
+
+            case INTRA:
+                switch (conn->state) {
+                    case PROXY:
+                        printdbg(
+                                "%s Packet from INTRA proxied directly to its destination\n", H(conn->id));
+                        proxy_intra2hih(pkt);
+                        free_pkt(pkt);
+                        break;
+                    default:
+                        free_pkt(pkt);
                         break;
                 }
                 break;
@@ -895,7 +934,7 @@ void de_thread(gpointer data) {
                     case DECISION:
                         //g_string_assign(conn->decision_rule, ";");
                         if (DE_process_packet(pkt) == OK) {
-                            proxy_ext(pkt);
+                            proxy_ext2int(pkt);
                         }
 
                         // Only store packets if there are backends
@@ -906,19 +945,19 @@ void de_thread(gpointer data) {
                         }
                         break;
                     case FORWARD:
-                        forward_ext(pkt);
+                        forward_ext2hih(pkt);
                         free_pkt(pkt);
                         break;
                     case PROXY:
                         printdbg(
                                 "%s Packet from EXT proxied directly to its destination (PROXY)\n", H(conn->id));
-                        proxy_ext(pkt);
+                        proxy_ext2int(pkt);
                         free_pkt(pkt);
                         break;
                     case CONTROL:
                         printdbg(
                                 "%s Packet from EXT proxied directly to its destination (CONTROL)\n", H(conn->id));
-                        proxy_ext(pkt);
+                        proxy_ext2int(pkt);
                         free_pkt(pkt);
                         break;
                     default:

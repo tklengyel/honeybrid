@@ -153,13 +153,14 @@ void set_iface_info(struct interface *iface) {
 /*
  * Sends ARP reply to all ARP requests with the receiving interface's MAC.
  */
-void send_arp_reply(uint16_t ethertype, struct interface *iface, const u_char *packet) {
+void send_arp_reply(uint16_t ethertype, struct interface *iface,
+        const u_char *packet) {
 
     //struct ether_header *eth = (struct ether_header *) packet;
     struct ether_arp *request = NULL;
     size_t psize = sizeof(struct ether_arp);
 
-    if(ethertype==ETHERTYPE_IP) {
+    if (ethertype == ETHERTYPE_IP) {
         request = (struct ether_arp *) (packet + ETHER_HDR_LEN);
         psize += ETHER_HDR_LEN;
     } else {
@@ -176,13 +177,13 @@ void send_arp_reply(uint16_t ethertype, struct interface *iface, const u_char *p
 
         // Construct Ethernet/VLAN header.
         struct ether_header *header = (struct ether_header *) frame;
-        if(ethertype==ETHERTYPE_IP) {
+        if (ethertype == ETHERTYPE_IP) {
             header->ether_type = htons(ETHERTYPE_ARP);
             reply = (struct ether_arp *) (frame + ETHER_HDR_LEN);
         } else {
             header->ether_type = htons(ETHERTYPE_VLAN);
             // copy the vlan-only portion of the header
-            memcpy(frame+ETHER_HDR_LEN, packet+ETHER_HDR_LEN, VLAN_HLEN);
+            memcpy(frame + ETHER_HDR_LEN, packet + ETHER_HDR_LEN, VLAN_HLEN);
             reply = (struct ether_arp *) (frame + VLAN_ETH_HLEN);
         }
 
@@ -437,33 +438,9 @@ static inline void nat(struct pkt_struct* pkt) {
     memcpy(&pkt->packet.eth->ether_shost, &pkt->out->mac.addr_eth, ETH_ALEN);
 
     switch (pkt->origin) {
-        case INT:
-        case LIH:
-        case HIH:
-
-            //SNAT
-
-            memcpy(&pkt->packet.eth->ether_dhost, &pkt->nat.dst_mac->addr_eth,
-                    ETH_ALEN);
-            memcpy(&pkt->packet.ip->saddr, &pkt->nat.src_ip->addr_ip,
-                    sizeof(ip_addr_t));
-
-            if(ntohs(pkt->packet.eth->ether_type) == ETHERTYPE_VLAN) {
-                // Uplink VLANs should be configured with the 8021q kernel module
-                // so we are stripping any VLAN header downlink had
-                printdbg("%s Stripping VLAN header from downlink packet\n", H(1));
-
-                memmove(pkt->packet.FRAME + VLAN_HLEN, pkt->packet.FRAME, ETHER_HDR_LEN);
-                pkt->packet.eth = (struct ether_header *)(pkt->packet.FRAME + VLAN_HLEN);
-                pkt->packet.eth->ether_type = htons(ETHERTYPE_IP);
-                pkt->size -= VLAN_HLEN;
-            }
-
-            break;
         case EXT:
-        default:
 
-            //DNAT
+            //Simply DNAT
 
             memcpy(&pkt->packet.eth->ether_dhost, &pkt->nat.dst_mac->addr_eth,
                     ETH_ALEN);
@@ -471,7 +448,7 @@ static inline void nat(struct pkt_struct* pkt) {
                     sizeof(ip_addr_t));
 
             // Downlink is a VLAN
-            if (pkt->nat.dst_vlan && pkt->nat.dst_vlan->v.vid) {
+            if (pkt->nat.dst_vlan && pkt->nat.dst_vlan->vid) {
 
                 printdbg("%s Downlink is a VLAN, NATing accordingly\n", H(1));
 
@@ -500,6 +477,112 @@ static inline void nat(struct pkt_struct* pkt) {
             }
 
             break;
+        default:
+
+            memcpy(&pkt->packet.eth->ether_dhost, &pkt->nat.dst_mac->addr_eth,
+                    ETH_ALEN);
+
+            switch (pkt->destination) {
+                case INTRA:
+
+                    // DNAT
+
+                    memcpy(&pkt->packet.ip->daddr, &pkt->nat.dst_ip->addr_ip,
+                            sizeof(ip_addr_t));
+
+                    if (ntohs(pkt->packet.eth->ether_type) == ETHERTYPE_VLAN) {
+
+                        if (pkt->nat.dst_vlan->vid) {
+                            printdbg(
+                                    "%s Changing VLAN VID from %u to %u\n",
+                                    H(pkt->conn->id), pkt->packet.vlan->h_vlan_TCI.vid, pkt->nat.dst_vlan->vid);
+
+                            pkt->packet.vlan->h_vlan_TCI = *(pkt->nat.dst_vlan);
+                        } else {
+                            // TODO intra is not on vlan, strip VLAN
+                        }
+                    } else if (pkt->nat.dst_vlan->vid) {
+                        printdbg(
+                                "%s Adding VLAN header with VID %u\n", H(pkt->conn->id), pkt->nat.dst_vlan->vid);
+
+                        // Regular ethernet headers are not at the start of FRAME
+                        // to save space for this scenario, so we just move it there
+                        memmove(pkt->packet.FRAME, pkt->packet.eth,
+                                ETHER_HDR_LEN);
+                        pkt->packet.vlan =
+                                (struct vlan_ethhdr *) pkt->packet.FRAME;
+                        pkt->packet.vlan->h_vlan_proto = htons(ETHERTYPE_VLAN);
+                        pkt->packet.vlan->h_vlan_encapsulated_proto =
+                                htons(ETHERTYPE_IP);
+                        pkt->packet.vlan->h_vlan_TCI = *(pkt->nat.dst_vlan);
+                        pkt->size += VLAN_HLEN;
+
+                    }
+                    break;
+
+                case EXT:
+                    // SNAT
+
+                    memcpy(&pkt->packet.ip->saddr, &pkt->nat.src_ip->addr_ip,
+                            sizeof(ip_addr_t));
+
+                    if (ntohs(pkt->packet.eth->ether_type) == ETHERTYPE_VLAN) {
+
+                        // Uplink VLANs should be configured with the 8021q kernel module
+                        // so we are stripping any VLAN header downlink had
+                        printdbg(
+                                "%s Stripping VLAN header from downlink packet going to EXT\n", H(1));
+
+                        memmove(pkt->packet.FRAME + VLAN_HLEN,
+                                pkt->packet.FRAME, ETHER_HDR_LEN);
+                        pkt->packet.eth =
+                                (struct ether_header *) (pkt->packet.FRAME
+                                        + VLAN_HLEN);
+                        pkt->packet.eth->ether_type = htons(ETHERTYPE_IP);
+                        pkt->size -= VLAN_HLEN;
+                    }
+                    break;
+
+                case HIH:
+                    // SNAT
+
+                    memcpy(&pkt->packet.ip->saddr, &pkt->nat.src_ip->addr_ip,
+                            sizeof(ip_addr_t));
+
+                    if (ntohs(pkt->packet.eth->ether_type) == ETHERTYPE_VLAN) {
+                        if (pkt->nat.dst_vlan->vid) {
+                            printdbg(
+                                    "%s Changing VLAN VID from %u to %u\n",
+                                    H(pkt->conn->id), pkt->packet.vlan->h_vlan_TCI.vid, pkt->nat.dst_vlan->vid);
+
+                            pkt->packet.vlan->h_vlan_TCI = *(pkt->nat.dst_vlan);
+                        } else {
+                            //TODO
+                        }
+                    } else if (pkt->nat.dst_vlan->vid) {
+                        printdbg(
+                                "%s Adding VLAN header with VID %u\n", H(pkt->conn->id), pkt->nat.dst_vlan->vid);
+
+                        // Regular ethernet headers are not at the start of FRAME
+                        // to save space for this scenario, so we just move it there
+                        memmove(pkt->packet.FRAME, pkt->packet.eth,
+                                ETHER_HDR_LEN);
+                        pkt->packet.vlan =
+                                (struct vlan_ethhdr *) pkt->packet.FRAME;
+                        pkt->packet.vlan->h_vlan_proto = htons(ETHERTYPE_VLAN);
+                        pkt->packet.vlan->h_vlan_encapsulated_proto =
+                                htons(ETHERTYPE_IP);
+                        pkt->packet.vlan->h_vlan_TCI = *(pkt->nat.dst_vlan);
+                        pkt->size += VLAN_HLEN;
+                    }
+                    break;
+                default:
+                    //INVALID
+                    return;
+
+            }
+
+            break;
     }
 
     if (pkt->packet.ip->protocol == IPPROTO_TCP) {
@@ -518,9 +601,9 @@ static inline void nat(struct pkt_struct* pkt) {
 
  \return OK if the packet has been succesfully sent
  */
-status_t proxy_ext(struct pkt_struct* pkt) {
+status_t proxy_ext2int(struct pkt_struct* pkt) {
 
-    //DNAT
+//DNAT
     switch (pkt->conn->initiator) {
         case LIH:
         case EXT:
@@ -528,12 +611,14 @@ status_t proxy_ext(struct pkt_struct* pkt) {
             pkt->nat.dst_mac = pkt->conn->target->front_handler->mac;
             pkt->nat.dst_ip = pkt->conn->target->front_handler->ip;
             pkt->nat.dst_vlan = &pkt->conn->target->front_handler->vlan;
+            pkt->destination = LIH;
             break;
         case HIH:
             pkt->out = pkt->conn->hih.back_handler->iface;
             pkt->nat.dst_mac = pkt->conn->hih.back_handler->mac;
             pkt->nat.dst_ip = pkt->conn->hih.back_handler->ip;
             pkt->nat.dst_vlan = &pkt->conn->hih.back_handler->vlan;
+            pkt->destination = HIH;
             break;
         default:
             return NOK;
@@ -541,7 +626,7 @@ status_t proxy_ext(struct pkt_struct* pkt) {
 
     nat(pkt);
 
-    printdbg("%s Sending PROXY packet on %s\n", H(6), pkt->out->tag);
+    printdbg("%s Sending EXT2INT PROXY packet on %s\n", H(6), pkt->out->tag);
 
     if (pkt->out
             && pcap_inject(pkt->out->pcap, pkt->packet.eth, pkt->size) != -1) {
@@ -551,25 +636,26 @@ status_t proxy_ext(struct pkt_struct* pkt) {
     return NOK;
 }
 
-/*! proxy_int
+/*! proxy_int2ext
  *
  \brief Proxy packet coming from INT to EXT (SNAT)
  \param[in] pkt, the packet metadata structure to forward
 
  \return OK if the packet has been succesfully sent
  */
-status_t proxy_int(struct pkt_struct* pkt) {
+status_t proxy_int2ext(struct pkt_struct* pkt) {
 
     pkt->out = pkt->conn->target->default_route;
+    pkt->destination = EXT;
 
-    //SNAT
-    if(pkt->conn->initiator == EXT) {
+//SNAT
+    if (pkt->conn->initiator == EXT) {
         pkt->nat.src_ip = &pkt->conn->first_pkt_dst_ip;
         pkt->nat.dst_mac = &pkt->conn->first_pkt_src_mac;
         pkt->nat.dst_ip = &pkt->conn->first_pkt_src_ip;
     } else {
-        if(pkt->conn->pin_target_ip) {
-            pkt->nat.src_ip = pkt->conn->pin_target_ip;
+        if (pkt->conn->pin_ip) {
+            pkt->nat.src_ip = pkt->conn->pin_ip;
         } else {
             pkt->nat.src_ip = &pkt->conn->target->default_route->ip;
         }
@@ -578,7 +664,7 @@ status_t proxy_int(struct pkt_struct* pkt) {
 
     nat(pkt);
 
-    printdbg("%s Sending PROXY packet on %s\n", H(6), pkt->out->tag);
+    printdbg("%s Sending INT2EXT PROXY packet on %s\n", H(6), pkt->out->tag);
 
     if (pkt->out
             && pcap_inject(pkt->out->pcap, pkt->packet.eth, pkt->size) != -1) {
@@ -587,26 +673,81 @@ status_t proxy_int(struct pkt_struct* pkt) {
 
     return NOK;
 }
+
+/*! proxy_int2intra
+ *
+ \brief Proxy packet coming from INT to INTRA (DNAT)
+ \param[in] pkt, the packet metadata structure to forward
+
+ \return OK if the packet has been succesfully sent
+ */
+status_t proxy_hih2intra(struct pkt_struct* pkt) {
+
+    pkt->out = pkt->conn->intra_handler->iface;
+    pkt->nat.dst_mac = pkt->conn->intra_handler->mac;
+    pkt->nat.dst_ip = pkt->conn->intra_handler->ip;
+    pkt->nat.dst_vlan = &pkt->conn->intra_handler->vlan;
+    pkt->destination = INTRA;
+
+    nat(pkt);
+
+    printdbg("%s Sending HIH2INTRA PROXY packet on %s\n", H(6), pkt->out->tag);
+
+    if (pkt->out
+            && pcap_inject(pkt->out->pcap, pkt->packet.eth, pkt->size) != -1) {
+        return OK;
+    }
+
+    return NOK;
+}
+
+/*! proxy_intra
+ *
+ \brief Proxy packet coming from INTRA to HIH (SNAT)
+ \param[in] pkt, the packet metadata structure to forward
+
+ \return OK if the packet has been succesfully sent
+ */
+status_t proxy_intra2hih(struct pkt_struct* pkt) {
+
+    pkt->out = pkt->conn->hih.back_handler->iface;
+    pkt->nat.src_ip = pkt->conn->pin_ip;
+    pkt->nat.dst_mac = &pkt->conn->first_pkt_src_mac;
+    pkt->nat.dst_vlan = &pkt->conn->hih.back_handler->vlan;
+    pkt->destination = HIH;
+
+    nat(pkt);
+
+    printdbg("%s Sending INTRA2HIH PROXY packet on %s\n", H(6), pkt->out->tag);
+
+    if (pkt->out
+            && pcap_inject(pkt->out->pcap, pkt->packet.eth, pkt->size) != -1) {
+        return OK;
+    }
+
+    return NOK;
+}
+
 /*
  * Forward packets coming from EXT to HIH
  */
-status_t forward_ext(struct pkt_struct* pkt) {
+status_t forward_ext2hih(struct pkt_struct* pkt) {
 
-    pkt->out=pkt->conn->hih.back_handler->iface;
+    pkt->out = pkt->conn->hih.back_handler->iface;
+    pkt->destination = HIH;
 
-    memcpy(&pkt->packet.eth->ether_shost, &pkt->out->mac.addr_eth,
-                ETH_ALEN);
-    memcpy(&pkt->packet.eth->ether_dhost, &pkt->conn->hih.back_handler->mac->addr_eth,
-            ETH_ALEN);
+    memcpy(&pkt->packet.eth->ether_shost, &pkt->out->mac.addr_eth, ETH_ALEN);
+    memcpy(&pkt->packet.eth->ether_dhost,
+            &pkt->conn->hih.back_handler->mac->addr_eth, ETH_ALEN);
     memcpy(&pkt->packet.ip->daddr, &pkt->conn->hih.back_handler->ip->addr_ip,
             sizeof(ip_addr_t));
 
     if (pkt->conn->hih.back_handler->vlan.i) {
-        if(pkt->packet.eth->ether_type != htons(ETHERTYPE_VLAN)) {
+        if (pkt->packet.eth->ether_type != htons(ETHERTYPE_VLAN)) {
             // Regular ethernet headers are not at the start of FRAME
             // to save space for this scenario, so we just move it there
             memmove(pkt->packet.FRAME, pkt->packet.eth, ETHER_HDR_LEN);
-            pkt->size+= VLAN_HLEN;
+            pkt->size += VLAN_HLEN;
         }
 
         pkt->packet.vlan = (struct vlan_ethhdr *) pkt->packet.FRAME;
@@ -654,24 +795,27 @@ status_t forward_ext(struct pkt_struct* pkt) {
 /*
  * Forward packets coming from a HIH
  */
-status_t forward_hih(struct pkt_struct* pkt) {
+status_t forward_hih2ext(struct pkt_struct* pkt) {
 
     pkt->out = pkt->conn->target->default_route;
+    pkt->destination = EXT;
 
-    memcpy(&pkt->packet.eth->ether_shost, &pkt->conn->first_pkt_dst_mac.addr_eth,
-            ETH_ALEN);
-    memcpy(&pkt->packet.eth->ether_dhost, &pkt->conn->first_pkt_src_mac.addr_eth,
-                ETH_ALEN);
+    memcpy(&pkt->packet.eth->ether_shost,
+            &pkt->conn->first_pkt_dst_mac.addr_eth, ETH_ALEN);
+    memcpy(&pkt->packet.eth->ether_dhost,
+            &pkt->conn->first_pkt_src_mac.addr_eth, ETH_ALEN);
     memcpy(&pkt->packet.ip->saddr, &pkt->conn->first_pkt_dst_ip.addr_ip,
             sizeof(ip_addr_t));
 
-    if(ntohs(pkt->packet.eth->ether_type) == ETHERTYPE_VLAN) {
+    if (ntohs(pkt->packet.eth->ether_type) == ETHERTYPE_VLAN) {
         // Uplink VLANs should be configured with the 8021q kernel module
         // so we are stripping any VLAN header downlink had
-        printdbg("%s Stripping VLAN header from downlink packet\n", H(1));
+        printdbg("%s Stripping VLAN header from HIH packet going to EXT\n", H(1));
 
-        memmove(pkt->packet.FRAME + VLAN_HLEN, pkt->packet.FRAME, ETHER_HDR_LEN);
-        pkt->packet.eth = (struct ether_header *)(pkt->packet.FRAME + VLAN_HLEN);
+        memmove(pkt->packet.FRAME + VLAN_HLEN, pkt->packet.FRAME,
+                ETHER_HDR_LEN);
+        pkt->packet.eth =
+                (struct ether_header *) (pkt->packet.FRAME + VLAN_HLEN);
         pkt->packet.eth->ether_type = htons(ETHERTYPE_IP);
         pkt->size -= VLAN_HLEN;
     }
@@ -691,8 +835,7 @@ status_t forward_hih(struct pkt_struct* pkt) {
             break;
             /*!If UDP, we update the source port and the checksum*/
         case IPPROTO_UDP:
-            pkt->packet.udp->source =
-                    pkt->conn->hih.port;
+            pkt->packet.udp->source = pkt->conn->hih.port;
 
             set_udp_checksum(pkt->packet.udppacket);
 
@@ -726,17 +869,21 @@ void reply_reset(struct pkt_struct *pkt, struct interface *iface) {
         struct ether_header *eth = (struct ether_header *) frame;
         struct tcp_packet *rst;
 
-        if(pkt->original_headers.vlan) {
+        if (pkt->original_headers.vlan) {
             size = VLAN_ETH_HLEN + sizeof(struct tcp_packet);
             struct vlan_ethhdr *vlan = (struct vlan_ethhdr *) frame;
             *vlan = *(pkt->original_headers.vlan);
-            memcpy(&vlan->h_source, &pkt->original_headers.vlan->h_dest, ETH_ALEN);
-            memcpy(&vlan->h_dest, &pkt->original_headers.vlan->h_source, ETH_ALEN);
+            memcpy(&vlan->h_source, &pkt->original_headers.vlan->h_dest,
+                    ETH_ALEN);
+            memcpy(&vlan->h_dest, &pkt->original_headers.vlan->h_source,
+                    ETH_ALEN);
             rst = (struct tcp_packet *) (frame + VLAN_ETH_HLEN);
         } else {
             size = ETHER_HDR_LEN + sizeof(struct tcp_packet);
-            memcpy(&eth->ether_shost, &pkt->original_headers.eth->ether_dhost, ETH_ALEN);
-            memcpy(&eth->ether_dhost, &pkt->original_headers.eth->ether_shost, ETH_ALEN);
+            memcpy(&eth->ether_shost, &pkt->original_headers.eth->ether_dhost,
+                    ETH_ALEN);
+            memcpy(&eth->ether_dhost, &pkt->original_headers.eth->ether_shost,
+                    ETH_ALEN);
             eth->ether_type = htons(ETHERTYPE_IP);
             rst = (struct tcp_packet *) (frame + ETHER_HDR_LEN);
         }
@@ -780,7 +927,7 @@ void reply_reset(struct pkt_struct *pkt, struct interface *iface) {
 
 void reset_lih(struct conn_struct* conn) {
 
-    //! reset only tcp connections
+//! reset only tcp connections
     if (conn->protocol != IPPROTO_TCP) return;
 
     struct packet *p = NULL;
@@ -833,7 +980,7 @@ status_t replay(struct conn_struct* conn, struct pkt_struct* pkt) {
         while (current->origin == EXT || de == 1) {
             printdbg("%s --(Origin: %d)\n", H(conn->id), current->origin);
 
-            if (current->origin == EXT) forward_ext(current);
+            if (current->origin == EXT) forward_ext2hih(current);
 
             if (g_slist_next(g_slist_nth( conn->BUFFER, conn->replay_id ))
                     == NULL) {
@@ -898,12 +1045,7 @@ status_t test_expected(struct conn_struct* conn, struct pkt_struct* pkt) {
 
     if (pkt->packet.ip->protocol != conn->expected_data.ip_proto) {
         printdbg(
-                "%s Unexpected protocol: %u (%s). Expected %u (%s) \n",
-                H(conn->id),
-                pkt->packet.ip->protocol,
-                lookup_proto(pkt->packet.ip->protocol),
-                conn->expected_data.ip_proto,
-                lookup_proto(conn->expected_data.ip_proto));
+                "%s Unexpected protocol: %u (%s). Expected %u (%s) \n", H(conn->id), pkt->packet.ip->protocol, lookup_proto(pkt->packet.ip->protocol), conn->expected_data.ip_proto, lookup_proto(conn->expected_data.ip_proto));
 
         conn->replay_problem |= REPLAY_UNEXPECTED_PROTOCOL;
 

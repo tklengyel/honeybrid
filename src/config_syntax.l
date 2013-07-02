@@ -32,6 +32,9 @@ vlan		{ return VLAN; }
 default		{ return DEFAULT; }
 route		{ return ROUTE; }
 via			{ return VIA; }
+netmask		{ return NETMASK; }
+internal	{ return INTERNAL; }
+with		{ return WITH; }
 
 
 	/* Delimiters */

@@ -354,8 +354,18 @@ status_t DE_process_packet(struct pkt_struct *pkt) {
 
             break;
         case CONTROL:
-            decision.node = (struct node *) pkt->conn->target->control_rule;
-            get_decision(&decision);
+            if (pkt->destination == EXT) {
+                decision.node = (struct node *) pkt->conn->target->control_rule;
+                get_decision(&decision);
+            } else if (pkt->conn->destination == INTRA) {
+                decision.node = (struct node *) pkt->conn->intra_handler->rule;
+                get_decision(&decision);
+
+                /* We need to get ACCEPT or REJECT from the intra rule */
+                if (decision.result == DE_DEFER) {
+                    decision.result = DE_DROP;
+                }
+            }
             break;
         default:
             /* should never happen */

@@ -50,14 +50,15 @@ const char* protocol_string[IPPROTO_MAX] = {
 	[IPPROTO_UDP] 	= "UDP"
 };
 
-const char *packet_origin_string[__MAX_ORIGIN] = {
+const char *role_string[__MAX_ROLE] = {
 
-	[0 ... __MAX_ORIGIN-1] = unknown,
+	[0 ... __MAX_ROLE-1] = unknown,
 
-	[EXT] = "[EXT] External",
-	[INT] = "[INT] Internal - Either LIH or HIH",
-	[LIH] = "[LIH] Low-interaction honeypot",
-	[HIH] = "[HIH] High-interaction honeypot"
+	[EXT]   = "[EXT] External",
+	[INT]   = "[INT] Internal - Either LIH or HIH",
+	[LIH]   = "[LIH] Low-interaction honeypot",
+	[HIH]   = "[HIH] High-interaction honeypot",
+	[INTRA] = "[INTRA] Internal target"
 };
 
 const char *conn_status_string[__MAX_CONN_STATUS] = {

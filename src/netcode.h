@@ -27,13 +27,17 @@
 #include "types.h"
 #include "structs.h"
 
-status_t proxy_int(struct pkt_struct* pkt);
+status_t proxy_int2ext(struct pkt_struct* pkt);
 
-status_t proxy_ext(struct pkt_struct* pkt);
+status_t proxy_hih2intra(struct pkt_struct* pkt);
 
-status_t forward_hih(struct pkt_struct* pkt);
+status_t proxy_intra2hih(struct pkt_struct* pkt);
 
-status_t forward_ext(struct pkt_struct* pkt);
+status_t proxy_ext2int(struct pkt_struct* pkt);
+
+status_t forward_hih2ext(struct pkt_struct* pkt);
+
+status_t forward_ext2hih(struct pkt_struct* pkt);
 
 void reply_reset(struct pkt_struct *pkt, struct interface *iface);
 

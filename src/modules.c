@@ -46,6 +46,8 @@ typedef enum {
 
     MOD_YESNO,
 
+    MOD_COUNTER,
+
     //MOD_VMI,
 
     MOD_CONTROL,
@@ -77,6 +79,8 @@ const struct mod_def module_definitions[__MAX_HONEYBRID_MODULE] = {
     [MOD_RANDOM] = {.name = "random", .function = mod_random},
 
     [MOD_YESNO] = {.name = "yesno", .function = mod_yesno},
+
+    [MOD_COUNTER] = { .name = "counter", .function = mod_counter},
 
     //[MOD_VMI] = {.name = "vmi", .function = mod_vmi},
 

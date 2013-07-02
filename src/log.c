@@ -401,15 +401,15 @@ status_t log_csv(const struct conn_struct *conn, const char *proto,
                 INET_ADDRSTRLEN);
         inet_ntop(AF_INET, &(conn->first_pkt_dst_ip.addr_ip), dst,
                 INET_ADDRSTRLEN);
-        src_port = conn->first_pkt_src_port;
-        dst_port = conn->first_pkt_dst_port;
+        src_port = ntohs(conn->first_pkt_src_port);
+        dst_port = ntohs(conn->first_pkt_dst_port);
     } else {
         inet_ntop(AF_INET, &(conn->first_pkt_dst_ip.addr_ip), src,
                 INET_ADDRSTRLEN);
         inet_ntop(AF_INET, &(conn->first_pkt_src_ip.addr_ip), dst,
                 INET_ADDRSTRLEN);
-        src_port = conn->first_pkt_dst_port;
-        dst_port = conn->first_pkt_src_port;
+        src_port = ntohs(conn->first_pkt_dst_port);
+        dst_port = ntohs(conn->first_pkt_src_port);
     }
 
     int log_size = snprintf(NULL, 0,
@@ -478,15 +478,15 @@ status_t log_std(const struct conn_struct *conn, const char *proto,
                 INET_ADDRSTRLEN);
         inet_ntop(AF_INET, &(conn->first_pkt_dst_ip.addr_ip), dst,
                 INET_ADDRSTRLEN);
-        src_port = conn->first_pkt_src_port;
-        dst_port = conn->first_pkt_dst_port;
+        src_port = ntohs(conn->first_pkt_src_port);
+        dst_port = ntohs(conn->first_pkt_dst_port);
     } else {
         inet_ntop(AF_INET, &(conn->first_pkt_dst_ip.addr_ip), src,
                 INET_ADDRSTRLEN);
         inet_ntop(AF_INET, &(conn->first_pkt_src_ip.addr_ip), dst,
                 INET_ADDRSTRLEN);
-        src_port = conn->first_pkt_dst_port;
-        dst_port = conn->first_pkt_src_port;
+        src_port = ntohs(conn->first_pkt_dst_port);
+        dst_port = ntohs(conn->first_pkt_src_port);
     }
 
     int log_size =
@@ -595,15 +595,15 @@ status_t log_mysql(const struct conn_struct *conn, const char *proto,
                     INET_ADDRSTRLEN);
             inet_ntop(AF_INET, &(conn->first_pkt_dst_ip.addr_ip), dst,
                     INET_ADDRSTRLEN);
-            src_port = conn->first_pkt_src_port;
-            dst_port = conn->first_pkt_dst_port;
+            src_port = ntohs(conn->first_pkt_src_port);
+            dst_port = ntohs(conn->first_pkt_dst_port);
         } else {
             inet_ntop(AF_INET, &(conn->first_pkt_dst_ip.addr_ip), src,
                     INET_ADDRSTRLEN);
             inet_ntop(AF_INET, &(conn->first_pkt_src_ip.addr_ip), dst,
                     INET_ADDRSTRLEN);
-            src_port = conn->first_pkt_dst_port;
-            dst_port = conn->first_pkt_src_port;
+            src_port = ntohs(conn->first_pkt_dst_port);
+            dst_port = ntohs(conn->first_pkt_src_port);
         }
 
         int log_size = snprintf(NULL, 0, "INSERT INTO honeybrid VALUES ("

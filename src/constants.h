@@ -30,7 +30,7 @@ extern const char banner[];
 
 extern const char* protocol_string[IPPROTO_MAX];
 
-extern const char* packet_origin_string[__MAX_ORIGIN];
+extern const char* role_string[__MAX_ROLE];
 
 extern const char* conn_status_string[__MAX_CONN_STATUS];
 
@@ -40,8 +40,8 @@ static inline const char *lookup_proto(uint8_t proto) {
 	return protocol_string[proto];
 }
 
-static inline const char *lookup_origin(origin_t origin) {
-	return packet_origin_string[origin];
+static inline const char *lookup_role(role_t role) {
+	return role_string[role];
 }
 
 static inline const char *lookup_state(conn_status_t state) {

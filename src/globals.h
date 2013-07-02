@@ -73,20 +73,29 @@ GHashTable *module;
 /*! \brief global hash table to hold module paramaters */
 GHashTable *links;
 
-// NEW: Protocol:externalSrcIP:externalSrcPort:targetDstIP:targetDstPort
-GTree *dnat_tree1;
-// REPLY: Protocol:internalSrcIP:internalSrcPort:externalDstIP:externalDstPort:VLAN
-GTree *dnat_tree2;
-// NEW: Protocol:internalSrcIP:internalSrcPort:externalDstIP:externalDstPort:VLAN
-GTree *snat_tree1;
-// REPLY: Protocol:externalSrcIP:externalSrcPort:targetDstIP:targetDstPort
-GTree *snat_tree2;
+// Our connection tracking is quite complex, but it is required to support
+// some exotic setups with clone routing, internal targets, VLANs, etc..
+
+// NEW: Protocol:externalSrcIP:externalSrcPort:targetDstIP:targetDstPort -> conn_struct
+GTree *ext_tree1;
+// REPLY: Protocol:internalSrcIP:internalSrcPort:externalDstIP:externalDstPort:VLAN -> conn_struct
+GTree *ext_tree2;
+// NEW: Protocol:internalSrcIP:internalSrcPort:externalDstIP:externalDstPort:VLAN -> conn_struct
+GTree *int_tree1;
+// REPLY: Protocol:externalSrcIP:externalSrcPort:targetDstIP:targetDstPort -> conn_struct
+GTree *int_tree2;
 // Map VLAN:internalSrcIP:externalDstIP -> targetDstIP
 GTree *comm_pin_tree;
 // Map VLAN:internalSrcIP -> targetDstIP
 GTree *target_pin_tree;
+// NEW: Protocol:internalSrcIP:internalSrcPort:targetDstIP:targetDstPort:VLAN -> conn_struct
+GTree *intra_tree1;
+// REPLY: Protocol:intraSrcIP:intraSrcPort:internalSrcIP:internalSrcPort:VLAN -> conn_struct
+GTree *intra_tree2;
+// Map VLAN:intraSrcIP:internalDstIP -> targetDstIP
+GTree *intra_pin_tree;
 
-/*! \brief security writing lock for the Binary Tree
+/*! \brief security writing lock for the Binary Trees
  */
 GMutex connlock;
 
@@ -96,14 +105,6 @@ GHashTable *module_to_save;
 
 /*! \brief pointer table for btree cleaning */
 GPtrArray *entrytoclean;
-
-/*!
- \def running
- *
- * Init value: OK
- * Set to NOK when honeybrid stops
- * It is used to stop processing new data wht NF_QUEUE when honeybrid stops */
-status_t running;
 
 /*!
  \def thread_clean
