@@ -48,11 +48,13 @@ typedef enum {
 
     MOD_COUNTER,
 
-    //MOD_VMI,
+    MOD_VMI,
 
     MOD_CONTROL,
 
     MOD_BACKPICK_RANDOM,
+
+    MOD_DNS_CONTROL,
 
 #ifdef HAVE_CRYPTO
     MOD_HASH,
@@ -82,11 +84,13 @@ const struct mod_def module_definitions[__MAX_HONEYBRID_MODULE] = {
 
     [MOD_COUNTER] = { .name = "counter", .function = mod_counter},
 
-    //[MOD_VMI] = {.name = "vmi", .function = mod_vmi},
+    [MOD_VMI] = {.name = "vmi", .function = mod_vmi},
 
     [MOD_CONTROL] = {.name = "control", .function = mod_control},
 
     [MOD_BACKPICK_RANDOM] = {.name = "backpick_random", .function = mod_backpick_random},
+
+    [MOD_DNS_CONTROL] = {.name = "dns_control", .function = mod_dns_control},
 
 #ifdef HAVE_CRYPTO
     [MOD_HASH] = {.name = "hash", .function = mod_hash},

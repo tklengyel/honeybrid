@@ -80,6 +80,7 @@ void free_handler(struct handler *);
  \brief structure to hold target information: PCAP filter and rules to accept/forward/redirect/control packets
  */
 struct target {
+    GMutex lock;
     struct interface *default_route; /* Default interface to send upstream packets on */
     struct addr *default_route_mac; /* Default MAC address to send upstream packets to */
     struct handler *front_handler; /* Honeypot frontend handling the first response */
@@ -382,7 +383,7 @@ struct pkt_struct {
     struct headers original_headers;
     role_t origin;
     role_t destination;
-    int data;
+    uint32_t data;
     uint32_t size;
     int DE;
     struct conn_struct * conn;

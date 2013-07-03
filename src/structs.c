@@ -62,6 +62,7 @@ void free_target(struct target *t) {
     g_tree_destroy(t->back_handlers);
     g_tree_destroy(t->intra_handlers);
     DE_destroy_tree(t->control_rule);
+    g_mutex_clear(&t->lock);
     g_free(t);
 }
 

@@ -504,32 +504,6 @@ mod_result_t mod_vmi_control(struct mod_args *args) {
     return result;
 }
 
-mod_result_t mod_vmi(struct mod_args *args) {
-
-    gchar *mode;
-    // get the backup file for this module
-    if (NULL
-            == (mode = (gchar *) g_hash_table_lookup(args->node->config, "mode"))) {
-        // We can't decide
-        printdbg("%s mandatory argument 'mode' undefined (back/control)!\n",
-                H(args->pkt->conn->id));
-        return DEFER;
-    }
-    //else
-    //printf("VMI Mode %s\n", mode);
-
-    if (!strcmp(mode, "front"))
-        return mod_vmi_front(args);
-    else if (!strcmp(mode, "pick"))
-        return mod_vmi_pick(args);
-    //else if (!strcmp(mode, "back"))
-    //	mod_vmi_back(args);
-    else if (!strcmp(mode, "control"))
-        return mod_vmi_control(args);
-
-    return DEFER;
-}
-
 //////////////////////
 
 void vm_status_updater_thread() {
@@ -687,3 +661,29 @@ int init_mod_vmi() {
     return 0;
 }
 */
+
+mod_result_t mod_vmi(struct mod_args *args) {
+
+    /*gchar *mode;
+    // get the backup file for this module
+    if (NULL
+            == (mode = (gchar *) g_hash_table_lookup(args->node->config, "mode"))) {
+        // We can't decide
+        printdbg("%s mandatory argument 'mode' undefined (back/control)!\n",
+                H(args->pkt->conn->id));
+        return DEFER;
+    }
+    //else
+    //printf("VMI Mode %s\n", mode);
+
+    if (!strcmp(mode, "front"))
+        return mod_vmi_front(args);
+    else if (!strcmp(mode, "pick"))
+        return mod_vmi_pick(args);
+    //else if (!strcmp(mode, "back"))
+    //  mod_vmi_back(args);
+    else if (!strcmp(mode, "control"))
+        return mod_vmi_control(args);*/
+
+    return DEFER;
+}

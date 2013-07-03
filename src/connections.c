@@ -170,12 +170,6 @@ status_t init_pkt(struct interface *iface, uint16_t ethertype,
         goto done;
     }
 
-    if (pkt->data < 0) {
-        printdbg("%s Invalid data size: %d, packet skipped\n", H(4), pkt->data);
-
-        goto done;
-    }
-
     // Check if the packet comes from a target interface
     if (pkt->in->target) {
         pkt->origin = EXT;

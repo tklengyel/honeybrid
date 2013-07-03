@@ -87,4 +87,7 @@ mod_result_t mod_backpick_random(struct mod_args *args);
 int init_mod_vmi();
 mod_result_t mod_vmi(struct mod_args *args);
 
+/*!** MODULE DNS CONTROL **/
+mod_result_t mod_dns_control(struct mod_args *args);
+
 #endif //_MODULES_H_

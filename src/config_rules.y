@@ -1,18 +1,6 @@
 %{
-#include <stdio.h>
-#include <string.h>
-#include <err.h>
-#include <stdlib.h>
-#include <pcap.h>
-#include <dumbnet.h>
-#include <glib.h>
-#include <glib/gprintf.h>
 #include <glib/gstdio.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <sys/stat.h>
 #include <fcntl.h>
-#include <config.h>
 #include "globals.h"
 #include "structs.h"
 #include "convenience.h"
@@ -20,10 +8,6 @@
 #include "modules.h"
 #include "log.h"
 
-/*! Type of capture link */
-#define LINKTYPE 1 	//LINKTYPE_ETHERNET=1 \todo dynamically assign link type from nfqueue
-
-enum { SOURCE = 1, DESTINATION, SOURCE_AND_DESTINATION, SOURCE_OR_DESTINATION };
 extern int  yylineno;
 extern char *yytext;
 static void yyerror(const char *msg);
@@ -34,9 +18,6 @@ int yywrap() {
 	/*! should return 0 if additional input has to be parsed, 1 if the end has been reached */
 	return 1;
 }
-
-char* str_append(char * root, char * str);
-char* int_append(char * root, int num);
 
 %}
 
@@ -75,23 +56,6 @@ char* int_append(char * root, int num);
 	struct addr * addr;
 }
 
-/*
-  config {
-    parameter = value;
-  }
-
-  module "<identifier>" {
-    parameter = value;
-  }
- 
-  target "net 10.0.0.0/16 and port 22" {        # pcap filter string
-    frontend 192.168.0.16/30 "accept rule defined by an equation of module identifiers (identifiers separated by 'or' or 'and') "   # will potentially use a NAT engine to proxy
-    backend 192.168.0.200 "accept rule defined by an equation of module identifiers" # will use a REDIRECTION engine
-    control "control rule defined by an equation of module identifiers"
-  }
- 
-*/
-
 %%
 configuration:	/* empty */
 	| configuration config { 	g_printerr("Main config parsed\n"); }
@@ -99,9 +63,6 @@ configuration:	/* empty */
 	| configuration module {	g_printerr("Module parsed\n"); }
 	| configuration target {	g_printerr("Target parsed\n"); }
 	;
-
-
-
 
 config: CONFIGURATION OPEN parameters END { /* nothing to do */ }
 	;
@@ -273,6 +234,8 @@ target: TARGET QUOTE WORD QUOTE DEFAULT ROUTE VIA mac OPEN rule END {
 
 rule: 	{
 		$$ = (struct target *)g_malloc0(sizeof(struct target));
+		
+		g_mutex_init(&$$->lock);
 		
 		// This tree holds the main backend structures
 		$$->back_handlers = g_tree_new_full((GCompareDataFunc)intcmp, NULL, g_free, (GDestroyNotify)free_handler);
@@ -538,30 +501,5 @@ equation: {
 
 static void  yyerror(const char *msg) {
         errx(1,"line %d: %s at '%s'", yylineno, msg, yytext);
-}
-
-char* str_append(char * root, char * str) {
-	g_printerr("\t##[1] root: %s, str: %s\n", root, str);
-		char *tmp = (char *)calloc(strlen(root) + strlen(str), sizeof(char));
-  		strcpy(tmp, root);
-  		strncat(tmp, str, strlen(root) + strlen(str));
-		root = realloc(root, strlen(root) + strlen(str));
-		strcpy(root, tmp);
-		free(tmp);
-	g_printerr("\t##[1] root: %s\n\t=====================\n", root);
-		return root;
-}
-char* int_append(char * root, int number) {
-	g_printerr("\t##[1] root: %s, num: %d\n", root, number);
-		char *num = malloc(128);
-		sprintf(num, "%d", number);
-		char *tmp = (char *)calloc(strlen(root) + strlen(num), sizeof(char));
-  		strcpy(tmp, root);
-  		strncat(tmp, num, strlen(root) + strlen(num));
-		root = tmp;
-		free(tmp);
-		free(num);
-	g_printerr("\t##[1] root: %s\n\t=====================\n", root);
-		return root;
 }
 
