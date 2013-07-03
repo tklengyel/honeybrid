@@ -513,10 +513,17 @@ int close_conn_trees() {
 
     g_mutex_lock(&connlock);
 
-    // call the clean function for each value, delete the value if TRUE is returned
-    g_tree_foreach(ext_tree1, (GTraverseFunc) expire_conn, GINT_TO_POINTER(delay));
-    g_tree_foreach(int_tree2, (GTraverseFunc) expire_conn, GINT_TO_POINTER(delay));
-    g_tree_foreach(intra_tree1, (GTraverseFunc) expire_conn, GINT_TO_POINTER(delay));
+    // call the clean function for each value
+    printdbg("%s: Looping ext_tree1\n", H(0));
+    g_tree_foreach(ext_tree1, (GTraverseFunc) expire_conn,
+            GINT_TO_POINTER(delay));
+    printdbg("%s: Looping int_tree2\n", H(0));
+    g_tree_foreach(int_tree2, (GTraverseFunc) expire_conn,
+            GINT_TO_POINTER(delay));
+    printdbg("%s: Looping intra_tree1\n", H(0));
+    g_tree_foreach(intra_tree1, (GTraverseFunc) expire_conn,
+            GINT_TO_POINTER(delay));
+
 
     /// remove each key listed from the btree
     g_ptr_array_foreach(entrytoclean, (GFunc) remove_conn, GINT_TO_POINTER(delay));

@@ -46,4 +46,10 @@ gint intcmp(gconstpointer a, gconstpointer b, gconstpointer c);
 #define ICONFIG_REQUIRED(parameter) \
 	*(const int *)config_lookup(parameter, TRUE)
 
+status_t switch_state(struct conn_struct *conn, conn_status_t new_state);
+
+#define free_0(x) if(x) { free(x); x = NULL; }
+
+void free_f_0(void **x);
+
 #endif /* __CONFIG_H_ */

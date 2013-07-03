@@ -23,7 +23,8 @@
 
 /*! \file mod_control_dns.c
  * \brief Control module to redirect all DNS queries to an internal host on-the-fly
- *          This module should only be placed in the "limit" section of a target configuration
+ *          This module should only be placed in the "limit" section of a target configuration.
+ *          Every subsequent connections to this IP will be redirected to the INTRA target
  *
  \author Tamas K Lengyel 2013
  */
@@ -31,8 +32,7 @@
 #include "modules.h"
 
 //DNS header structure
-struct dns_header
-{
+struct dns_header {
     unsigned short id; // identification number
 
     unsigned char rd :1; // recursion desired
@@ -61,80 +61,89 @@ struct question {
 
 mod_result_t mod_dns_control(struct mod_args *args) {
 
-    mod_result_t result = REJECT;
+    mod_result_t result = ACCEPT;
 
-    if (args->pkt == NULL) {
-        printdbg("%s Error, NULL packet\n", H(6));
+    if (args->pkt == NULL || args->pkt->conn->destination != EXT) {
         goto done;
     }
 
     printdbg("%s Module called\n", H(args->pkt->conn->id));
 
-    if((args->pkt->packet.ip->protocol == IPPROTO_TCP && ntohs(args->pkt->packet.tcp->dest) != 53)
-            ||
-       (args->pkt->packet.ip->protocol == IPPROTO_UDP && ntohs(args->pkt->packet.udp->dest) != 53)
-            ||
-       args->pkt->data < sizeof(struct dns_header)
-       ) {
+    if ((args->pkt->packet.ip->protocol == IPPROTO_TCP
+            && ntohs(args->pkt->packet.tcp->dest) != 53)
+            || (args->pkt->packet.ip->protocol == IPPROTO_UDP
+                    && ntohs(args->pkt->packet.udp->dest) != 53)
+            || args->pkt->data < sizeof(struct dns_header)) {
 
         // It's not DNS
-        result = ACCEPT;
         goto done;
     }
 
-    struct dns_header *dns = NULL;
-    if(args->pkt->packet.ip->protocol == IPPROTO_TCP) {
-        dns = (struct dns_header *)args->pkt->packet.udppacket->payload;
-    } else {
-        dns = (struct dns_header *)args->pkt->packet.tcppacket->payload;
-    }
+    struct dns_header *dns = (struct dns_header *) args->pkt->packet.payload;
 
-    if(dns->qr == 0 && dns->q_count>0) {
+    if (dns && dns->qr == 0 && dns->q_count > 0 && ntohs(dns->opcode) < 6) {
         // It looks like a DNS query
-        printdbg("%s DNS query ID %u OPCODE %u with %u questions\n",
-                H(args->pkt->conn->id), ntohs(dns->id), ntohs(dns->opcode), ntohs(dns->q_count));
+        printdbg(
+                "%s DNS query ID %u OPCODE %u with %u questions\n", H(args->pkt->conn->id), ntohs(dns->id), ntohs(dns->opcode), ntohs(dns->q_count));
 
 #ifdef HONEYBRID_DEBUG
         uint32_t qcount = 1;
-        char *query = (char *)dns + sizeof(struct dns_header);
-        struct question *question = (struct question *)((char*)dns+strlen(query)+1);
-        while(qcount <= (ntohs(dns->q_count))) {
-            printdbg("%s DNS query type %u for %s\n",H(args->pkt->conn->id), question->qtype, query);
+        char *query = (char *) dns + sizeof(struct dns_header);
+        struct question *question = (struct question *) ((char*) dns
+                + strlen(query) + 1);
+        while (qcount <= (ntohs(dns->q_count))) {
+            printdbg(
+                    "%s DNS query type %u for %s\n", H(args->pkt->conn->id), ntohs(question->qtype), query);
             query += strlen(query) + 1 + sizeof(struct question);
             qcount++;
         }
 #endif
 
         // We will switch the query to our internal DNS server
+        char *our_server_iface = g_hash_table_lookup(args->node->config,
+                "interface");
+        char *our_server_ip = g_hash_table_lookup(args->node->config, "ip");
+        char *our_server_mac = g_hash_table_lookup(args->node->config, "mac");
+        int *vlan = g_hash_table_lookup(args->node->config, "vlan_id");
+
+        if (!our_server_iface || !our_server_ip || !our_server_mac || !vlan) {
+            // Incomplete configuration
+            goto done;
+        }
+
+        switch_state(args->pkt->conn, PROXY);
         args->pkt->conn->destination = INTRA;
 
         struct addr *target_ip = g_malloc(sizeof(struct addr));
         addr_pack(target_ip, ADDR_TYPE_IP, 32, &args->pkt->packet.ip->daddr,
                 sizeof(ip_addr_t));
 
-        char *our_server_iface = g_hash_table_lookup(args->node->config,
-                "interface");
-        char *our_server_ip = g_hash_table_lookup(args->node->config, "ip");
-        char *our_server_mac = g_hash_table_lookup(args->node->config, "mac");
-        int vlan = *(int *) g_hash_table_lookup(args->node->config, "vlan");
+        // Check if we have an internal handler defined for this target IP
+        struct handler *intra_handler = g_tree_lookup(args->pkt->conn->target->intra_handlers, target_ip);
+        if (!intra_handler) {
+            struct addr *ip = g_malloc0(sizeof(struct addr));
+            addr_pton(our_server_ip, ip);
 
-        struct addr *ip = g_malloc0(sizeof(struct addr));
-        addr_pton(our_server_ip, ip);
+            struct addr *mac = g_malloc0(sizeof(struct addr));
+            addr_pton(our_server_mac, mac);
 
-        struct addr *mac = g_malloc0(sizeof(struct addr));
-        addr_pton(our_server_mac, mac);
+            intra_handler = g_malloc0(sizeof(struct handler));
+            intra_handler->iface = g_hash_table_lookup(links, our_server_iface);
+            intra_handler->intra_target_ip = target_ip;
+            intra_handler->ip = ip;
+            intra_handler->ip_str = g_strdup(our_server_ip);
+            intra_handler->mac = mac;
+            intra_handler->vlan.i = htons(*vlan & ((1 << 12)-1));
+            intra_handler->exclusive = 0; // allow this inra to act as multiple target IPs
+                                          // since this is a DNS server, we don't expect it to initiate reverse connections
 
-        struct handler *intra_handler = g_malloc0(sizeof(struct handler));
-        intra_handler->iface = g_hash_table_lookup(links, our_server_iface);
-        intra_handler->intra_target_ip = target_ip;
-        intra_handler->ip = ip;
-        intra_handler->ip_str = g_strdup(our_server_ip);
-        intra_handler->mac = mac;
-        intra_handler->vlan.i = htons(vlan & ((1 << 12)-1));
-
-        g_mutex_lock(&args->pkt->conn->target->lock);
-        g_tree_insert(args->pkt->conn->target->intra_handlers, intra_handler->intra_target_ip, intra_handler);
-        g_mutex_unlock(&args->pkt->conn->target->lock);
+            g_mutex_lock(&args->pkt->conn->target->lock);
+            g_tree_insert(args->pkt->conn->target->intra_handlers,
+                    intra_handler->intra_target_ip, intra_handler);
+            g_mutex_unlock(&args->pkt->conn->target->lock);
+        } else {
+            free(target_ip);
+        }
 
         args->pkt->conn->intra_handler = intra_handler;
 
@@ -162,13 +171,10 @@ mod_result_t mod_dns_control(struct mod_args *args) {
 
         g_mutex_unlock(&connlock);
 
-        free(args->pkt->conn->ext_key);
-
         result = ACCEPT;
 
     }
 
-    done:
-    return result;
+    done: return result;
 }
 

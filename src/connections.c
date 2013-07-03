@@ -196,19 +196,19 @@ status_t init_pkt(struct interface *iface, uint16_t ethertype,
  \param[in] pkt: struct pkt_struct to free
  */
 void free_pkt(struct pkt_struct *pkt) {
-    g_free(pkt->original_headers.eth);
-    g_free(pkt->original_headers.vlan);
-    g_free(pkt->original_headers.ip);
-    g_free(pkt->original_headers.tcp);
-    g_free(pkt->original_headers.udp);
-    g_free(pkt->packet.FRAME);
-    g_free(pkt->src);
-    g_free(pkt->dst);
-    g_free(pkt->src_port);
-    g_free(pkt->dst_port);
-    g_free(pkt->src_with_port);
-    g_free(pkt->dst_with_port);
-    g_free(pkt);
+    free_0(pkt->original_headers.eth);
+    free_0(pkt->original_headers.vlan);
+    free_0(pkt->original_headers.ip);
+    free_0(pkt->original_headers.tcp);
+    free_0(pkt->original_headers.udp);
+    free_0(pkt->packet.FRAME);
+    free_0(pkt->src);
+    free_0(pkt->dst);
+    free_0(pkt->src_port);
+    free_0(pkt->dst_port);
+    free_0(pkt->src_with_port);
+    free_0(pkt->dst_with_port);
+    free_0(pkt);
 }
 
 /*! store_pkt function
@@ -332,17 +332,6 @@ void print_payload(const u_char *payload, int len) {
     }
 
     return;
-}
-
-status_t switch_state(struct conn_struct *conn, conn_status_t new_state) {
-
-    printdbg(
-            "%s switching state from %s to %s\n",
-            H(conn->id), lookup_state(conn->state), lookup_state(new_state));
-
-    conn->state = new_state;
-
-    return OK;
 }
 
 gboolean find_hih_src(uint64_t *hihID, struct handler *back_handler,
@@ -925,41 +914,39 @@ status_t create_conn(struct pkt_struct *pkt, struct conn_struct **conn, gdouble 
 
             // Check if we have a pin for this
             // this is required to allow new connections back here from INTRA
-            char *pin_key = g_malloc0(
-                    snprintf(NULL, 0, "%u:%s:%s",
-                            conn_init->intra_handler->vlan.vid,
-                            conn_init->intra_handler->ip_str,
-                            pkt->src) + 1);
+            if (conn_init->intra_handler->exclusive) {
+                char *pin_key = g_malloc0(
+                        snprintf(NULL, 0, "%u:%s:%s",
+                                conn_init->intra_handler->vlan.vid,
+                                conn_init->intra_handler->ip_str, pkt->src)
+                                + 1);
 
-            sprintf(pin_key, "%u:%s:%s",
-                    conn_init->intra_handler->vlan.vid,
-                    conn_init->intra_handler->ip_str,
-                    pkt->src);
+                sprintf(pin_key, "%u:%s:%s", conn_init->intra_handler->vlan.vid,
+                        conn_init->intra_handler->ip_str, pkt->src);
 
-            struct pin *pin = g_tree_lookup(intra_pin_tree, pin_key);
-            if (!pin) {
-                pin = malloc(sizeof(struct pin));
-                pin->key = pin_key;
-                pin->count = 1;
-                pin->ip = conn_init->first_pkt_dst_ip;
-                conn_init->pin_ip = &pin->ip;
-                conn_init->pin_key = g_strdup(pin_key);
-                g_tree_insert(intra_pin_tree, pin->key, pin);
-            } else {
-                if (pin->ip.addr_ip != conn_init->first_pkt_dst_ip.addr_ip) {
-                    // This INTRA is pinned to a different target IP
-                    printdbg(
-                            "%s Can't setup connection. INTRA is pinned to another target IP \n", H(conn_init->id));
-
-                    free(pin_key);
-                    goto done;
-                } else {
-                    pin->count++;
-                    conn_init->pin_key = pin_key;
+                struct pin *pin = g_tree_lookup(intra_pin_tree, pin_key);
+                if (!pin) {
+                    pin = malloc(sizeof(struct pin));
+                    pin->key = pin_key;
+                    pin->count = 1;
+                    pin->ip = conn_init->first_pkt_dst_ip;
                     conn_init->pin_ip = &pin->ip;
-                }
+                    conn_init->pin_key = g_strdup(pin_key);
+                    g_tree_insert(intra_pin_tree, pin->key, pin);
+                } else {
+                    if (pin->ip.addr_ip != conn_init->first_pkt_dst_ip.addr_ip) {
+                        // This INTRA is pinned to a different target IP
+                        printdbg(
+                                "%s Can't setup connection. INTRA is pinned to another target IP \n", H(conn_init->id));
 
-                pin->count++;
+                        free(pin_key);
+                        goto done;
+                    } else {
+                        pin->count++;
+                        conn_init->pin_key = pin_key;
+                        conn_init->pin_ip = &pin->ip;
+                    }
+                }
             }
 
             conn_init->intra_key = g_malloc0(
@@ -1133,39 +1120,56 @@ void remove_conn(struct conn_struct *conn,
         if(conn->hih.redirected_int_key) {
             g_tree_steal(ext_tree2, conn->hih.redirected_int_key);
         }
-    } else if((conn->initiator == LIH || conn->initiator == HIH) && conn->destination == EXT){
-        g_tree_steal(int_tree2, conn->ext_key);
-        g_tree_steal(int_tree1, conn->int_key);
-    } else if(conn->initiator == INTRA || (conn->initiator == HIH && conn->destination == INTRA)) {
-        g_tree_steal(intra_tree1, conn->int_key);
-        g_tree_steal(intra_tree2, conn->intra_key);
-    }
 
-    struct pin *pin = NULL;
-    if (conn->pin_key) {
-        pin = g_tree_lookup(comm_pin_tree, conn->pin_key);
-        if (pin) {
+        struct pin *pin = NULL;
+        if (conn->pin_key && (pin=g_tree_lookup(comm_pin_tree, conn->pin_key))) {
             pin->count--;
+            printdbg("%s Comm pin count @ %lu\n", H(1), pin->count);
             if (pin->count == 0) {
+                printdbg("%s Removing comm pin\n", H(1));
                 g_tree_steal(comm_pin_tree, conn->pin_key);
                 free_pin(pin);
             }
-        } else {
-            pin = g_tree_lookup(intra_pin_tree, conn->pin_key);
-            if (pin) {
-                pin->count--;
-                if (pin->count == 0) {
-                    g_tree_steal(intra_pin_tree, conn->pin_key);
-                    free_pin(pin);
-                }
+        }
+    } else if ((conn->initiator == LIH || conn->initiator == HIH)
+            && conn->destination == EXT) {
+        g_tree_steal(int_tree2, conn->ext_key);
+        g_tree_steal(int_tree1, conn->int_key);
+
+        struct pin *pin = NULL;
+        if (conn->pin_key && (pin=g_tree_lookup(comm_pin_tree, conn->pin_key))) {
+            pin->count--;
+            printdbg("%s Comm pin count @ %lu\n", H(1), pin->count);
+            if (pin->count == 0) {
+                printdbg("%s Removing comm pin\n", H(1));
+                g_tree_steal(comm_pin_tree, conn->pin_key);
+                free_pin(pin);
+            }
+        }
+    } else if (conn->initiator == INTRA
+            || (conn->initiator == HIH && conn->destination == INTRA)) {
+        g_tree_steal(intra_tree1, conn->int_key);
+        g_tree_steal(intra_tree2, conn->intra_key);
+
+        struct pin *pin = NULL;
+        if (conn->pin_key && (pin=g_tree_lookup(intra_pin_tree, conn->pin_key))) {
+            pin->count--;
+            printdbg("%s Intra pin count @ %lu\n", H(1), pin->count);
+            if (pin->count == 0) {
+                printdbg("%s Removing intra pin\n", H(1));
+                g_tree_steal(intra_pin_tree, conn->pin_key);
+                free_pin(pin);
             }
         }
     }
 
+    struct pin *pin = NULL;
     if (conn->hih.target_pin_key && (pin = g_tree_lookup(target_pin_tree, conn->hih.target_pin_key))) {
         pin->count--;
+        printdbg("%s HIH target pin count @ %lu\n", H(1), pin->count);
         if (pin->count == 0) {
             g_tree_steal(target_pin_tree, conn->pin_key);
+            printdbg("%s Removing HIH target pin\n", H(1));
             free_pin(pin);
         }
     }
@@ -1227,7 +1231,7 @@ status_t init_conn(struct pkt_struct *pkt, struct conn_struct **conn) {
 void free_conn(struct conn_struct *conn) {
     if (conn) {
 
-        printdbg("%s Connection %u entry removed\n", H(8), conn->id);
+        uint32_t id = conn->id;
 
         GSList *current = conn->BUFFER;
         struct pkt_struct* tmp;
@@ -1248,7 +1252,7 @@ void free_conn(struct conn_struct *conn) {
                 if (custom->data && custom->data_free) custom->data_free(
                         custom->data);
 
-                free(custom);
+                free_0(custom);
             }
 
             current = g_slist_next(current);
@@ -1256,15 +1260,17 @@ void free_conn(struct conn_struct *conn) {
 
         g_slist_free(conn->custom_data);
         g_mutex_clear(&conn->lock);
-        g_free(conn->int_key);
-        g_free(conn->ext_key);
-        g_free(conn->pin_key);
-        g_free(conn->intra_key);
-        g_free(conn->hih.redirected_int_key);
-        g_free(conn->hih.target_pin_key);
+        free_0(conn->int_key);
+        free_0(conn->ext_key);
+        free_0(conn->pin_key);
+        free_0(conn->intra_key);
+        free_0(conn->hih.redirected_int_key);
+        free_0(conn->hih.target_pin_key);
         g_string_free(conn->start_timestamp, TRUE);
         g_string_free(conn->decision_rule, TRUE);
-        g_free(conn);
+        free_0(conn);
+
+        printdbg("%s Connection %u entry removed\n", H(8), id);
     }
 }
 

@@ -27,8 +27,6 @@
 #include "types.h"
 #include "structs.h"
 
-status_t switch_state(struct conn_struct *conn, conn_status_t new_state);
-
 status_t init_pkt(struct interface *iface, uint16_t ethertype,
         const struct pcap_pkthdr *header, const u_char *packet,
         struct pkt_struct **pkt_out);

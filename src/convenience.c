@@ -21,8 +21,11 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "config.h"
+#include "types.h"
+#include "log.h"
+#include "constants.h"
 #include "globals.h"
+#include "structs.h"
 
 /*!	\file convenience.c
  \brief
@@ -49,3 +52,23 @@ gint intcmp(gconstpointer v1, gconstpointer v2,
     return (*(uint32_t *) v1 < (*(uint32_t *) v2) ? 1 :
             (*(uint32_t *) v1 == (*(uint32_t *) v2)) ? 0 : -1);
 }
+
+
+status_t switch_state(struct conn_struct *conn, conn_status_t new_state) {
+
+    printdbg(
+            "%s switching state from %s to %s\n",
+            H(conn->id), lookup_state(conn->state), lookup_state(new_state));
+
+    conn->state = new_state;
+
+    return OK;
+}
+
+void free_f_0(void **x) {
+    if(*x) {
+        free(*x);
+        *x = NULL;
+    }
+}
+

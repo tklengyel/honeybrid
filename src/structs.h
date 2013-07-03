@@ -72,6 +72,7 @@ struct handler {
     struct vlan_tci vlan;
     struct interface *iface;
     struct node *rule;
+    int exclusive;
 };
 void free_handler(struct handler *);
 
@@ -119,16 +120,17 @@ struct packet {
         struct vlan_ethhdr *vlan;
     };
     union {
-        struct iphdr *ip;
         struct tcp_packet *tcppacket;
         struct udp_packet *udppacket;
+        struct {
+            struct iphdr *ip;
+            union {
+                struct tcphdr *tcp;
+                struct udphdr *udp;
+            };
+            char *payload;
+        };
     };
-    union {
-        struct tcphdr *tcp;
-        struct udphdr *udp;
-    };
-
-    char *payload;
 
     char *FRAME;
 };

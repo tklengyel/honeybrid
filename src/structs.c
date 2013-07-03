@@ -22,6 +22,7 @@
  */
 
 #include "structs.h"
+#include "convenience.h"
 #include "decision_engine.h"
 
 /*!	\file structs.c
@@ -36,45 +37,46 @@ void free_interface(struct interface *iface) {
     if (iface) {
         if(iface->filter) {
             pcap_freecode(&iface->pcap_filter);
-            free(iface->filter);
+            free_0(iface->filter);
         }
-        g_free(iface->name);
-        g_free(iface->tag);
-        free(iface);
+        free_0(iface->name);
+        free_0(iface->tag);
+        free_0(iface);
     }
 }
 
 void free_handler(struct handler *handler) {
     if (handler) {
-        g_free(handler->ip);
-        g_free(handler->ip_str);
-        g_free(handler->mac);
-        g_free(handler->intra_target_ip);
-        g_free(handler->netmask);
+        free_0(handler->ip);
+        free_0(handler->ip_str);
+        free_0(handler->mac);
+        free_0(handler->intra_target_ip);
+        free_0(handler->netmask);
         DE_destroy_tree(handler->rule);
-        free(handler);
+        free_0(handler);
     }
 }
 
 void free_target(struct target *t) {
+    g_mutex_lock(&t->lock);
     free_handler(t->front_handler);
-    g_free(t->default_route_mac);
+    free_0(t->default_route_mac);
     g_tree_destroy(t->back_handlers);
     g_tree_destroy(t->intra_handlers);
     DE_destroy_tree(t->control_rule);
     g_mutex_clear(&t->lock);
-    g_free(t);
+    free_0(t);
 }
 
 void free_raw_pcap(struct raw_pcap *raw) {
-    free(raw->header);
-    free(raw->packet);
-    free(raw);
+    free_0(raw->header);
+    free_0(raw->packet);
+    free_0(raw);
 }
 
 void free_pin(struct pin *pin) {
     if(pin) {
-        g_free(pin->key);
-        free(pin);
+        free_0(pin->key);
+        free_0(pin);
     }
 }

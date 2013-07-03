@@ -29,7 +29,7 @@ int yywrap() {
 %token BACKPICK LIMIT CONFIGURATION 
 %token TARGET LINK HW VLAN DEFAULT 
 %token ROUTE VIA NETMASK INTERNAL
-%token WITH
+%token WITH EXCLUSIVE
 
 /* Content Variables */
 %token <number> NUMBER
@@ -365,7 +365,6 @@ rule: 	{
         g_free($4);
         free(mac);
     }
-    
 	| rule INTERNAL QUOTE WORD QUOTE honeynet WITH honeynet mac netmask vlan SEMICOLON {
     		
     	struct interface *iface = g_hash_table_lookup(links, $4);
@@ -380,7 +379,8 @@ rule: 	{
         intra_handler->ip=$8;
        	intra_handler->mac=$9;
        	intra_handler->netmask = $10;
-       	intra_handler->vlan.i = htons($11 & ((1 << 12)-1));    	
+       	intra_handler->vlan.i = htons($11 & ((1 << 12)-1));
+       	intra_handler->exclusive = 1;  	
        	
        	intra_handler->ip_str=g_strdup(addr_ntoa($8));
        	    
@@ -412,6 +412,7 @@ rule: 	{
        	intra_handler->netmask = $10;
        	intra_handler->vlan.i = htons($11 & ((1 << 12)-1));  
         intra_handler->rule=DE_create_tree($13->str);
+        intra_handler->exclusive = 1;
         
         intra_handler->ip_str=g_strdup(addr_ntoa($8));
     

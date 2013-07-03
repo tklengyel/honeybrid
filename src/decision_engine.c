@@ -100,13 +100,7 @@ struct node *DE_build_subtree(const gchar *expr) {
     g_string_printf(node->module_name, "%s", modname);
     g_string_printf(node->function, "%s", function);
 
-#ifdef DEBUG
-    g_print("\t\tModule function '%s' defined\n", function);
-#endif
-
-    //#ifdef DEBUG_
-    //g_print("\tmodule = %s.%s()\n",node->module_name->str, node->function->str);
-    //#endif
+    printdbg("\t\tModule function '%s' defined\n", function);
 
     g_regex_unref(and_regex);
     g_free(modname);
@@ -135,9 +129,8 @@ struct node *DE_create_tree(const gchar *equation) {
     /*! for all the other subgroups */
     int n = 1;
     for (n = 1; subgroups[n] != NULL; n++) {
-#ifdef DEBUG
-        g_print("\t\tAnalyzing subgroup %i: '%s'\n", n, subgroups[n]);
-#endif
+        printdbg("\t\tAnalyzing subgroup %i: '%s'\n", n, subgroups[n]);
+
 
         /*! get the pointer to the beginning of the new subtree */
         struct node *headsubgroup;

@@ -396,21 +396,10 @@ status_t log_csv(const struct conn_struct *conn, const char *proto,
     uint16_t src_port;
     uint16_t dst_port;
 
-    if (conn->initiator == EXT) {
-        inet_ntop(AF_INET, &(conn->first_pkt_src_ip.addr_ip), src,
-                INET_ADDRSTRLEN);
-        inet_ntop(AF_INET, &(conn->first_pkt_dst_ip.addr_ip), dst,
-                INET_ADDRSTRLEN);
-        src_port = ntohs(conn->first_pkt_src_port);
-        dst_port = ntohs(conn->first_pkt_dst_port);
-    } else {
-        inet_ntop(AF_INET, &(conn->first_pkt_dst_ip.addr_ip), src,
-                INET_ADDRSTRLEN);
-        inet_ntop(AF_INET, &(conn->first_pkt_src_ip.addr_ip), dst,
-                INET_ADDRSTRLEN);
-        src_port = ntohs(conn->first_pkt_dst_port);
-        dst_port = ntohs(conn->first_pkt_src_port);
-    }
+    inet_ntop(AF_INET, &(conn->first_pkt_src_ip.addr_ip), src, INET_ADDRSTRLEN);
+    inet_ntop(AF_INET, &(conn->first_pkt_dst_ip.addr_ip), dst, INET_ADDRSTRLEN);
+    src_port = ntohs(conn->first_pkt_src_port);
+    dst_port = ntohs(conn->first_pkt_dst_port);
 
     int log_size = snprintf(NULL, 0,
 #ifdef HAVE_XMPP
@@ -418,9 +407,8 @@ status_t log_csv(const struct conn_struct *conn, const char *proto,
 #else
             "%s,%.3f,%s,%s,%u,%s,%u,%d,%d,%s,%d,%s,%s,%s,%s,%s,%s\n",
 #endif
-            conn->start_timestamp->str, duration, proto, src,
-            src_port, dst, dst_port, conn->total_packet, conn->total_byte,
-            status, conn->id,
+            conn->start_timestamp->str, duration, proto, src, src_port, dst,
+            dst_port, conn->total_packet, conn->total_byte, status, conn->id,
             //status_info[INVALID]->str,
             status_info[INIT]->str, status_info[DECISION]->str,
             status_info[REPLAY]->str, status_info[FORWARD]->str,
@@ -441,9 +429,8 @@ status_t log_csv(const struct conn_struct *conn, const char *proto,
 #else
             "%s,%.3f,%s,%s,%u,%s,%u,%d,%d,%s,%d,%s,%s,%s,%s,%s,%s\n",
 #endif
-            conn->start_timestamp->str, duration, proto, src,
-            src_port, dst, dst_port, conn->total_packet, conn->total_byte,
-            status, conn->id,
+            conn->start_timestamp->str, duration, proto, src, src_port, dst,
+            dst_port, conn->total_packet, conn->total_byte, status, conn->id,
             //status_info[INVALID]->str,
             status_info[INIT]->str, status_info[DECISION]->str,
             status_info[REPLAY]->str, status_info[FORWARD]->str,
@@ -473,21 +460,10 @@ status_t log_std(const struct conn_struct *conn, const char *proto,
     uint16_t src_port;
     uint16_t dst_port;
 
-    if (conn->initiator == EXT) {
-        inet_ntop(AF_INET, &(conn->first_pkt_src_ip.addr_ip), src,
-                INET_ADDRSTRLEN);
-        inet_ntop(AF_INET, &(conn->first_pkt_dst_ip.addr_ip), dst,
-                INET_ADDRSTRLEN);
-        src_port = ntohs(conn->first_pkt_src_port);
-        dst_port = ntohs(conn->first_pkt_dst_port);
-    } else {
-        inet_ntop(AF_INET, &(conn->first_pkt_dst_ip.addr_ip), src,
-                INET_ADDRSTRLEN);
-        inet_ntop(AF_INET, &(conn->first_pkt_src_ip.addr_ip), dst,
-                INET_ADDRSTRLEN);
-        src_port = ntohs(conn->first_pkt_dst_port);
-        dst_port = ntohs(conn->first_pkt_src_port);
-    }
+    inet_ntop(AF_INET, &(conn->first_pkt_src_ip.addr_ip), src, INET_ADDRSTRLEN);
+    inet_ntop(AF_INET, &(conn->first_pkt_dst_ip.addr_ip), dst, INET_ADDRSTRLEN);
+    src_port = ntohs(conn->first_pkt_src_port);
+    dst_port = ntohs(conn->first_pkt_dst_port);
 
     int log_size =
             snprintf(NULL, 0,
@@ -590,21 +566,12 @@ status_t log_mysql(const struct conn_struct *conn, const char *proto,
         uint16_t src_port;
         uint16_t dst_port;
 
-        if (conn->initiator == EXT) {
-            inet_ntop(AF_INET, &(conn->first_pkt_src_ip.addr_ip), src,
-                    INET_ADDRSTRLEN);
-            inet_ntop(AF_INET, &(conn->first_pkt_dst_ip.addr_ip), dst,
-                    INET_ADDRSTRLEN);
-            src_port = ntohs(conn->first_pkt_src_port);
-            dst_port = ntohs(conn->first_pkt_dst_port);
-        } else {
-            inet_ntop(AF_INET, &(conn->first_pkt_dst_ip.addr_ip), src,
-                    INET_ADDRSTRLEN);
-            inet_ntop(AF_INET, &(conn->first_pkt_src_ip.addr_ip), dst,
-                    INET_ADDRSTRLEN);
-            src_port = ntohs(conn->first_pkt_dst_port);
-            dst_port = ntohs(conn->first_pkt_src_port);
-        }
+        inet_ntop(AF_INET, &(conn->first_pkt_src_ip.addr_ip), src,
+                INET_ADDRSTRLEN);
+        inet_ntop(AF_INET, &(conn->first_pkt_dst_ip.addr_ip), dst,
+                INET_ADDRSTRLEN);
+        src_port = ntohs(conn->first_pkt_src_port);
+        dst_port = ntohs(conn->first_pkt_dst_port);
 
         int log_size = snprintf(NULL, 0, "INSERT INTO honeybrid VALUES ("
                 "'',"
@@ -620,11 +587,11 @@ status_t log_mysql(const struct conn_struct *conn, const char *proto,
 #endif
                 ");",
 
-        conn->start_microtime, duration, proto, src,
-                src_port, dst, dst_port, conn->total_packet, conn->total_byte,
-                status, conn->id, status_info[INIT]->str,
-                status_info[DECISION]->str, status_info[REPLAY]->str,
-                status_info[FORWARD]->str, status_info[PROXY]->str,
+        conn->start_microtime, duration, proto, src, src_port, dst, dst_port,
+                conn->total_packet, conn->total_byte, status, conn->id,
+                status_info[INIT]->str, status_info[DECISION]->str,
+                status_info[REPLAY]->str, status_info[FORWARD]->str,
+                status_info[PROXY]->str,
                 (conn->custom_data ? custom_conn_data(conn->custom_data) : "-")
 #ifdef HAVE_XMPP
                 conn->dionaeaDownload, conn->dionaeaDownloadTime
@@ -645,11 +612,11 @@ status_t log_mysql(const struct conn_struct *conn, const char *proto,
 #ifdef HAVE_XMPP
                 ",%i,%i"
 #endif
-                ");", conn->start_microtime, duration,
-                proto, src, src_port, dst, dst_port, conn->total_packet,
-                conn->total_byte, status, conn->id, status_info[INIT]->str,
-                status_info[DECISION]->str, status_info[REPLAY]->str,
-                status_info[FORWARD]->str, status_info[PROXY]->str,
+                ");", conn->start_microtime, duration, proto, src, src_port,
+                dst, dst_port, conn->total_packet, conn->total_byte, status,
+                conn->id, status_info[INIT]->str, status_info[DECISION]->str,
+                status_info[REPLAY]->str, status_info[FORWARD]->str,
+                status_info[PROXY]->str,
                 (conn->custom_data ? custom_conn_data(conn->custom_data) : "-")
 #ifdef HAVE_XMPP
                 ,conn->dionaeaDownload, conn->dionaeaDownloadTime

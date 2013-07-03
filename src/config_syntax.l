@@ -35,6 +35,7 @@ via			{ return VIA; }
 netmask		{ return NETMASK; }
 internal	{ return INTERNAL; }
 with		{ return WITH; }
+exclusive 	{ return EXCLUSIVE; }
 
 
 	/* Delimiters */
