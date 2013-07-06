@@ -151,17 +151,23 @@ struct tcp_packet {
     char *payload;
 };
 
-struct pseudotcphdr {
+struct pseudohdr {
     uint32_t saddr;
     uint32_t daddr;
     uint8_t res1;
     uint8_t proto;
-    uint16_t tcp_len;
+    uint16_t len;
 };
 
 struct tcp_chk_packet {
-    struct pseudotcphdr pseudohdr;
+    struct pseudohdr pseudohdr;
     struct tcphdr tcp;
+    char payload[BUFSIZE];
+};
+
+struct udp_chk_packet {
+    struct pseudohdr pseudohdr;
+    struct udphdr udp;
     char payload[BUFSIZE];
 };
 

@@ -47,26 +47,29 @@
  \brief IP checksum using in_cksum
  */
 #define set_ip_checksum(hdr) \
-    ((struct iphdr*)hdr)->check = 0; \
-	((struct iphdr*)hdr)->check = \
-		in_cksum(hdr, \
-		sizeof(struct iphdr))
+    do { \
+    	((struct iphdr*)hdr)->check = htons(0); \
+    	((struct iphdr*)hdr)->check = \
+		    in_cksum(hdr, sizeof(struct iphdr)); \
+    } while(0)
 
 /*! udp_checksum
  \brief UDP checksum using in_cksum
  */
+//TODO      ((struct udp_packet *)hdr)->udp.check = udp_checksum(hdr);
 #define set_udp_checksum(hdr) \
-    ((struct udp_packet *)hdr)->udp.check = 0; \
-	((struct udp_packet *)hdr)->udp.check = \
-		in_cksum( hdr, \
-        sizeof(struct udphdr))
+    do { \
+    	((struct udp_packet *)hdr)->udp.check = htons(0); \
+    } while(0)
 
 /*! udp_checksum
  \brief UDP checksum using in_cksum
  */
 #define set_tcp_checksum(hdr) \
-    ((struct tcp_packet *)hdr)->tcp.check = 0; \
-    ((struct tcp_packet *)hdr)->tcp.check = tcp_checksum(hdr)
+    do { \
+        ((struct tcp_packet *)hdr)->tcp.check = htons(0); \
+        ((struct tcp_packet *)hdr)->tcp.check = tcp_checksum(hdr); \
+    } while(0)
 
 /*! in_cksum
  \brief Checksum routine for Internet Protocol family headers
@@ -74,10 +77,10 @@
  \param[in] len the 32 bits data size
  \return sum a 16 bits checksum
  */
-static inline uint16_t in_cksum(const void *addr, uint32_t len) {
+static inline uint16_t in_cksum(const void *addr, size_t len) {
     uint32_t sum = 0;
     const uint16_t *w = addr;
-    int nleft = len;
+    size_t nleft = len;
 
     /*!
      * Our algorithm is simple, using a 32 bit accumulator (sum), we add
@@ -86,6 +89,10 @@ static inline uint16_t in_cksum(const void *addr, uint32_t len) {
      */
     while (nleft > 1) {
         sum += *w++;
+        if(sum & 0x80000000) {
+            /* if high order bit set, fold */
+            sum = (sum >> 16) + (sum & 0xFFFF);
+        }
         nleft -= 2;
     }
 
@@ -97,8 +104,9 @@ static inline uint16_t in_cksum(const void *addr, uint32_t len) {
     }
 
     /*! add back carry outs from top 16 bits to low 16 bits */
-    sum = (sum >> 16) + (sum & 0xffff); /*! add hi 16 to low 16 */
-    sum += (sum >> 16); /*! add carry */
+    while(sum>>16) {
+        sum = (sum >> 16) + (sum & 0xFFFF);
+    }
     return ((uint16_t) ~sum); /*! truncate to 16 bits */
 }
 
@@ -223,20 +231,35 @@ static inline uint16_t tcp_checksum(struct tcp_packet* pkt) {
     struct tcp_chk_packet chk_p;
     bzero(&chk_p, sizeof(struct tcp_chk_packet));
 
-    unsigned short TOT_SIZE = ntohs(pkt->ip.tot_len);
-    unsigned short IPHDR_SIZE = (pkt->ip.ihl << 2);
-    unsigned short TCPHDRDATA_SIZE = TOT_SIZE - IPHDR_SIZE;
-    unsigned short len_tcp = TCPHDRDATA_SIZE;
+    unsigned short HDRDATA_SIZE = ntohs(pkt->ip.tot_len) - (pkt->ip.ihl << 2);
 
     chk_p.pseudohdr.saddr = pkt->ip.saddr;
     chk_p.pseudohdr.daddr = pkt->ip.daddr;
     chk_p.pseudohdr.proto = IPPROTO_TCP;
-    chk_p.pseudohdr.tcp_len = htons(len_tcp);
+    chk_p.pseudohdr.len = htons(HDRDATA_SIZE);
 
-    memcpy(&chk_p.tcp, &pkt->tcp, sizeof(struct tcphdr));
-    memcpy(&chk_p.payload, &pkt->payload, len_tcp - sizeof(struct tcphdr));
+    memcpy(&chk_p.tcp, &pkt->tcp, TCP_HDR_LEN);
+    memcpy(&chk_p.payload, &pkt->payload, HDRDATA_SIZE - TCP_HDR_LEN);
 
-    return in_cksum(&chk_p, sizeof(struct pseudotcphdr) + len_tcp);
+    return in_cksum(&chk_p, sizeof(struct pseudohdr) + HDRDATA_SIZE);
+}
+
+uint16_t udp_checksum(struct udp_packet *pkt) {
+
+    struct udp_chk_packet chk_p;
+    bzero(&chk_p, sizeof(struct udp_chk_packet));
+
+    unsigned short HDRDATA_SIZE = ntohs(pkt->ip.tot_len) - (pkt->ip.ihl << 2);
+
+    chk_p.pseudohdr.saddr = pkt->ip.saddr;
+    chk_p.pseudohdr.daddr = pkt->ip.daddr;
+    chk_p.pseudohdr.proto = IPPROTO_UDP;
+    chk_p.pseudohdr.len = htons(HDRDATA_SIZE);
+
+    memcpy(&chk_p.udp, &pkt->udp, UDP_HDR_LEN);
+    memcpy(&chk_p.payload, &pkt->payload, HDRDATA_SIZE - UDP_HDR_LEN);
+
+    return in_cksum(&chk_p, sizeof(struct pseudohdr) + HDRDATA_SIZE);
 }
 
 /*
@@ -711,7 +734,11 @@ status_t proxy_hih2intra(struct pkt_struct* pkt) {
 status_t proxy_intra2hih(struct pkt_struct* pkt) {
 
     pkt->out = pkt->conn->hih.back_handler->iface;
-    pkt->nat.src_ip = pkt->conn->pin_ip;
+    if(pkt->conn->pin_ip) {
+        pkt->nat.src_ip = pkt->conn->pin_ip;
+    } else {
+        pkt->nat.src_ip = &pkt->conn->first_pkt_dst_ip;
+    }
     pkt->nat.dst_mac = &pkt->conn->first_pkt_src_mac;
     pkt->nat.dst_vlan = &pkt->conn->hih.back_handler->vlan;
     pkt->destination = HIH;

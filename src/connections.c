@@ -85,9 +85,6 @@ status_t init_pkt(struct interface *iface, uint16_t ethertype,
 
     pkt->original_headers.ip = g_memdup(pkt->packet.ip, (pkt->packet.ip->ihl << 2));
 
-    pkt->packet.tcp = (struct tcphdr*) (((char *) pkt->packet.ip)
-            + (pkt->packet.ip->ihl << 2));
-
     char tmp[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &(pkt->packet.ip->saddr), tmp, INET_ADDRSTRLEN);
     pkt->src = g_strdup(tmp);
@@ -97,6 +94,10 @@ status_t init_pkt(struct interface *iface, uint16_t ethertype,
 
     if (pkt->packet.ip->protocol == IPPROTO_TCP) {
         /*! Process TCP packets */
+
+        pkt->packet.tcp = (struct tcphdr*) (((char *) pkt->packet.ip)
+                + (pkt->packet.ip->ihl << 2));
+
         if (pkt->size < MIN_TCP_SIZE) {
             printdbg("%s Invalid TCP header length. Skipped.\n", H(4));
 
@@ -143,6 +144,9 @@ status_t init_pkt(struct interface *iface, uint16_t ethertype,
     } else if (pkt->packet.ip->protocol == IPPROTO_UDP) {
         /*! Process UDP packet */
 
+        pkt->packet.udp = (struct udphdr*) (((char *) pkt->packet.ip)
+                + (pkt->packet.ip->ihl << 2));
+
         pkt->original_headers.udp = g_memdup(pkt->packet.udp, sizeof(struct udphdr));
 
         pkt->packet.payload = (char*) pkt->packet.udp + UDP_HDR_LEN;
@@ -162,8 +166,7 @@ status_t init_pkt(struct interface *iface, uint16_t ethertype,
                 snprintf(NULL, 0, "%s:%s", pkt->dst,pkt->dst_port) + 1);
         sprintf(pkt->dst_with_port, "%s:%s", pkt->dst,pkt->dst_port);
 
-        /* The volume of data is the value of udp->ulen minus the size of the UPD header (always 8 bytes) */
-        pkt->data = pkt->packet.udp->len - UDP_HDR_LEN;
+        pkt->data = ntohs(pkt->packet.ip->tot_len) - (pkt->packet.ip->ihl << 2) - UDP_HDR_LEN;
     } else {
         printdbg("%s Invalid protocol, packet skipped\n", H(4));
 
@@ -1059,6 +1062,8 @@ status_t create_conn(struct pkt_struct *pkt, struct conn_struct **conn, gdouble 
         g_tree_insert(intra_tree2,conn_init->intra_key,conn_init);
         g_mutex_unlock(&connlock);
 
+        result = OK;
+
     }
 
     done:
@@ -1115,10 +1120,10 @@ void remove_conn(struct conn_struct *conn,
     }
 
     if(conn->initiator == EXT) {
-        g_tree_steal(ext_tree1, conn->ext_key);
-        g_tree_steal(ext_tree2, conn->int_key);
+        g_tree_remove(ext_tree1, conn->ext_key);
+        g_tree_remove(ext_tree2, conn->int_key);
         if(conn->hih.redirected_int_key) {
-            g_tree_steal(ext_tree2, conn->hih.redirected_int_key);
+            g_tree_remove(ext_tree2, conn->hih.redirected_int_key);
         }
 
         struct pin *pin = NULL;
@@ -1127,14 +1132,14 @@ void remove_conn(struct conn_struct *conn,
             printdbg("%s Comm pin count @ %lu\n", H(1), pin->count);
             if (pin->count == 0) {
                 printdbg("%s Removing comm pin\n", H(1));
-                g_tree_steal(comm_pin_tree, conn->pin_key);
+                g_tree_remove(comm_pin_tree, conn->pin_key);
                 free_pin(pin);
             }
         }
     } else if ((conn->initiator == LIH || conn->initiator == HIH)
             && conn->destination == EXT) {
-        g_tree_steal(int_tree2, conn->ext_key);
-        g_tree_steal(int_tree1, conn->int_key);
+        g_tree_remove(int_tree2, conn->ext_key);
+        g_tree_remove(int_tree1, conn->int_key);
 
         struct pin *pin = NULL;
         if (conn->pin_key && (pin=g_tree_lookup(comm_pin_tree, conn->pin_key))) {
@@ -1142,14 +1147,14 @@ void remove_conn(struct conn_struct *conn,
             printdbg("%s Comm pin count @ %lu\n", H(1), pin->count);
             if (pin->count == 0) {
                 printdbg("%s Removing comm pin\n", H(1));
-                g_tree_steal(comm_pin_tree, conn->pin_key);
+                g_tree_remove(comm_pin_tree, conn->pin_key);
                 free_pin(pin);
             }
         }
     } else if (conn->initiator == INTRA
             || (conn->initiator == HIH && conn->destination == INTRA)) {
-        g_tree_steal(intra_tree1, conn->int_key);
-        g_tree_steal(intra_tree2, conn->intra_key);
+        g_tree_remove(intra_tree1, conn->int_key);
+        g_tree_remove(intra_tree2, conn->intra_key);
 
         struct pin *pin = NULL;
         if (conn->pin_key && (pin=g_tree_lookup(intra_pin_tree, conn->pin_key))) {
@@ -1157,7 +1162,7 @@ void remove_conn(struct conn_struct *conn,
             printdbg("%s Intra pin count @ %lu\n", H(1), pin->count);
             if (pin->count == 0) {
                 printdbg("%s Removing intra pin\n", H(1));
-                g_tree_steal(intra_pin_tree, conn->pin_key);
+                g_tree_remove(intra_pin_tree, conn->pin_key);
                 free_pin(pin);
             }
         }
@@ -1168,7 +1173,7 @@ void remove_conn(struct conn_struct *conn,
         pin->count--;
         printdbg("%s HIH target pin count @ %lu\n", H(1), pin->count);
         if (pin->count == 0) {
-            g_tree_steal(target_pin_tree, conn->pin_key);
+            g_tree_remove(target_pin_tree, conn->pin_key);
             printdbg("%s Removing HIH target pin\n", H(1));
             free_pin(pin);
         }

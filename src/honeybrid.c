@@ -752,7 +752,8 @@ void de_thread(gpointer data) {
         }
 
         printdbg(
-                "%s Origin: %s %s, %u bytes with %u bytes of data\n", H(conn->id), lookup_role(pkt->origin), lookup_state(conn->state), pkt->size, pkt->data);
+                "%s %s %s, %u bytes with %u bytes of data\n",
+                H(conn->id), lookup_role(pkt->origin), lookup_state(conn->state), pkt->size, pkt->data);
 
         /*! Check that there was no problem getting the current connection structure
          *  and make sure the STATE is valid */

@@ -347,7 +347,7 @@ status_t DE_process_packet(struct pkt_struct *pkt) {
 
             break;
         case CONTROL:
-            if (pkt->destination == EXT) {
+            if (pkt->conn->destination == EXT) {
                 decision.node = (struct node *) pkt->conn->target->control_rule;
                 get_decision(&decision);
             } else if (pkt->conn->destination == INTRA) {

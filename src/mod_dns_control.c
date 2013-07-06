@@ -63,7 +63,7 @@ mod_result_t mod_dns_control(struct mod_args *args) {
 
     mod_result_t result = ACCEPT;
 
-    if (args->pkt == NULL || args->pkt->conn->destination != EXT) {
+    if (args->pkt == NULL) {
         goto done;
     }
 
@@ -90,7 +90,7 @@ mod_result_t mod_dns_control(struct mod_args *args) {
         uint32_t qcount = 1;
         char *query = (char *) dns + sizeof(struct dns_header);
         struct question *question = (struct question *) ((char*) dns
-                + strlen(query) + 1);
+                + sizeof(struct dns_header) + strlen(query) + 1);
         while (qcount <= (ntohs(dns->q_count))) {
             printdbg(
                     "%s DNS query type %u for %s\n", H(args->pkt->conn->id), ntohs(question->qtype), query);
@@ -119,7 +119,8 @@ mod_result_t mod_dns_control(struct mod_args *args) {
                 sizeof(ip_addr_t));
 
         // Check if we have an internal handler defined for this target IP
-        struct handler *intra_handler = g_tree_lookup(args->pkt->conn->target->intra_handlers, target_ip);
+        struct handler *intra_handler = g_tree_lookup(
+                args->pkt->conn->target->intra_handlers, target_ip);
         if (!intra_handler) {
             struct addr *ip = g_malloc0(sizeof(struct addr));
             addr_pton(our_server_ip, ip);
@@ -162,8 +163,8 @@ mod_result_t mod_dns_control(struct mod_args *args) {
         g_mutex_lock(&connlock);
 
         // First remove this connection from the int_trees
-        g_tree_steal(int_tree1, args->pkt->conn->int_key);
-        g_tree_steal(int_tree2, args->pkt->conn->ext_key);
+        g_tree_remove(int_tree1, args->pkt->conn->int_key);
+        g_tree_remove(int_tree2, args->pkt->conn->ext_key);
 
         // And reinsert it into the intra_trees
         g_tree_insert(intra_tree1, args->pkt->conn->int_key, args->pkt->conn);
