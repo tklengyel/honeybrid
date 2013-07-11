@@ -114,6 +114,12 @@ const struct mod_def module_definitions[__MAX_HONEYBRID_MODULE] = {
 void init_modules() {
     printdbg("%s Initiate modules\n", H(6));
 
+    /*! create a thread that will save module memory every minute */
+    if ((mod_backup = g_thread_new("module_backup_saver",
+            (void *) save_backup_handler, NULL)) == NULL) {
+        errx(1, "%s Cannot create a thread to save module memory", H(6));
+    }
+
 #ifdef HAVE_CRYPTO
     init_mod_hash();
 #endif
@@ -122,13 +128,11 @@ void init_modules() {
     init_mod_dionaea();
 #endif
 
-    //init_mod_vmi();
+    init_mod_vmi();
+}
 
-    /*! create a thread that will save module memory every minute */
-    if ((mod_backup = g_thread_new("module_backup_saver",
-            (void *) save_backup_handler, NULL)) == NULL) {
-        errx(1, "%s Cannot create a thread to save module memory", H(6));
-    }
+void close_modules() {
+    close_mod_vmi();
 }
 
 /*! run_module

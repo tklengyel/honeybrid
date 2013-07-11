@@ -1200,6 +1200,7 @@ int main(int argc, char *argv[]) {
 
     init_pcap();
     wait_pcap();
+    close_modules();
     close_all();
 
     g_printerr("Honeybrid exited successfully.\n");

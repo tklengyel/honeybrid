@@ -432,6 +432,7 @@ rule: 	{
         
     }
 	| rule LIMIT QUOTE equation QUOTE SEMICOLON {
+		g_printerr("\tControl rule defined as: %s\n", $4->str);
 		$$->control_rule = DE_create_tree($4->str);
 		g_string_free($4, TRUE);
 	}

@@ -32,6 +32,7 @@
 #include "convenience.h"
 
 void init_modules();
+void close_modules();
 
 #define run_module(module, args, result) \
 	(module) ? \
@@ -85,6 +86,7 @@ mod_result_t mod_backpick_random(struct mod_args *args);
 
 /*!** MODULE VMI **/
 int init_mod_vmi();
+void close_mod_vmi();
 mod_result_t mod_vmi(struct mod_args *args);
 
 /*!** MODULE DNS CONTROL **/
