@@ -319,23 +319,32 @@ mod_result_t mod_vmi_control(struct mod_args *args) {
             result = ACCEPT;
         } else {
 
-            printdbg(
-                    "%s Cought network event, sending signal!\n", H(args->pkt->conn->id));
+            if (!strcmp(vm->key_ext, args->pkt->dst)) {
+                // Connection back to the original IP
+                result = ACCEPT;
+            } else {
 
-            struct custom_conn_data *log = g_malloc0(
-                    sizeof(struct custom_conn_data));
-            log->data = GUINT_TO_POINTER(vm->logID);
-            log->data_print = vmi_log;
+                // Don't touch DNS, we will use mod_dns_control.
 
-            char *buf = g_malloc0(
-                    snprintf(NULL, 0, "%s,%s,%s\n", vm->name,
-                            args->pkt->src_with_port, args->pkt->dst_with_port)
-                            + 1);
-            sprintf(buf, "%s,%s,%s\n", vm->name, args->pkt->src_with_port,
-                    args->pkt->dst_with_port);
-            if (write(vmi_sock, buf, strlen(buf)) < 0)
-            printdbg("%s Failed to write to socket!\n", H(args->pkt->conn->id));
-            free(buf);
+                printdbg(
+                        "%s Cought network event, sending signal!\n", H(args->pkt->conn->id));
+
+                struct custom_conn_data *log = g_malloc0(
+                        sizeof(struct custom_conn_data));
+                log->data = GUINT_TO_POINTER(vm->logID);
+                log->data_print = vmi_log;
+
+                char *buf = g_malloc0(
+                        snprintf(NULL, 0, "%s,%s,%s\n", vm->name,
+                                args->pkt->src_with_port,
+                                args->pkt->dst_with_port) + 1);
+                sprintf(buf, "%s,%s,%s\n", vm->name, args->pkt->src_with_port,
+                        args->pkt->dst_with_port);
+                if (write(vmi_sock, buf, strlen(buf)) < 0)
+                printdbg(
+                        "%s Failed to write to socket!\n", H(args->pkt->conn->id));
+                free(buf);
+            }
         }
     }
 
