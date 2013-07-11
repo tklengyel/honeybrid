@@ -38,6 +38,9 @@ int vmi_sock;
 struct sockaddr_in vmi_addr; /* VMI server address */
 unsigned short vmi_port; /* VMI server port */
 
+#define check_lan_comm(ip, dst, netmask) \
+    ((ip & netmask) == (dst & netmask))
+
 struct vmi_vm {
     gchar *key_ext;
     uint32_t logID;
@@ -183,12 +186,12 @@ int init_mod_vmi() {
     }
 
     if (NULL
-            == (vmi_server_port = g_hash_table_lookup(config,
-                    "vmi_server_port"))) {
+            == (vmi_server_port = g_hash_table_lookup(config, "vmi_server_port"))) {
         errx(1, "%s: VMI Server port not defined!!\n", __func__);
     }
 
-    printdbg("%s Init mod_vmi. VMI-Honeymon is defined at %s:%i\n", H(22),vmi_server_ip, *vmi_server_port);
+    printdbg(
+            "%s Init mod_vmi. VMI-Honeymon is defined at %s:%i\n", H(22), vmi_server_ip, *vmi_server_port);
 
     // socket: create the socket
     vmi_sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -253,7 +256,8 @@ mod_result_t mod_vmi_pick(struct mod_args *args) {
     }
 
     if (vm != NULL) {
-        printdbg("%s Picking %s (%lu).\n", H(args->pkt->conn->id), vm->name, vm->backendID);
+        printdbg(
+                "%s Picking %s (%lu).\n", H(args->pkt->conn->id), vm->name, vm->backendID);
         args->backend_use = vm->backendID;
         result = ACCEPT;
 
@@ -274,7 +278,7 @@ mod_result_t mod_vmi_pick(struct mod_args *args) {
 
 mod_result_t mod_vmi_control(struct mod_args *args) {
     // Only control packets coming from the backends
-    if (args->pkt->in == args->pkt->conn->target->front_handler->iface) {
+    if (args->pkt->origin != HIH) {
         return ACCEPT;
     }
 
@@ -301,24 +305,38 @@ mod_result_t mod_vmi_control(struct mod_args *args) {
     } else {
 
         //TODO: Check if intra-lan connection and redirect to INTRA if so
-        printdbg(
-                "%s Cought network event, sending signal!\n", H(args->pkt->conn->id));
+        if (check_lan_comm(
+                args->pkt->conn->hih.back_handler->ip->addr_ip,
+                args->pkt->packet.ip->daddr,
+                args->pkt->conn->hih.back_handler->netmask->addr_ip)) {
 
-        struct custom_conn_data *log = g_malloc0(
-                sizeof(struct custom_conn_data));
-        log->data = GUINT_TO_POINTER(vm->logID);
-        log->data_print = vmi_log;
+            printdbg("%s Intra-lan packet", H(1));
 
-        char *buf = g_malloc0(
-                snprintf(NULL, 0, "%s,%s,%s\n", vm->name,
-                        args->pkt->src_with_port, args->pkt->dst_with_port)
-                        + 1);
-        sprintf(buf, "%s,%s,%s\n", vm->name, args->pkt->src_with_port,
-                args->pkt->dst_with_port);
-        if (write(vmi_sock, buf, strlen(buf)) < 0)
-        printdbg("%s Failed to write to socket!\n", H(args->pkt->conn->id));
-        free(buf);
+            if((args->pkt->packet.ip->daddr & ~args->pkt->conn->hih.back_handler->netmask->addr_ip) == 255) {
+                printdbg("%s Broadcast packet", H(1));
+            }
 
+            result = ACCEPT;
+        } else {
+
+            printdbg(
+                    "%s Cought network event, sending signal!\n", H(args->pkt->conn->id));
+
+            struct custom_conn_data *log = g_malloc0(
+                    sizeof(struct custom_conn_data));
+            log->data = GUINT_TO_POINTER(vm->logID);
+            log->data_print = vmi_log;
+
+            char *buf = g_malloc0(
+                    snprintf(NULL, 0, "%s,%s,%s\n", vm->name,
+                            args->pkt->src_with_port, args->pkt->dst_with_port)
+                            + 1);
+            sprintf(buf, "%s,%s,%s\n", vm->name, args->pkt->src_with_port,
+                    args->pkt->dst_with_port);
+            if (write(vmi_sock, buf, strlen(buf)) < 0)
+            printdbg("%s Failed to write to socket!\n", H(args->pkt->conn->id));
+            free(buf);
+        }
     }
 
     return result;
