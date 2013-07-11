@@ -310,10 +310,10 @@ mod_result_t mod_vmi_control(struct mod_args *args) {
                 args->pkt->packet.ip->daddr,
                 args->pkt->conn->hih.back_handler->netmask->addr_ip)) {
 
-            printdbg("%s Intra-lan packet", H(1));
+            printdbg("%s Intra-lan packet\n", H(1));
 
-            if((args->pkt->packet.ip->daddr & ~args->pkt->conn->hih.back_handler->netmask->addr_ip) == 255) {
-                printdbg("%s Broadcast packet", H(1));
+            if((args->pkt->packet.ip->daddr & ~args->pkt->conn->hih.back_handler->netmask->addr_ip) == htons(255)) {
+                printdbg("%s Broadcast packet\n", H(1));
             }
 
             result = ACCEPT;

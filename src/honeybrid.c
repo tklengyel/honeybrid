@@ -795,7 +795,7 @@ void de_thread(gpointer data) {
                         proxy_int2ext(pkt);
 
                         // Only store packets if there are backends
-                        if (conn->target->back_handler_count > 0) {
+                        if (conn->target->back_handler_count > 0 || conn->target->back_picker) {
                             store_pkt(conn, pkt);
                         } else {
                             free_pkt(pkt);
@@ -811,7 +811,7 @@ void de_thread(gpointer data) {
                         proxy_int2ext(pkt);
 
                         // Only store packets if there are backends
-                        if (conn->target->back_handler_count > 0) {
+                        if (conn->target->back_handler_count > 0 || conn->target->back_picker) {
                             store_pkt(conn, pkt);
                         } else {
                             free_pkt(pkt);
@@ -835,7 +835,7 @@ void de_thread(gpointer data) {
                         }
 
                         // Only store packets if there are backends
-                        if (conn->target->back_handler_count > 0) {
+                        if (conn->target->back_handler_count > 0 || conn->target->back_picker) {
                             store_pkt(conn, pkt);
                         } else {
                             free_pkt(pkt);
@@ -946,7 +946,7 @@ void de_thread(gpointer data) {
                         }
 
                         // Only store packets if there are backends
-                        if (conn->target->back_handler_count > 0) {
+                        if (conn->target->back_handler_count > 0 || conn->target->back_picker) {
                             store_pkt(conn, pkt);
                         } else {
                             free_pkt(pkt);
