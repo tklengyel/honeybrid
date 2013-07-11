@@ -216,9 +216,10 @@ void decide(struct decision_holder *decision) {
                         "+%s;", node->module_name->str);
 
                 /* Global multi-hih module that tells which HIH ID to use */
-                if (decision->backend_use != 0) {
+                if (args.backend_use != 0) {
                     printdbg(
-                            "%s >> Module suggested using HIH %u\n", H(decision->pkt->conn->id), args.backend_use);
+                            "%s >> Module suggested using HIH %lu\n", H(decision->pkt->conn->id), args.backend_use);
+                    decision->backend_use=args.backend_use;
                 }
 
                 if (node->true_branch != NULL) {
@@ -399,7 +400,7 @@ status_t DE_process_packet(struct pkt_struct *pkt) {
             printdbg("%s Rule decides to accept\n", H(pkt->conn->id));
             switch (pkt->conn->state) {
                 case INIT:
-                    if (pkt->conn->target->back_handler_count == 0) {
+                    if (pkt->conn->target->back_handler_count == 0 && !pkt->conn->target->back_picker) {
                         printdbg(
                                 "%s No back rules and back picker is null\n", H(pkt->conn->id));
                         switch_state(pkt->conn, PROXY);

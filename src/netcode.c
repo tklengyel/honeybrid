@@ -964,7 +964,7 @@ void reset_lih(struct conn_struct* conn) {
     GSList * current = (GSList *) conn->BUFFER;
     do {
         tmp = (struct pkt_struct*) g_slist_nth_data(current, 0);
-        if (tmp->origin == LIH) {
+        if (tmp && tmp->origin == LIH) {
             p = &tmp->packet;
         }
     } while ((current = g_slist_next(current)) != NULL);

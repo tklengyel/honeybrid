@@ -172,7 +172,8 @@ mod_result_t mod_vmi_front(struct mod_args *args) {
 
 int init_mod_vmi() {
 
-    gchar *vmi_server_ip, *vmi_server_port;
+    gchar *vmi_server_ip;
+    int *vmi_server_port;
 
     if (NULL
             == (vmi_server_ip = (gchar *) g_hash_table_lookup(config,
@@ -182,12 +183,12 @@ int init_mod_vmi() {
     }
 
     if (NULL
-            == (vmi_server_port = (gchar *) g_hash_table_lookup(config,
+            == (vmi_server_port = g_hash_table_lookup(config,
                     "vmi_server_port"))) {
         errx(1, "%s: VMI Server port not defined!!\n", __func__);
     }
 
-    printdbg("%s Init mod vmi\n", H(22));
+    printdbg("%s Init mod_vmi. VMI-Honeymon is defined at %s:%i\n", H(22),vmi_server_ip, *vmi_server_port);
 
     // socket: create the socket
     vmi_sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -197,7 +198,7 @@ int init_mod_vmi() {
     bzero(&vmi_addr, sizeof(vmi_addr));
     vmi_addr.sin_family = AF_INET;
     vmi_addr.sin_addr.s_addr = inet_addr(vmi_server_ip);
-    vmi_addr.sin_port = htons(atoi(vmi_server_port));
+    vmi_addr.sin_port = htons(*vmi_server_port);
 
     // connect: create a connection with the server
     if (connect(vmi_sock, (struct sockaddr *) &vmi_addr, sizeof(vmi_addr)) < 0) errx(
@@ -252,17 +253,9 @@ mod_result_t mod_vmi_pick(struct mod_args *args) {
     }
 
     if (vm != NULL) {
-        //printf("%s Picking %s (%u).\n", H(args->pkt->conn->id), search.vm->name, search.vm->vmID);
+        printdbg("%s Picking %s (%lu).\n", H(args->pkt->conn->id), vm->name, vm->backendID);
         args->backend_use = vm->backendID;
         result = ACCEPT;
-
-        struct custom_conn_data *log = g_malloc0(
-                sizeof(struct custom_conn_data));
-        log->data = GUINT_TO_POINTER(vm->logID);
-        log->data_print = vmi_log;
-
-        args->pkt->conn->custom_data = g_slist_append(
-                args->pkt->conn->custom_data, log);
 
         // save the conns here (they could get expired so don't trust this list)
         g_mutex_lock(&vm->lock);

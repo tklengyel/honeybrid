@@ -429,8 +429,8 @@ struct DE_submit_args {
 struct mod_args {
     const struct node *node;
     struct pkt_struct *pkt;
-    const uint32_t backend_test;
-    uint32_t backend_use;
+    const uint64_t backend_test;
+    uint64_t backend_use;
 };
 
 struct mod_def {
