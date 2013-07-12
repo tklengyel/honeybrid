@@ -53,6 +53,7 @@ struct vmi_vm {
     gboolean close;
 };
 
+gboolean initialized;
 GMutex vmi_lock;
 GTree *vmi_vms_ext;
 GTree *vmi_vms_int;
@@ -95,7 +96,9 @@ void close_vmi_vm(struct vmi_vm *vm) {
 
     // ban the external ip
     g_mutex_lock(&banned_lock);
-    g_tree_insert(bannedIPs, strdup(vm->key_ext), GINT_TO_POINTER(TRUE));
+    if (!g_tree_lookup(bannedIPs, vm->key_ext)) {
+        g_tree_insert(bannedIPs, strdup(vm->key_ext), GINT_TO_POINTER(TRUE));
+    }
     g_mutex_unlock(&banned_lock);
 
     // drop any remaining connections
@@ -280,6 +283,7 @@ int init_mod_vmi() {
             == (vmi_server_ip = (gchar *) g_hash_table_lookup(config,
                     "vmi_server_ip"))) {
         // Not defined so skipping init
+        initialized = FALSE;
         return 0;
     }
 
@@ -322,18 +326,27 @@ int init_mod_vmi() {
     bannedIPs = g_tree_new_full((GCompareDataFunc) strcmp, NULL,
             (GDestroyNotify) g_free, NULL);
 
+    initialized = TRUE;
+
     return 0;
 }
 
 void close_mod_vmi() {
-    g_tree_destroy(vmi_vms_ext);
-    g_tree_destroy(vmi_vms_int);
-    g_tree_destroy(bannedIPs);
+    if (initialized) {
+        g_tree_destroy(vmi_vms_ext);
+        g_tree_destroy(vmi_vms_int);
+        g_tree_destroy(bannedIPs);
+    }
 }
 
 mod_result_t mod_vmi_pick(struct mod_args *args) {
 
     printdbg("%s VMI Backpick Module called\n", H(args->pkt->conn->id));
+
+    if(!initialized) {
+        printdbg("%s VMI module is uninitialized!\n");
+        return ACCEPT;
+    }
 
     mod_result_t result = REJECT;
     struct vmi_vm *vm = NULL;
@@ -387,6 +400,11 @@ mod_result_t mod_vmi_pick(struct mod_args *args) {
 mod_result_t mod_vmi_control(struct mod_args *args) {
     // Only control packets coming from the backends
     if (args->pkt->origin != HIH) {
+        return ACCEPT;
+    }
+
+    if(!initialized) {
+        printdbg("%s VMI module is uninitialized!\n");
         return ACCEPT;
     }
 
