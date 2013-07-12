@@ -279,11 +279,11 @@ void send_icmp_frag_needed(struct pkt_struct *pkt) {
             pkt->packet.ip, sizeof(struct iphdr) + 8);
 
     icmp->icmp_cksum = 0;
-    icmp->icmp_cksum = in_cksum((unsigned short *)icmp, psize);
+    icmp->icmp_cksum = in_cksum(icmp, psize);
     set_ip_checksum(ip);
 
     // Write the Ethernet frame to the interface.
-    if (pcap_inject(pkt->in->pcap, frame, sizeof(frame)) == -1) {
+    if (pcap_inject(pkt->in->pcap, frame, psize) == -1) {
         printdbg("%s ICMP fragmentation needed packet failed!\n", H(5));
     } else {
         printdbg("%s Sent ICMP fragmentation needed!\n", H(5));
@@ -522,8 +522,7 @@ static inline status_t fix_tcp_timestamps(struct tcphdr* th,
 }
 
 /*
- * NAT Ethernet and IP header, fix checksums
- * Only for non-forwarded connections!
+ * NAT Ethernet and IP header, fix checksums and add/strip VLAN headers
  */
 static inline void nat(struct pkt_struct* pkt) {
 

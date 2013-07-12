@@ -25,8 +25,8 @@
 
 #include <errno.h>
 
-#define MAX_LIFE        600*G_TIME_SPAN_SECOND
-#define IDLE_TIMEOUT    60*G_TIME_SPAN_SECOND
+#define MAX_LIFE        600
+#define IDLE_TIMEOUT    60
 #define VLAN_TRUNK_INTERFACE "honeynet"
 
 #define check_lan_comm(ip, dst, netmask) \
@@ -37,12 +37,12 @@ struct vmi_vm {
     uint32_t logID;
     uint64_t backendID;
     char *name;
-    gint64 start;
-    gint64 last_seen;
+    GTimer *start;
 
     struct handler *handler;
     struct target *target;
 
+    gboolean signal;
     GCond timeout;
     GMutex lock;
 
@@ -133,6 +133,7 @@ void close_vmi_vm(struct vmi_vm *vm) {
     g_mutex_clear(&vm->lock);
     g_cond_clear(&vm->timeout);
     g_slist_free_full(vm->conn_keys, g_free);
+    g_timer_destroy(vm->start);
     free(vm);
 }
 
@@ -140,6 +141,7 @@ void free_vmi_vm(struct vmi_vm *vm) {
     if (vm) {
         g_mutex_lock(&vm->lock);
         vm->close = TRUE;
+        vm->signal = TRUE;
         g_cond_signal(&vm->timeout);
         g_mutex_unlock(&vm->lock);
     }
@@ -152,13 +154,21 @@ void* vm_timer(void* data) {
     gint64 sleep_cycle;
     // Wait for timeout or signal
     g_mutex_lock(&vm->lock);
-    rewind: sleep_cycle = g_get_monotonic_time() + IDLE_TIMEOUT;
-    if (!g_cond_wait_until(&vm->timeout, &vm->lock, sleep_cycle)) {
-        printdbg(
-                "%s VM timer expired on %s. Sending close signal and shutting down HIH\n", H(1), vm->name);
-    } else {
-        //event, restart the timer
-        if (!vm->close) goto rewind;
+    rewind: sleep_cycle =
+            g_get_monotonic_time() + IDLE_TIMEOUT * G_TIME_SPAN_SECOND;
+    while (!vm->close) {
+        if (!g_cond_wait_until(&vm->timeout, &vm->lock, sleep_cycle)) {
+            printdbg(
+                    "%s VM timer expired on %s. Sending close signal and shutting down HIH\n", H(1), vm->name);
+            break;
+        } else {
+            if (vm->signal) {
+                vm->signal = FALSE;
+
+                //event, restart the timer
+                if (!vm->close) goto rewind;
+            }
+        }
     }
 
     g_mutex_unlock(&vm->lock);
@@ -219,8 +229,7 @@ struct vmi_vm *get_new_clone(struct pkt_struct *pkt, struct conn_struct *conn) {
 
         vm->key_ext = g_strdup(pkt->src);
         vm->handler = new_handler;
-        vm->last_seen = g_get_monotonic_time();
-        vm->start = vm->last_seen;
+        vm->start = g_timer_new();
         vm->logID = logID;
         vm->backendID = *key;
         vm->target = pkt->conn->target;
@@ -373,14 +382,10 @@ mod_result_t mod_vmi_pick(struct mod_args *args) {
         args->backend_use = vm->backendID;
         result = ACCEPT;
 
-        GTimeVal t;
-        g_get_current_time(&t);
-
         // save the conns here (they could get expired so don't trust this list)
         g_mutex_lock(&vm->lock);
         vm->conn_keys = g_slist_append(vm->conn_keys,
                 g_strdup(args->pkt->conn->ext_key));
-        vm->last_seen = t.tv_sec;
         g_mutex_unlock(&vm->lock);
 
     } else {
@@ -418,9 +423,7 @@ mod_result_t mod_vmi_control(struct mod_args *args) {
 
     g_mutex_lock(&vm->lock);
 
-    vm->last_seen = g_get_monotonic_time();
-
-    if (vm->start + MAX_LIFE >= vm->last_seen) {
+    if (g_timer_elapsed(vm->start, NULL) > MAX_LIFE) {
         printdbg(
                 "%s VM max life expired, sending signal!\n", H(args->pkt->conn->id));
 
@@ -460,6 +463,7 @@ mod_result_t mod_vmi_control(struct mod_args *args) {
         vm->close = TRUE;
     }
 
+    vm->signal = TRUE;
     signal: g_cond_signal(&vm->timeout);
     g_mutex_unlock(&vm->lock);
 

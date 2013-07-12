@@ -298,40 +298,31 @@ void init_variables() {
             "%s: Fatal error while creating links hash table.\n", __func__);
 
     /*! create the trees that track connections */
-    if (NULL
-            == (ext_tree1 = g_tree_new((GCompareFunc) g_strcmp0))) errx(1,
+    if (NULL == (ext_tree1 = g_tree_new((GCompareFunc) g_strcmp0))) errx(1,
             "%s: Fatal error while creating tree.\n", __func__);
 
-    if (NULL
-            == (ext_tree2 = g_tree_new((GCompareFunc) g_strcmp0))) errx(1,
+    if (NULL == (ext_tree2 = g_tree_new((GCompareFunc) g_strcmp0))) errx(1,
             "%s: Fatal error while creating tree.\n", __func__);
 
-    if (NULL
-            == (int_tree1 = g_tree_new((GCompareFunc) g_strcmp0))) errx(1,
+    if (NULL == (int_tree1 = g_tree_new((GCompareFunc) g_strcmp0))) errx(1,
             "%s: Fatal error while creating tree.\n", __func__);
 
-    if (NULL
-            == (int_tree2 = g_tree_new((GCompareFunc) g_strcmp0))) errx(1,
+    if (NULL == (int_tree2 = g_tree_new((GCompareFunc) g_strcmp0))) errx(1,
             "%s: Fatal error while creating tree.\n", __func__);
 
-    if (NULL
-            == (comm_pin_tree = g_tree_new((GCompareFunc) g_strcmp0))) errx(1,
+    if (NULL == (comm_pin_tree = g_tree_new((GCompareFunc) g_strcmp0))) errx(1,
             "%s: Fatal error while creating tree.\n", __func__);
 
-    if (NULL
-            == (target_pin_tree = g_tree_new((GCompareFunc) g_strcmp0))) errx(1,
+    if (NULL == (target_pin_tree = g_tree_new((GCompareFunc) g_strcmp0))) errx(
+            1, "%s: Fatal error while creating tree.\n", __func__);
+
+    if (NULL == (intra_tree1 = g_tree_new((GCompareFunc) g_strcmp0))) errx(1,
             "%s: Fatal error while creating tree.\n", __func__);
 
-    if (NULL
-            == (intra_tree1 = g_tree_new((GCompareFunc) g_strcmp0))) errx(1,
+    if (NULL == (intra_tree2 = g_tree_new((GCompareFunc) g_strcmp0))) errx(1,
             "%s: Fatal error while creating tree.\n", __func__);
 
-    if (NULL
-            == (intra_tree2 = g_tree_new((GCompareFunc) g_strcmp0))) errx(1,
-            "%s: Fatal error while creating tree.\n", __func__);
-
-    if (NULL
-            == (intra_pin_tree = g_tree_new((GCompareFunc) g_strcmp0))) errx(1,
+    if (NULL == (intra_pin_tree = g_tree_new((GCompareFunc) g_strcmp0))) errx(1,
             "%s: Fatal error while creating tree.\n", __func__);
 
     /*! create the hash table for the log engine */
@@ -363,7 +354,6 @@ void init_variables() {
     broadcast_allowed = ICONFIG("broadcast_allowed");
 }
 
-
 /*! init_pcap
  \brief Initialize pcap capture on each interface and start their respective threads */
 void init_pcap() {
@@ -385,8 +375,7 @@ void init_pcap() {
                     __func__, iface->name, pcapErr);
         }
 
-        iface->pcap = pcap_open_live(iface->name, BUFSIZE, 0, -1,
-                pcapErr);
+        iface->pcap = pcap_open_live(iface->name, BUFSIZE, 0, -1, pcapErr);
 
         if (iface->pcap == NULL) {
             errx(1, "%s Failed to open pcap interface on %s: %s!\n", __func__,
@@ -418,7 +407,6 @@ void init_pcap() {
         }
     }
 }
-
 
 /*! wait_pcap
  \brief Wait till all pcap looper threads exit */
@@ -528,9 +516,9 @@ int close_conn_trees() {
     g_tree_foreach(intra_tree1, (GTraverseFunc) expire_conn,
             GINT_TO_POINTER(delay));
 
-
     /// remove each key listed from the btree
-    g_ptr_array_foreach(entrytoclean, (GFunc) remove_conn, GINT_TO_POINTER(delay));
+    g_ptr_array_foreach(entrytoclean, (GFunc) remove_conn,
+            GINT_TO_POINTER(delay));
 
     /// free the array
     g_ptr_array_free(entrytoclean, TRUE);
@@ -595,9 +583,8 @@ void pcap_cb(u_char *input, const struct pcap_pkthdr *header,
         case ETHERTYPE_VLAN:
 
             // Uplink VLANs have to be configured with 8021q kernel module
-            if(iface->target) {
-                printdbg(
-                        "%s Packet is from an uplink VLAN. Skipped.\n", H(4));
+            if (iface->target) {
+                printdbg( "%s Packet is from an uplink VLAN. Skipped.\n", H(4));
                 return;
             }
 
@@ -608,7 +595,8 @@ void pcap_cb(u_char *input, const struct pcap_pkthdr *header,
                     ip = (struct iphdr *) (packet + VLAN_ETH_HLEN);
                     break;
                 case ETHERTYPE_ARP:
-                    send_arp_reply(ethertype, (struct interface *)input, packet);
+                    send_arp_reply(ethertype, (struct interface *) input,
+                            packet);
                     return;
                     break;
                 default:
@@ -672,7 +660,8 @@ status_t process_packet(struct interface *iface,
             ip = (struct iphdr *) (packet + ETHER_HDR_LEN);
             break;
         case ETHERTYPE_VLAN:
-            if (ntohs(((struct vlan_ethhdr *) packet)->h_vlan_encapsulated_proto) == ETHERTYPE_IP) {
+            if (ntohs(((struct vlan_ethhdr *) packet)->h_vlan_encapsulated_proto)
+                    == ETHERTYPE_IP) {
                 ip = (struct iphdr *) (packet + VLAN_ETH_HLEN);
             } else {
                 printdbg(
@@ -696,10 +685,10 @@ status_t process_packet(struct interface *iface,
     }
 
     /*if (ntohs(ip->tot_len) > header->len) {
-        printdbg(
-                "%s Truncated packet: %u/%u. Skipped.\n", H(4), header->len, ntohs(ip->tot_len));
-        return NOK;
-    }*/
+     printdbg(
+     "%s Truncated packet: %u/%u. Skipped.\n", H(4), header->len, ntohs(ip->tot_len));
+     return NOK;
+     }*/
 
     *pkt = NULL;
 
@@ -741,22 +730,26 @@ void de_thread(gpointer data) {
         }
         free_raw_pcap(raw);
 
-        if(pkt->fragmented) {
+        if (pkt->fragmented) {
+            printdbg(
+                    "%s Fragmented packet detected %s -> %s. Send ICMP fragmentation required packet!\n",
+                    H(1), pkt->src_with_port, pkt->dst_with_port);
             send_icmp_frag_needed(pkt);
             free_pkt(pkt);
             goto done;
         }
 
         if (pkt->broadcast) {
-            printdbg("%s Broadcast packet\n", H(1));
-
-            if(!broadcast_allowed) {
+            if (!broadcast_allowed) {
+                printdbg(
+                        "%s Broadcast packetd dropped: %s -> %s\n", H(1), pkt->src_with_port, pkt->dst_with_port);
                 free_pkt(pkt);
                 goto done;
             }
-
-        } else if(memcmp(&pkt->packet.eth->ether_dhost,&pkt->in->mac.addr_eth,ETH_ALEN)) {
-            printdbg("%s Packet's destination MAC doesn't match the interface. Are you in promisc mode?\n", H(1));
+        } else if (memcmp(&pkt->packet.eth->ether_dhost, &pkt->in->mac.addr_eth,
+                ETH_ALEN)) {
+            printdbg(
+                    "%s Packet's destination MAC doesn't match the interface. Are you in promisc mode?\n", H(1));
             free_pkt(pkt);
             goto done;
         }
@@ -771,8 +764,7 @@ void de_thread(gpointer data) {
         }
 
         printdbg(
-                "%s %s %s, %u bytes with %u bytes of data\n",
-                H(conn->id), lookup_role(pkt->origin), lookup_state(conn->state), pkt->size, pkt->data);
+                "%s %s %s, %u bytes with %u bytes of data\n", H(conn->id), lookup_role(pkt->origin), lookup_state(conn->state), pkt->size, pkt->data);
 
         /*! Check that there was no problem getting the current connection structure
          *  and make sure the STATE is valid */
@@ -814,7 +806,8 @@ void de_thread(gpointer data) {
                         proxy_int2ext(pkt);
 
                         // Only store packets if there are backends
-                        if (conn->target->back_handler_count > 0 || conn->target->back_picker) {
+                        if (conn->target->back_handler_count > 0
+                                || conn->target->back_picker) {
                             store_pkt(conn, pkt);
                         } else {
                             free_pkt(pkt);
@@ -830,7 +823,8 @@ void de_thread(gpointer data) {
                         proxy_int2ext(pkt);
 
                         // Only store packets if there are backends
-                        if (conn->target->back_handler_count > 0 || conn->target->back_picker) {
+                        if (conn->target->back_handler_count > 0
+                                || conn->target->back_picker) {
                             store_pkt(conn, pkt);
                         } else {
                             free_pkt(pkt);
@@ -854,7 +848,8 @@ void de_thread(gpointer data) {
                         }
 
                         // Only store packets if there are backends
-                        if (conn->target->back_handler_count > 0 || conn->target->back_picker) {
+                        if (conn->target->back_handler_count > 0
+                                || conn->target->back_picker) {
                             store_pkt(conn, pkt);
                         } else {
                             free_pkt(pkt);
@@ -894,7 +889,7 @@ void de_thread(gpointer data) {
                                     "%s Packet from HIH proxied directly to its EXT destination\n", H(conn->id));
                             proxy_int2ext(pkt);
                             free_pkt(pkt);
-                        } else if(pkt->conn->destination == INTRA) {
+                        } else if (pkt->conn->destination == INTRA) {
                             printdbg(
                                     "%s Packet from HIH proxied directly to its INTRA destination\n", H(conn->id));
                             proxy_hih2intra(pkt);
@@ -965,7 +960,8 @@ void de_thread(gpointer data) {
                         }
 
                         // Only store packets if there are backends
-                        if (conn->target->back_handler_count > 0 || conn->target->back_picker) {
+                        if (conn->target->back_handler_count > 0
+                                || conn->target->back_picker) {
                             store_pkt(conn, pkt);
                         } else {
                             free_pkt(pkt);
@@ -996,16 +992,16 @@ void de_thread(gpointer data) {
 
         done:
 
-        if(conn) {
+        if (conn) {
             g_mutex_unlock(&conn->lock);
         }
 
-        printdbg("%s de_thread end of loop\n", H(1));
+        printdbg("%s de_thread %u end of loop\n", H(1), thread_id);
     }
 }
 
 /*! main
- \brief process arguments, daemonize, init variables, create QUEUE handler and process each packet
+ \brief process arguments, daemonize, init variables and start processing
  \param[in] argc, number of arguments
  \param[in] argv, table with arguments
  *
