@@ -58,6 +58,8 @@
  */
 #define BUFSIZE 2048
 
+#define MTU 1500
+
 #define MIN_PACKET_SIZE 42 // Ethernet(14) + IPv4(20) + UDP(8)
 
 #define MIN_UDP_SIZE MIN_PACKET_SIZE

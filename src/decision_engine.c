@@ -212,8 +212,6 @@ void decide(struct decision_holder *decision) {
             case ACCEPT:
                 /*! if result is true, forward to true node or exit with 1 */
                 /*! update decision_rule information */
-                g_string_append_printf(decision->pkt->conn->decision_rule,
-                        "+%s;", node->module_name->str);
 
                 /* Global multi-hih module that tells which HIH ID to use */
                 if (args.backend_use != 0) {
@@ -237,9 +235,6 @@ void decide(struct decision_holder *decision) {
                 break;
             case REJECT:
             default:
-
-                g_string_append_printf(decision->pkt->conn->decision_rule,
-                        "-%s;", node->module_name->str);
 
                 if (node->false_branch != NULL) {
                     /*! go to next node */

@@ -63,6 +63,10 @@ status_t init_pkt(struct interface *iface, uint16_t ethertype,
     pkt->size = header->caplen;
     pkt->in = iface;
 
+    if(header->len != header->caplen) {
+        pkt->fragmented = TRUE;
+    }
+
     /*! Assign the packet IP header and payload to the packet structure */
     if (ethertype == ETHERTYPE_IP) {
 

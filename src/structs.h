@@ -199,6 +199,7 @@ struct interface {
     bpf_u_int32 netmask; /* subnet mask  */
     bpf_u_int32 ip_network; /* ip network */
     struct addr mac;
+    uint32_t mtu;
 
     // only if the iface is set as a target's default route
     struct target *target;
@@ -389,6 +390,7 @@ struct headers {
 struct pkt_struct {
     struct packet packet;
     struct headers original_headers;
+    gboolean fragmented;
     role_t origin;
     role_t destination;
     uint32_t data;

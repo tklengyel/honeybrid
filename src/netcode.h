@@ -53,4 +53,6 @@ void set_iface_info(struct interface *iface);
 
 void send_arp_reply(uint16_t ethertype, struct interface *iface, const u_char *packet);
 
+void send_icmp_frag_needed(struct pkt_struct *pkt);
+
 #endif // _NETCODE_H_

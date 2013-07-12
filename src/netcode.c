@@ -43,6 +43,9 @@
 #include "log.h"
 #include "connections.h"
 
+#define checksum_carry(x) \
+    (x = (x >> 16) + (x & 0xffff), (~(x + (x >> 16)) & 0xffff))
+
 /*! ip_checksum
  \brief IP checksum using in_cksum
  */
@@ -77,37 +80,29 @@
  \param[in] len the 32 bits data size
  \return sum a 16 bits checksum
  */
-static inline uint16_t in_cksum(const void *addr, size_t len) {
-    uint32_t sum = 0;
-    const uint16_t *w = addr;
-    size_t nleft = len;
+static inline uint16_t in_cksum(void *addr, int len)
+{
+    int sum;
+    int nleft;
+    unsigned short ans;
+    unsigned short *w;
 
-    /*!
-     * Our algorithm is simple, using a 32 bit accumulator (sum), we add
-     * sequential 16 bit words to it, and at the end, fold back all the
-     * carry bits from the top 16 bits into the lower 16 bits.
-     */
-    while (nleft > 1) {
+    sum = 0;
+    ans = 0;
+    nleft = len;
+    w = (unsigned short *)addr;
+
+    while (nleft > 1)
+    {
         sum += *w++;
-        if(sum & 0x80000000) {
-            /* if high order bit set, fold */
-            sum = (sum >> 16) + (sum & 0xFFFF);
-        }
         nleft -= 2;
     }
-
-    /*! mop up an odd byte, if necessary */
-    if (nleft == 1) {
-        uint16_t tmp = 0;
-        *(uint8_t *) (&tmp) = *(uint8_t *) w;
-        sum += tmp;
+    if (nleft == 1)
+    {
+        *(unsigned short *)(&ans) = *(unsigned short *)w;
+        sum += ans;
     }
-
-    /*! add back carry outs from top 16 bits to low 16 bits */
-    while(sum>>16) {
-        sum = (sum >> 16) + (sum & 0xFFFF);
-    }
-    return ((uint16_t) ~sum); /*! truncate to 16 bits */
+    return checksum_carry(sum);
 }
 
 // from http://www.microhowto.info/howto/send_an_arbitrary_ethernet_frame_using_libpcap/send_arp.c
@@ -141,6 +136,14 @@ void set_iface_info(struct interface *iface) {
     struct sockaddr_in* source_ip_addr = (struct sockaddr_in*) &ifr.ifr_addr;
     addr_pack(&iface->ip, ADDR_TYPE_IP, 0, &(source_ip_addr->sin_addr.s_addr),
             sizeof(uint32_t));
+
+    // Obtain the MTU
+    if (ioctl(fd, SIOCGIFMTU, &ifr) == -1) {
+        perror(0);
+        close(fd);
+        exit(1);
+    }
+    iface->mtu = ifr.ifr_mtu;
 
     // Obtain the source MAC address, copy into Ethernet header
     if (ioctl(fd, SIOCGIFHWADDR, &ifr) == -1) {
@@ -218,6 +221,72 @@ void send_arp_reply(uint16_t ethertype, struct interface *iface,
         } else {
             printdbg("%s Sent ARP reply!\n", H(5));
         }
+    }
+}
+
+void send_icmp_frag_needed(struct pkt_struct *pkt) {
+
+    size_t psize = 2*sizeof(struct iphdr) + sizeof(struct icmp_hdr) + sizeof(struct icmp_msg_needfrag) + 8;
+    gboolean is_vlan = FALSE;
+
+    if(pkt->packet.eth->ether_type == htons(ETHERTYPE_IP)) {
+        psize += ETHER_HDR_LEN;
+    } else {
+        psize += VLAN_ETH_HLEN;
+        is_vlan = TRUE;
+    }
+
+    unsigned char frame[psize];
+    bzero(&frame, psize);
+    struct ether_header *header = (struct ether_header *) frame;
+    struct iphdr *ip = NULL;
+    struct icmp_hdr *icmp = NULL;
+
+    // Construct Ethernet/VLAN header.
+    if (!is_vlan) {
+        header->ether_type = htons(ETHERTYPE_IP);
+        ip = (struct iphdr *) (frame + ETHER_HDR_LEN);
+        icmp =
+                (struct icmp_hdr *) (frame + ETHER_HDR_LEN
+                        + sizeof(struct iphdr));
+    } else {
+        header->ether_type = htons(ETHERTYPE_VLAN);
+        // copy the vlan-only portion of the header
+        memcpy(frame + ETHER_HDR_LEN, (char *) pkt->packet.vlan + ETHER_HDR_LEN,
+                VLAN_HLEN);
+        ip = (struct iphdr *) (frame + VLAN_ETH_HLEN);
+        icmp =
+                (struct icmp_hdr *) (frame + VLAN_ETH_HLEN
+                        + sizeof(struct iphdr));
+    }
+
+    memcpy(&header->ether_shost, &pkt->in->mac.addr_eth,
+            sizeof(header->ether_shost));
+    memcpy(&header->ether_dhost, &pkt->packet.eth->ether_shost,
+            sizeof(header->ether_dhost));
+
+    /*! fill up the IP header */
+    ip->version = 4;
+    ip->ihl = sizeof(struct iphdr) >> 2;
+    ip->tot_len = ntohs(psize);
+    ip->frag_off = ntohs(0x4000);
+    ip->ttl = 0x40;
+    ip->protocol = IPPROTO_TCP;
+    ip->saddr = pkt->original_headers.ip->daddr;
+    ip->daddr = pkt->original_headers.ip->saddr;
+
+    icmp_pack_hdr_needfrag(icmp, ICMP_UNREACH, ICMP_UNREACH_NEEDFRAG, pkt->in->mtu,
+            pkt->packet.ip, sizeof(struct iphdr) + 8);
+
+    icmp->icmp_cksum = 0;
+    icmp->icmp_cksum = in_cksum((unsigned short *)icmp, psize);
+    set_ip_checksum(ip);
+
+    // Write the Ethernet frame to the interface.
+    if (pcap_inject(pkt->in->pcap, frame, sizeof(frame)) == -1) {
+        printdbg("%s ICMP fragmentation needed packet failed!\n", H(5));
+    } else {
+        printdbg("%s Sent ICMP fragmentation needed!\n", H(5));
     }
 }
 

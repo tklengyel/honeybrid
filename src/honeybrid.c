@@ -579,11 +579,6 @@ void close_all(void) {
 void pcap_cb(u_char *input, const struct pcap_pkthdr *header,
         const u_char *packet) {
 
-    if (header->len != header->caplen) {
-        printdbg("%s Truncated packet. Captured %u out of %u bytes. Skipped.\n", H(4), header->caplen, header->len);
-        return;
-    }
-
     struct interface *iface = (struct interface *) input;
     struct iphdr *ip = NULL;
     struct vlan_ethhdr *veth = NULL;
@@ -696,11 +691,11 @@ status_t process_packet(struct interface *iface,
         return NOK;
     }
 
-    if (ntohs(ip->tot_len) > header->len) {
+    /*if (ntohs(ip->tot_len) > header->len) {
         printdbg(
                 "%s Truncated packet: %u/%u. Skipped.\n", H(4), header->len, ntohs(ip->tot_len));
         return NOK;
-    }
+    }*/
 
     *pkt = NULL;
 
@@ -741,6 +736,12 @@ void de_thread(gpointer data) {
             goto done;
         }
         free_raw_pcap(raw);
+
+        if(pkt->fragmented) {
+            send_icmp_frag_needed(pkt);
+            free_pkt(pkt);
+            goto done;
+        }
 
         /*! Initialize the connection structure (into conn) and get the state of the connection */
         if (init_conn(pkt, &conn) == NOK) {
