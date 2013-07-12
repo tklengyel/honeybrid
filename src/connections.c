@@ -402,7 +402,7 @@ int conn_lookup(struct pkt_struct *pkt, struct conn_struct **conn_out) {
 
     int ret = 0;
 
-    printdbg("%s Looking for connection %s <-> %s!\n",
+    printdbg("%s Looking for connection %s -> %s!\n",
             H(1), pkt->src_with_port, pkt->dst_with_port);
 
     g_mutex_lock(&connlock);

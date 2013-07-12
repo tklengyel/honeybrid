@@ -43,9 +43,6 @@
 #include "log.h"
 #include "connections.h"
 
-#define checksum_carry(x) \
-    (x = (x >> 16) + (x & 0xffff), (~(x + (x >> 16)) & 0xffff))
-
 /*! ip_checksum
  \brief IP checksum using in_cksum
  */
@@ -80,29 +77,32 @@
  \param[in] len the 32 bits data size
  \return sum a 16 bits checksum
  */
-static inline uint16_t in_cksum(void *addr, int len)
-{
-    int sum;
-    int nleft;
-    unsigned short ans;
-    unsigned short *w;
+static inline uint16_t in_cksum(const void *addr, uint32_t len) {
+    uint32_t sum = 0;
+    const uint16_t *w = addr;
+    int nleft = len;
 
-    sum = 0;
-    ans = 0;
-    nleft = len;
-    w = (unsigned short *)addr;
-
-    while (nleft > 1)
-    {
+    /*!
+     * Our algorithm is simple, using a 32 bit accumulator (sum), we add
+     * sequential 16 bit words to it, and at the end, fold back all the
+     * carry bits from the top 16 bits into the lower 16 bits.
+     */
+    while (nleft > 1) {
         sum += *w++;
         nleft -= 2;
     }
-    if (nleft == 1)
-    {
-        *(unsigned short *)(&ans) = *(unsigned short *)w;
-        sum += ans;
+
+    /*! mop up an odd byte, if necessary */
+    if (nleft == 1) {
+        uint16_t tmp = 0;
+        *(uint8_t *) (&tmp) = *(uint8_t *) w;
+        sum += tmp;
     }
-    return checksum_carry(sum);
+
+    /*! add back carry outs from top 16 bits to low 16 bits */
+    sum = (sum >> 16) + (sum & 0xffff); /*! add hi 16 to low 16 */
+    sum += (sum >> 16); /*! add carry */
+    return ((uint16_t) ~sum); /*! truncate to 16 bits */
 }
 
 // from http://www.microhowto.info/howto/send_an_arbitrary_ethernet_frame_using_libpcap/send_arp.c

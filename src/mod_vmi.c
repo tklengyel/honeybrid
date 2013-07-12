@@ -144,7 +144,9 @@ void free_vmi_vm(struct vmi_vm *vm) {
 
 void* vm_timer(void* data) {
     struct vmi_vm *vm = (struct vmi_vm*) data;
-    gint sleep_cycle;
+    if(!vm) goto done;
+
+    gint64 sleep_cycle;
     // Wait for timeout or signal
     g_mutex_lock(&vm->lock);
     rewind: sleep_cycle =
@@ -160,6 +162,7 @@ void* vm_timer(void* data) {
     g_mutex_unlock(&vm->lock);
     close_vmi_vm(vm);
 
+    done:
     pthread_exit(NULL);
     return NULL;
 }
@@ -226,7 +229,7 @@ struct vmi_vm *get_new_clone(struct pkt_struct *pkt, struct conn_struct *conn) {
         g_mutex_init(&vm->lock);
         g_cond_init(&vm->timeout);
         pthread_t c;
-        pthread_create(&c, NULL, (void *) vm, (void *) vm_timer);
+        pthread_create(&c, NULL, (void *) vm_timer, (void *) vm);
         pthread_detach(c);
 
         g_mutex_lock(&vmi_lock);
