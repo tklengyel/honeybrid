@@ -25,18 +25,9 @@
 
 #include <errno.h>
 
-#define ATTACK_TIMEOUT 600
+#define MAX_LIFE 600
+#define IDLE_TIMEOUT 60
 #define VLAN_TRUNK_INTERFACE "honeynet"
-
-GThread *vmi_status_updater = NULL;
-GMutex vmi_lock;
-GTree *vmi_vms_ext;
-GTree *vmi_vms_int;
-GTree *bannedIPs;
-int vmi_sock;
-
-struct sockaddr_in vmi_addr; /* VMI server address */
-unsigned short vmi_port; /* VMI server port */
 
 #define check_lan_comm(ip, dst, netmask) \
     ((ip & netmask) == (dst & netmask))
@@ -50,13 +41,27 @@ struct vmi_vm {
     gint last_seen;
 
     struct handler *handler;
+    struct target *target;
 
+    GCond timeout;
     GMutex lock;
 
     // To manipulate connections associated
     // we need to keys
     GSList *conn_keys;
+
+    gboolean close;
 };
+
+GMutex vmi_lock;
+GTree *vmi_vms_ext;
+GTree *vmi_vms_int;
+GMutex banned_lock;
+GTree *bannedIPs;
+
+int vmi_sock;
+struct sockaddr_in vmi_addr; /* VMI server address */
+unsigned short vmi_port; /* VMI server port */
 
 const char* vmi_log(gpointer data) {
     static char vmi_log_buff[12];
@@ -64,14 +69,99 @@ const char* vmi_log(gpointer data) {
     return vmi_log_buff;
 }
 
+void open_tcp(int *s) {
+    if (!s) return;
+    // socket: create the socket
+    *s = socket(AF_INET, SOCK_STREAM, 0);
+    if (*s < 0) errx(1, "%s: ERROR opening socket", __func__);
+
+    // connect: create a connection with the server
+    if (connect(*s, (struct sockaddr *) &vmi_addr, sizeof(vmi_addr)) < 0) errx(
+            1, "%s: ERROR connecting", __func__);
+}
+
+void close_vmi_vm(struct vmi_vm *vm) {
+    //timeout, send signal
+    g_mutex_lock(&vmi_lock);
+
+    int fd;
+    open_tcp(&fd);
+    char *buf = g_malloc0(snprintf(NULL, 0, "close,%s\n", vm->name) + 1);
+    sprintf(buf, "close,%s\n", vm->name);
+    if (write(fd, buf, strlen(buf)) < 0)
+    printdbg( "%s Failed to write to socket!\n", H(1));
+    free(buf);
+    shutdown(fd, 0);
+
+    // ban the external ip
+    g_mutex_lock(&banned_lock);
+    g_tree_insert(bannedIPs, strdup(vm->key_ext), GINT_TO_POINTER(TRUE));
+    g_mutex_unlock(&banned_lock);
+
+    // drop any remaining connections
+    GSList* loop = vm->conn_keys;
+    while (loop) {
+        g_mutex_lock(&connlock);
+        struct conn_struct *conn = g_tree_lookup(ext_tree1, loop->data);
+        g_mutex_unlock(&connlock);
+
+        if (conn) {
+            g_mutex_lock(&conn->lock);
+            switch_state(conn, DROP);
+            g_mutex_unlock(&conn->lock);
+        }
+        loop = loop->next;
+    }
+
+    // remove the vm from the vmi trees
+    g_tree_steal(vmi_vms_ext, vm->key_ext);
+    g_tree_remove(vmi_vms_int, &vm->backendID);
+
+    // remove the handler from the target
+    g_mutex_lock(&vm->target->lock);
+    g_tree_remove(vm->target->back_handlers, &vm->backendID);
+    g_mutex_unlock(&vm->target->lock);
+
+    g_mutex_unlock(&vmi_lock);
+
+    // free the struct
+    g_free(vm->key_ext);
+    g_free(vm->name);
+    g_mutex_clear(&vm->lock);
+    g_cond_clear(&vm->timeout);
+    g_slist_free_full(vm->conn_keys, g_free);
+    free(vm);
+}
+
 void free_vmi_vm(struct vmi_vm *vm) {
     if (vm) {
-        g_free(vm->key_ext);
-        g_free(vm->name);
-        g_mutex_clear(&vm->lock);
-
-        free(vm);
+        g_mutex_lock(&vm->lock);
+        vm->close = TRUE;
+        g_cond_signal(&vm->timeout);
+        g_mutex_unlock(&vm->lock);
     }
+}
+
+void* vm_timer(void* data) {
+    struct vmi_vm *vm = (struct vmi_vm*) data;
+    gint sleep_cycle;
+    // Wait for timeout or signal
+    g_mutex_lock(&vm->lock);
+    rewind: sleep_cycle =
+            g_get_monotonic_time() + IDLE_TIMEOUT * G_TIME_SPAN_SECOND;
+    if (!g_cond_wait_until(&vm->timeout, &vm->lock, sleep_cycle)) {
+        printdbg(
+                "%s VM timer expired. Sending close signal and shutting down HIH\n", H(1));
+    } else {
+        //event, restart the timer
+        if (!vm->close) goto rewind;
+    }
+
+    g_mutex_unlock(&vm->lock);
+    close_vmi_vm(vm);
+
+    pthread_exit(NULL);
+    return NULL;
 }
 
 struct vmi_vm *get_new_clone(struct pkt_struct *pkt, struct conn_struct *conn) {
@@ -132,7 +222,12 @@ struct vmi_vm *get_new_clone(struct pkt_struct *pkt, struct conn_struct *conn) {
         vm->start = vm->last_seen;
         vm->logID = logID;
         vm->backendID = *key;
+        vm->target = pkt->conn->target;
         g_mutex_init(&vm->lock);
+        g_cond_init(&vm->timeout);
+        pthread_t c;
+        pthread_create(&c, NULL, (void *) vm, (void *) vm_timer);
+        pthread_detach(c);
 
         g_mutex_lock(&vmi_lock);
         g_tree_insert(vmi_vms_ext, vm->key_ext, vm);
@@ -228,9 +323,9 @@ int init_mod_vmi() {
 }
 
 void close_mod_vmi() {
-    if (vmi_status_updater) {
-        g_thread_join(vmi_status_updater);
-    }
+    g_tree_destroy(vmi_vms_ext);
+    g_tree_destroy(vmi_vms_int);
+    g_tree_destroy(bannedIPs);
 }
 
 mod_result_t mod_vmi_pick(struct mod_args *args) {
@@ -244,14 +339,20 @@ mod_result_t mod_vmi_pick(struct mod_args *args) {
         return result;
     }
 
-    if (g_tree_lookup(bannedIPs, args->pkt->src)) {
+    g_mutex_lock(&banned_lock);
+    gpointer banned = g_tree_lookup(bannedIPs, args->pkt->src);
+    g_mutex_unlock(&banned_lock);
+
+    if (banned) {
         printf("%s Attacker %s is banned from the HIHs!\n",
                 H(args->pkt->conn->id), args->pkt->src);
         return result;
     } else {
         //printf("Check if he already uses a clone\n");
 
+        g_mutex_lock(&vmi_lock);
         vm = g_tree_lookup(vmi_vms_ext, args->pkt->src);
+        g_mutex_unlock(&vmi_lock);
         if (!vm) vm = get_new_clone(args->pkt, args->pkt->conn);
     }
 
@@ -261,10 +362,14 @@ mod_result_t mod_vmi_pick(struct mod_args *args) {
         args->backend_use = vm->backendID;
         result = ACCEPT;
 
+        GTimeVal t;
+        g_get_current_time(&t);
+
         // save the conns here (they could get expired so don't trust this list)
         g_mutex_lock(&vm->lock);
         vm->conn_keys = g_slist_append(vm->conn_keys,
                 g_strdup(args->pkt->conn->ext_key));
+        vm->last_seen = t.tv_sec;
         g_mutex_unlock(&vm->lock);
 
     } else {
@@ -286,16 +391,22 @@ mod_result_t mod_vmi_control(struct mod_args *args) {
 
     mod_result_t result = REJECT;
 
+    g_mutex_lock(&vmi_lock);
     struct vmi_vm *vm = g_tree_lookup(vmi_vms_int, &args->pkt->conn->hih.hihID);
+    g_mutex_unlock(&vmi_lock);
+
+    if (!vm) {
+        // Not a VMI HIH
+        return ACCEPT;
+    }
+
+    g_mutex_lock(&vm->lock);
 
     struct addr dst;
     addr_pack(&dst, ADDR_TYPE_IP, 32, &args->pkt->packet.ip->daddr,
             sizeof(ip_addr_t));
 
-    if (!vm) {
-        // Not a VMI HIH
-        result = ACCEPT;
-    } else if (!addr_cmp(&dst, &args->pkt->conn->first_pkt_src_ip)) {
+    if (!addr_cmp(&dst, &args->pkt->conn->first_pkt_src_ip)) {
         // Packet is a reply in an existing connection
         result = ACCEPT;
     } else if (g_tree_lookup(args->pkt->conn->target->intra_handlers,
@@ -312,7 +423,9 @@ mod_result_t mod_vmi_control(struct mod_args *args) {
 
             printdbg("%s Intra-lan packet\n", H(1));
 
-            if((args->pkt->packet.ip->daddr & ~args->pkt->conn->hih.back_handler->netmask->addr_ip) == htons(255)) {
+            if ((args->pkt->packet.ip->daddr
+                    & ~args->pkt->conn->hih.back_handler->netmask->addr_ip)
+                    == 255) {
                 printdbg("%s Broadcast packet\n", H(1));
             }
 
@@ -324,29 +437,18 @@ mod_result_t mod_vmi_control(struct mod_args *args) {
                 result = ACCEPT;
             } else {
 
-                // Don't touch DNS, we will use mod_dns_control.
+                // TODO: Don't touch DNS, we will use mod_dns_control.
 
                 printdbg(
                         "%s Cought network event, sending signal!\n", H(args->pkt->conn->id));
 
-                struct custom_conn_data *log = g_malloc0(
-                        sizeof(struct custom_conn_data));
-                log->data = GUINT_TO_POINTER(vm->logID);
-                log->data_print = vmi_log;
-
-                char *buf = g_malloc0(
-                        snprintf(NULL, 0, "%s,%s,%s\n", vm->name,
-                                args->pkt->src_with_port,
-                                args->pkt->dst_with_port) + 1);
-                sprintf(buf, "%s,%s,%s\n", vm->name, args->pkt->src_with_port,
-                        args->pkt->dst_with_port);
-                if (write(vmi_sock, buf, strlen(buf)) < 0)
-                printdbg(
-                        "%s Failed to write to socket!\n", H(args->pkt->conn->id));
-                free(buf);
+                vm->close = TRUE;
             }
         }
     }
+
+    g_cond_signal(&vm->timeout);
+    g_mutex_unlock(&vm->lock);
 
     return result;
 }

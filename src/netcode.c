@@ -66,7 +66,7 @@
     } while(0)
 
 /*! udp_checksum
- \brief UDP checksum using in_cksum
+ \brief TCP checksum using in_cksum
  */
 #define set_tcp_checksum(hdr) \
     do { \
