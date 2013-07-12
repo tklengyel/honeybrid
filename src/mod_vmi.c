@@ -25,8 +25,8 @@
 
 #include <errno.h>
 
-#define MAX_LIFE 600
-#define IDLE_TIMEOUT 60
+#define MAX_LIFE        600*G_TIME_SPAN_SECOND
+#define IDLE_TIMEOUT    60*G_TIME_SPAN_SECOND
 #define VLAN_TRUNK_INTERFACE "honeynet"
 
 #define check_lan_comm(ip, dst, netmask) \
@@ -37,8 +37,8 @@ struct vmi_vm {
     uint32_t logID;
     uint64_t backendID;
     char *name;
-    gint start;
-    gint last_seen;
+    gint64 start;
+    gint64 last_seen;
 
     struct handler *handler;
     struct target *target;
@@ -147,16 +147,15 @@ void free_vmi_vm(struct vmi_vm *vm) {
 
 void* vm_timer(void* data) {
     struct vmi_vm *vm = (struct vmi_vm*) data;
-    if(!vm) goto done;
+    if (!vm) goto done;
 
     gint64 sleep_cycle;
     // Wait for timeout or signal
     g_mutex_lock(&vm->lock);
-    rewind: sleep_cycle =
-            g_get_monotonic_time() + IDLE_TIMEOUT * G_TIME_SPAN_SECOND;
+    rewind: sleep_cycle = g_get_monotonic_time() + IDLE_TIMEOUT;
     if (!g_cond_wait_until(&vm->timeout, &vm->lock, sleep_cycle)) {
         printdbg(
-                "%s VM timer expired. Sending close signal and shutting down HIH\n", H(1));
+                "%s VM timer expired on %s. Sending close signal and shutting down HIH\n", H(1), vm->name);
     } else {
         //event, restart the timer
         if (!vm->close) goto rewind;
@@ -165,8 +164,7 @@ void* vm_timer(void* data) {
     g_mutex_unlock(&vm->lock);
     close_vmi_vm(vm);
 
-    done:
-    pthread_exit(NULL);
+    done: pthread_exit(NULL);
     return NULL;
 }
 
@@ -217,14 +215,11 @@ struct vmi_vm *get_new_clone(struct pkt_struct *pkt, struct conn_struct *conn) {
         g_tree_insert(conn->target->back_handlers, key, new_handler);
         g_mutex_unlock(&conn->target->lock);
 
-        GTimeVal t;
-        g_get_current_time(&t);
-
         // We need to pin the attacker's ip and destination ip to this VM
 
         vm->key_ext = g_strdup(pkt->src);
         vm->handler = new_handler;
-        vm->last_seen = t.tv_sec;
+        vm->last_seen = g_get_monotonic_time();
         vm->start = vm->last_seen;
         vm->logID = logID;
         vm->backendID = *key;
@@ -343,8 +338,8 @@ mod_result_t mod_vmi_pick(struct mod_args *args) {
 
     printdbg("%s VMI Backpick Module called\n", H(args->pkt->conn->id));
 
-    if(!initialized) {
-        printdbg("%s VMI module is uninitialized!\n");
+    if (!initialized) {
+        printdbg("%s VMI module is uninitialized!\n", H(1));
         return ACCEPT;
     }
 
@@ -403,8 +398,8 @@ mod_result_t mod_vmi_control(struct mod_args *args) {
         return ACCEPT;
     }
 
-    if(!initialized) {
-        printdbg("%s VMI module is uninitialized!\n");
+    if (!initialized) {
+        printdbg("%s VMI module is uninitialized!\n", H(0));
         return ACCEPT;
     }
 
@@ -423,6 +418,16 @@ mod_result_t mod_vmi_control(struct mod_args *args) {
 
     g_mutex_lock(&vm->lock);
 
+    vm->last_seen = g_get_monotonic_time();
+
+    if (vm->start + MAX_LIFE >= vm->last_seen) {
+        printdbg(
+                "%s VM max life expired, sending signal!\n", H(args->pkt->conn->id));
+
+        vm->close = TRUE;
+        goto signal;
+    }
+
     struct addr dst;
     addr_pack(&dst, ADDR_TYPE_IP, 32, &args->pkt->packet.ip->daddr,
             sizeof(ip_addr_t));
@@ -434,41 +439,28 @@ mod_result_t mod_vmi_control(struct mod_args *args) {
             args->pkt->dst)) {
         // Packet is going to a defined INTRA
         result = ACCEPT;
+    } else if (check_lan_comm(
+            args->pkt->conn->hih.back_handler->ip->addr_ip,
+            args->pkt->packet.ip->daddr,
+            args->pkt->conn->hih.back_handler->netmask->addr_ip)) {
+
+        printdbg("%s Intra-lan packet\n", H(1));
+
+        result = ACCEPT;
+    } else if (!strcmp(vm->key_ext, args->pkt->dst)) {
+        // Connection back to the original IP
+        result = ACCEPT;
     } else {
 
-        //TODO: Check if intra-lan connection and redirect to INTRA if so
-        if (check_lan_comm(
-                args->pkt->conn->hih.back_handler->ip->addr_ip,
-                args->pkt->packet.ip->daddr,
-                args->pkt->conn->hih.back_handler->netmask->addr_ip)) {
+        // TODO: Don't touch DNS, we will use mod_dns_control.
 
-            printdbg("%s Intra-lan packet\n", H(1));
+        printdbg(
+                "%s Cought network event, sending signal!\n", H(args->pkt->conn->id));
 
-            if ((args->pkt->packet.ip->daddr
-                    & ~args->pkt->conn->hih.back_handler->netmask->addr_ip)
-                    == 255) {
-                printdbg("%s Broadcast packet\n", H(1));
-            }
-
-            result = ACCEPT;
-        } else {
-
-            if (!strcmp(vm->key_ext, args->pkt->dst)) {
-                // Connection back to the original IP
-                result = ACCEPT;
-            } else {
-
-                // TODO: Don't touch DNS, we will use mod_dns_control.
-
-                printdbg(
-                        "%s Cought network event, sending signal!\n", H(args->pkt->conn->id));
-
-                vm->close = TRUE;
-            }
-        }
+        vm->close = TRUE;
     }
 
-    g_cond_signal(&vm->timeout);
+    signal: g_cond_signal(&vm->timeout);
     g_mutex_unlock(&vm->lock);
 
     return result;

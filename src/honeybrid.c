@@ -357,6 +357,10 @@ void init_variables() {
 
     /*! Enable threads */
     threading = OK;
+
+    addr_pton(mac_broadcast_string, &broadcast);
+
+    broadcast_allowed = ICONFIG("broadcast_allowed");
 }
 
 
@@ -739,6 +743,20 @@ void de_thread(gpointer data) {
 
         if(pkt->fragmented) {
             send_icmp_frag_needed(pkt);
+            free_pkt(pkt);
+            goto done;
+        }
+
+        if (pkt->broadcast) {
+            printdbg("%s Broadcast packet\n", H(1));
+
+            if(!broadcast_allowed) {
+                free_pkt(pkt);
+                goto done;
+            }
+
+        } else if(memcmp(&pkt->packet.eth->ether_dhost,&pkt->in->mac.addr_eth,ETH_ALEN)) {
+            printdbg("%s Packet's destination MAC doesn't match the interface. Are you in promisc mode?\n", H(1));
             free_pkt(pkt);
             goto done;
         }

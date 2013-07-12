@@ -79,3 +79,5 @@ const char *mod_result_string[] = {
 	[ACCEPT] = "ACCEPT",
 	[REJECT] = "REJECT"
 };
+
+const char mac_broadcast_string[] = "FF:FF:FF:FF:FF:FF";

@@ -324,7 +324,7 @@ void connection_log(const struct conn_struct *conn) {
 
     /*! if log rotation is configured, then we call rotate_connection_log()
      */
-    if (ICONFIG("log_rotation") == 1) {
+    if (ICONFIG("log_rotation")) {
         rotate_connection_log(0);
     }
 

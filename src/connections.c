@@ -87,6 +87,10 @@ status_t init_pkt(struct interface *iface, uint16_t ethertype,
         pkt->packet.ip = (struct iphdr *) ((char *)pkt->packet.vlan + VLAN_ETH_HLEN);
     }
 
+    if(!memcmp(&pkt->packet.eth->ether_dhost,&broadcast.addr_eth,ETH_ALEN)) {
+        pkt->broadcast = TRUE;
+    }
+
     pkt->original_headers.ip = g_memdup(pkt->packet.ip, (pkt->packet.ip->ihl << 2));
 
     char tmp[INET_ADDRSTRLEN];

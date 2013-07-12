@@ -104,8 +104,8 @@ typedef enum {
 } output_t;
 
 typedef enum {
-	NOK = -1,
-	OK = 1
+	NOK = FALSE,
+	OK = TRUE
 } status_t;
 
 typedef enum {

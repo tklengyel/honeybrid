@@ -391,6 +391,7 @@ struct pkt_struct {
     struct packet packet;
     struct headers original_headers;
     gboolean fragmented;
+    gboolean broadcast;
     role_t origin;
     role_t destination;
     uint32_t data;

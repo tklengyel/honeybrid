@@ -150,4 +150,10 @@ gboolean debug;
  */
 int fdebug;
 
+/*!
+ \Def broadcast
+ */
+gboolean broadcast_allowed;
+struct addr broadcast;
+
 #endif //__GLOBALS_H__
