@@ -42,8 +42,9 @@ honeybrid_SOURCES += mod_source.c
 honeybrid_SOURCES += mod_source_time.c
 honeybrid_SOURCES += mod_yesno.c
 honeybrid_SOURCES += mod_backpick_random.c
-honeybrid_SOURCES += mod_vmi.c
 honeybrid_SOURCES += mod_dns_control.c
+honeybrid_SOURCES += mod_vmi.c
+honeybrid_SOURCES += mod_vmi_legacy.c
 
 if DIONAEA
 honeybrid_SOURCES += mod_dionaea.c mod_dionaea.h

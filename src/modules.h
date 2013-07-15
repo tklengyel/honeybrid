@@ -89,6 +89,10 @@ int init_mod_vmi();
 void close_mod_vmi();
 mod_result_t mod_vmi(struct mod_args *args);
 
+/*!** MODULE VMI LEGACY **/
+int init_mod_vmi_legacy();
+mod_result_t mod_vmi_legacy(struct mod_args *args);
+
 /*!** MODULE DNS CONTROL **/
 mod_result_t mod_dns_control(struct mod_args *args);
 
