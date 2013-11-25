@@ -34,6 +34,8 @@
 
 #include "modules.h"
 
+#ifdef DISABLE
+
 GThread *vmi_com_thread;
 GRWLock vmi_lock;
 GQueue *vmi_send, *vmi_recv;
@@ -441,3 +443,9 @@ mod_result_t mod_vmi_legacy(struct mod_args *args) {
 
     return res;
 }
+
+#else
+int init_mod_vmi_legacy(){ return 0; }
+mod_result_t mod_vmi_legacy(__attribute__((unused)) struct mod_args *args) { return DEFER; }
+
+#endif

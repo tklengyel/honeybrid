@@ -61,8 +61,10 @@ int reset_ext;
 
 int exclusive_hih;
 
+uint32_t target_counter;
+
 /*! \brief global array of pointers to hold target structures */
-GHashTable *targets;
+GTree *targets;
 
 /*! \brief global hash table that contain the values of the configuration file  */
 GHashTable *config;
@@ -98,6 +100,10 @@ GTree *intra_pin_tree;
 /*! \brief security writing lock for the Binary Trees
  */
 GMutex connlock;
+
+/*! \brief security writing lock for the target table
+ */
+GRWLock targetlock;
 
 /*! \def list of module to save
  */

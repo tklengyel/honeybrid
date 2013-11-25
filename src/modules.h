@@ -30,6 +30,7 @@
 #include "globals.h"
 #include "structs.h"
 #include "convenience.h"
+#include "management.h"
 
 void init_modules();
 void close_modules();

@@ -455,13 +455,11 @@ status_t log_std(const struct conn_struct *conn, const char *proto,
         const char *status, GString **status_info, gdouble duration,
         output_t output) {
 
-    char src[INET_ADDRSTRLEN];
-    char dst[INET_ADDRSTRLEN];
+	char *src, *dst;
+	GET_IP_STRINGS(conn->first_pkt_src_ip.addr_ip, conn->first_pkt_dst_ip.addr_ip, src, dst);
+
     uint16_t src_port;
     uint16_t dst_port;
-
-    inet_ntop(AF_INET, &(conn->first_pkt_src_ip.addr_ip), src, INET_ADDRSTRLEN);
-    inet_ntop(AF_INET, &(conn->first_pkt_dst_ip.addr_ip), dst, INET_ADDRSTRLEN);
     src_port = ntohs(conn->first_pkt_src_port);
     dst_port = ntohs(conn->first_pkt_dst_port);
 

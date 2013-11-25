@@ -26,6 +26,7 @@ honeybrid_SOURCES += types.h globals.h
 honeybrid_SOURCES += constants.c constants.h
 honeybrid_SOURCES += structs.c structs.h
 honeybrid_SOURCES += convenience.c convenience.h
+honeybrid_SOURCES += management.c management.h
 honeybrid_SOURCES += connections.c connections.h
 honeybrid_SOURCES += decision_engine.c decision_engine.h
 honeybrid_SOURCES += modules.c modules.h

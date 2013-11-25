@@ -21,7 +21,7 @@
 
 AC_PREREQ(2.61)
 AC_INIT([Honeybrid - Advanced Honeypot Gateway],
-        [1.0.0-rc],
+        [1.0.0],
         [Tamas K Lengyel, tamas.k.lengyel@gmail.com],
         [honeybrid],
         [http://honeybrid.sf.net])
@@ -142,6 +142,11 @@ PKG_CHECK_MODULES([CRYPTO], [libcrypto], [
 	AC_DEFINE([HAVE_CRYPTO], [1], [Crypto library found])
 	], [])
 PKG_CHECK_MODULES([GLIB], [glib-2.0 >= 2.32 gthread-2.0])
+
+AC_CHECK_TYPE([__int128_t],
+              [AC_DEFINE([HAVE_INT128_T], [1],
+                         [Define to 1 if the system has the type `__int128_t'.])],
+              [AC_ERROR(No __int128_t present)], [])
 
 AC_ARG_ENABLE(xmpp,
  [  --enable-xmpp=yes    specify if you want to compile Honeybrid with Dionaea-XMPP module],

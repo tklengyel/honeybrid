@@ -23,7 +23,7 @@ target		{ return TARGET; }
 module		{ return MODULE; }
 frontend 	{ return FRONTEND; }
 backend  	{ return BACKEND; }
-limit 	 	{ return LIMIT; }
+internet 	{ return INTERNET; }
 backpick	{ return BACKPICK; }
 link	    { return LINK; }
 filter	    { return FILTER; }
@@ -36,7 +36,7 @@ netmask		{ return NETMASK; }
 internal	{ return INTERNAL; }
 with		{ return WITH; }
 exclusive 	{ return EXCLUSIVE; }
-
+intralan    { return INTRALAN; }
 
 	/* Delimiters */
 "{"		{ return OPEN; }

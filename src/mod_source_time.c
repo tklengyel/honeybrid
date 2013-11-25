@@ -50,7 +50,8 @@ mod_result_t mod_source_time(struct mod_args *args) {
     gint now = (t.tv_sec);
 
     /*! get the IP address from the packet */
-    key_src = args->pkt->src;
+    key_src =  g_malloc0(snprintf(NULL, 0, "%u", args->pkt->packet.ip->saddr)+1);
+    sprintf(key_src, "%u", args->pkt->packet.ip->saddr);
 
     printdbg("%s source IP is %s\n", H(args->pkt->conn->id), key_src);
 
@@ -159,6 +160,7 @@ mod_result_t mod_source_time(struct mod_args *args) {
 
     save_backup(backup, backup_file);
 
+    free(key_src);
     return result;
 }
 

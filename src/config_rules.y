@@ -7,6 +7,7 @@
 #include "decision_engine.h"
 #include "modules.h"
 #include "log.h"
+#include "management.h"
 
 extern int  yylineno;
 extern char *yytext;
@@ -26,10 +27,10 @@ int yywrap() {
 
 /* Honeybrid configuration keywords */
 %token MODULE FILTER FRONTEND BACKEND
-%token BACKPICK LIMIT CONFIGURATION 
+%token BACKPICK INTERNET CONFIGURATION 
 %token TARGET LINK HW VLAN DEFAULT 
 %token ROUTE VIA NETMASK INTERNAL
-%token WITH EXCLUSIVE
+%token WITH EXCLUSIVE INTRALAN
 
 /* Content Variables */
 %token <number> NUMBER
@@ -212,35 +213,31 @@ module_settings: {
 	}
 	;
 
-target: TARGET QUOTE WORD QUOTE DEFAULT ROUTE VIA mac OPEN rule END {
+target: TARGET OPEN rule END {
+        add_target($3);
+    }
+    | TARGET DEFAULT ROUTE VIA QUOTE WORD QUOTE mac OPEN rule END {
 
-		struct interface *iface = g_hash_table_lookup(links, $3);
+		struct interface *iface = g_hash_table_lookup(links, $6);
 		if(iface == NULL) {
 			yyerror("\tTarget interface is not defined!\n");
-		}
-		
-		if(NULL != g_hash_table_lookup(targets, $3)) {
-			yyerror("\tThis link is already assigned to a target!\n");
 		}
 		
 		iface->target = $10;
 		iface->target->default_route=iface;
 		iface->target->default_route_mac=$8;
 		
-		printdbg("\tAdding target with default link '%s'\n", $3);
-		g_hash_table_insert(targets, $3, $10);
+		printdbg("\tAdding target with default link '%s'\n", $6);
+		add_target($10);
 	}
 	;
 
 rule: 	{
 		$$ = (struct target *)g_malloc0(sizeof(struct target));
-		
-		g_mutex_init(&$$->lock);
-		
-		// This tree holds the main backend structures
-		$$->back_handlers = g_tree_new_full((GCompareDataFunc)intcmp, NULL, g_free, (GDestroyNotify)free_handler);
-		$$->intra_handlers = g_tree_new_full((GCompareDataFunc)addr_cmp, NULL, NULL, (GDestroyNotify)free_handler);
-		
+		$$->back_handlers = g_tree_new_full((GCompareDataFunc) intcmp,
+                    NULL, g_free, (GDestroyNotify) free_handler);
+        $$->intra_handlers = g_tree_new_full((GCompareDataFunc) intcmp,
+                    NULL, g_free, NULL);		
 	}
 	| rule FRONTEND QUOTE WORD QUOTE honeynet mac netmask vlan SEMICOLON {
 		$$->front_handler = g_malloc0(sizeof(struct handler));
@@ -374,20 +371,17 @@ rule: 	{
     		
     	struct handler *intra_handler = g_malloc0(sizeof(struct handler));
     	intra_handler->iface=iface;
-    
-    	intra_handler->intra_target_ip=$6;
         intra_handler->ip=$8;
        	intra_handler->mac=$9;
        	intra_handler->netmask = $10;
        	intra_handler->vlan.i = htons($11 & ((1 << 12)-1));
        	intra_handler->exclusive = 1;  	
-       	
        	intra_handler->ip_str=g_strdup(addr_ntoa($8));
        	    
-    	g_tree_insert($$->intra_handlers, intra_handler->intra_target_ip, intra_handler);
-    		
+        add_intra_handler($$, $6, intra_handler);
+
         char *mac = g_strdup(addr_ntoa(intra_handler->mac));
-        char *intra_ip_str = g_strdup(addr_ntoa(intra_handler->intra_target_ip));    
+        char *intra_ip_str = g_strdup(addr_ntoa($6));    
         
     	g_printerr("\tInternal target for %s defined at %s hw %s VLAN %u on '%s'\n",
     		intra_ip_str, intra_handler->ip_str, mac, $11, $4);
@@ -405,21 +399,18 @@ rule: 	{
             
         struct handler *intra_handler = g_malloc0(sizeof(struct handler));
         intra_handler->iface=g_hash_table_lookup(links, $4);
-    
-    	intra_handler->intra_target_ip = $6;
         intra_handler->ip=$8;
        	intra_handler->mac=$9;
        	intra_handler->netmask = $10;
        	intra_handler->vlan.i = htons($11 & ((1 << 12)-1));  
         intra_handler->rule=DE_create_tree($13->str);
         intra_handler->exclusive = 1;
-        
         intra_handler->ip_str=g_strdup(addr_ntoa($8));
     
-    	g_tree_insert($$->intra_handlers, intra_handler->intra_target_ip, intra_handler);
-        
+        add_intra_handler($$, $6, intra_handler);
+    
         char *mac = g_strdup(addr_ntoa(intra_handler->mac));
-        char *intra_ip_str = g_strdup(addr_ntoa(intra_handler->intra_target_ip));
+        char *intra_ip_str = g_strdup(addr_ntoa($6));
         
         g_printerr("\tInternal target for %s defined at %s hw %s VLAN %u on '%s' with rule: %s\n", 
         	intra_ip_str, intra_handler->ip_str,
@@ -431,11 +422,17 @@ rule: 	{
         free(intra_ip_str);
         
     }
-	| rule LIMIT QUOTE equation QUOTE SEMICOLON {
+	| rule INTERNET QUOTE equation QUOTE SEMICOLON {
 		g_printerr("\tControl rule defined as: %s\n", $4->str);
 		$$->control_rule = DE_create_tree($4->str);
 		g_string_free($4, TRUE);
 	}
+	
+    | rule INTRALAN QUOTE equation QUOTE SEMICOLON {
+        g_printerr("\tControl rule defined as: %s\n", $4->str);
+        $$->intra_rule = DE_create_tree($4->str);
+        g_string_free($4, TRUE);
+    }
 	;
 
 honeynet: EXPR {

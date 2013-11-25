@@ -179,7 +179,6 @@ void send_arp_reply(uint16_t ethertype, struct interface *iface,
         psize += VLAN_ETH_HLEN;
     }
 
-    // Only reply to ARP requests that don't match our interface's IP
     if (request->ea_hdr.ar_op == htons(ARPOP_REQUEST)) {
 
         unsigned char frame[psize];
@@ -198,6 +197,7 @@ void send_arp_reply(uint16_t ethertype, struct interface *iface,
             reply = (struct ether_arp *) (frame + VLAN_ETH_HLEN);
         }
 
+        // TODO: The MAC address here could be randomly generated!
         memcpy(&header->ether_shost, &iface->mac.addr_eth,
                 sizeof(header->ether_shost));
         memcpy(&header->ether_dhost, &request->arp_sha,
@@ -209,6 +209,7 @@ void send_arp_reply(uint16_t ethertype, struct interface *iface,
         reply->arp_hln = ETHER_ADDR_LEN;
         reply->arp_pln = sizeof(in_addr_t);
         reply->arp_op = htons(ARPOP_REPLY);
+
         memcpy(&reply->arp_sha, &iface->mac.addr_eth, sizeof(reply->arp_sha));
 
         // Copy IP into ARP reply.

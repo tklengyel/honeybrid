@@ -28,6 +28,7 @@
 
 // Include standard headers
 #include <stdint.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -179,5 +180,7 @@ typedef enum {
 
 struct mod_args;
 typedef mod_result_t (*module_function)(struct mod_args *);
+
+typedef unsigned __int128 uint128_t;
 
 #endif
