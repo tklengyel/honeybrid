@@ -50,8 +50,6 @@ typedef enum {
 
     MOD_VMI,
 
-    MOD_VMI_LEGACY,
-
     MOD_CONTROL,
 
     MOD_BACKPICK_RANDOM,
@@ -87,8 +85,6 @@ const struct mod_def module_definitions[__MAX_HONEYBRID_MODULE] = {
     [MOD_COUNTER] = { .name = "counter", .function = mod_counter},
 
     [MOD_VMI] = {.name = "vmi", .function = mod_vmi},
-
-    [MOD_VMI_LEGACY] = {.name = "vmi_legacy", .function = mod_vmi_legacy},
 
     [MOD_CONTROL] = {.name = "control", .function = mod_control},
 
@@ -133,8 +129,6 @@ void init_modules() {
 #endif
 
     init_mod_vmi();
-
-    init_mod_vmi_legacy();
 }
 
 void close_modules() {

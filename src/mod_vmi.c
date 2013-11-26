@@ -483,6 +483,10 @@ mod_result_t mod_vmi_control(struct mod_args *args) {
 	return result;
 }
 
+mod_result_t mod_vmi_intra(struct mod_args *args) {
+	return DEFER;
+}
+
 mod_result_t mod_vmi(struct mod_args *args) {
 
 	gchar *mode;
@@ -505,6 +509,8 @@ mod_result_t mod_vmi(struct mod_args *args) {
 	//  mod_vmi_back(args);
 	else if (!strcmp(mode, "control"))
 		return mod_vmi_control(args);
+	else if (!strcmp(mode, "intra"))
+		return mod_vmi_intra(args);
 
 	return DEFER;
 }

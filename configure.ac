@@ -148,36 +148,6 @@ AC_CHECK_TYPE([__int128_t],
                          [Define to 1 if the system has the type `__int128_t'.])],
               [AC_ERROR(No __int128_t present)], [])
 
-AC_ARG_ENABLE(xmpp,
- [  --enable-xmpp=yes    specify if you want to compile Honeybrid with Dionaea-XMPP module],
- [ if   test "x$enableval" = "xyes" ; then
- 	dionaea="yes"
-	PKG_CHECK_MODULES([XMPP], [gloox libxml++-2.6], [
-		PKG_CHECK_MODULES([XML2], [libxml-2.0], [
-			AC_MSG_NOTICE([Enabling XMPP listener and Dionaea module])
-			AC_DEFINE([HAVE_XMPP], [1], [XMPP listener enabled])
-			])
-		],
-		[AC_MSG_NOTICE([XMPP listener won't be compiled])])
-		
-		if test "x$XMPP_LIBS" != "x" -a "xXML2_LIBS" == "x"; then
-			AC_ERROR(XML2 libs are missing)
-		fi
-		
-		if test "x$XML2_LIBS" != "x" -a "x$XML2_CFLAGS" != "x"; then
-			xmpp_listener="tools/dionaea_xmpp_listener"
-		else
-			xmpp_listener=""
-		fi
-		
-		AC_SUBST(xmpp_listener)
-		AC_CONFIG_FILES(tools/dionaea_xmpp_listener/Makefile)
-	else
-		dionaea="no"
-	fi
- ])
-AM_CONDITIONAL([DIONAEA], [test x$dionaea = xyes])
-
 AC_PATH_PROG(MYSQL_CONFIG, mysql_config)
 if test "x$MYSQL_CONFIG" != "x"; then
 	MYSQL_LIBS=$($MYSQL_CONFIG --libs)
