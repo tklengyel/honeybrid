@@ -775,20 +775,24 @@ status_t proxy_int2ext(struct pkt_struct* pkt) {
  */
 status_t proxy_hih2intra(struct pkt_struct* pkt) {
 
-    pkt->out = pkt->conn->intra_handler->iface;
-    pkt->nat.dst_mac = pkt->conn->intra_handler->mac;
-    pkt->nat.dst_ip = pkt->conn->intra_handler->ip;
-    pkt->nat.dst_vlan = &pkt->conn->intra_handler->vlan;
-    pkt->destination = INTRA;
+	if (likely(pkt->conn->intra_handler)) {
+		pkt->out = pkt->conn->intra_handler->iface;
+		pkt->nat.dst_mac = pkt->conn->intra_handler->mac;
+		pkt->nat.dst_ip = pkt->conn->intra_handler->ip;
+		pkt->nat.dst_vlan = &pkt->conn->intra_handler->vlan;
+		pkt->destination = INTRA;
 
-    nat(pkt);
+		nat(pkt);
 
-    printdbg("%s Sending HIH2INTRA PROXY packet on %s\n", H(6), pkt->out->tag);
+		printdbg(
+				"%s Sending HIH2INTRA PROXY packet on %s\n", H(6), pkt->out->tag);
 
-    if (pkt->out
-            && pcap_inject(pkt->out->pcap, pkt->packet.eth, pkt->size) != -1) {
-        return OK;
-    }
+		if (pkt->out
+				&& pcap_inject(pkt->out->pcap, pkt->packet.eth, pkt->size)
+						!= -1) {
+			return OK;
+		}
+	}
 
     return NOK;
 }
@@ -802,24 +806,29 @@ status_t proxy_hih2intra(struct pkt_struct* pkt) {
  */
 status_t proxy_intra2hih(struct pkt_struct* pkt) {
 
-    pkt->out = pkt->conn->hih.back_handler->iface;
-    if(pkt->conn->pin_ip) {
-        pkt->nat.src_ip = pkt->conn->pin_ip;
-    } else {
-        pkt->nat.src_ip = &pkt->conn->first_pkt_dst_ip;
-    }
-    pkt->nat.dst_mac = &pkt->conn->first_pkt_src_mac;
-    pkt->nat.dst_vlan = &pkt->conn->hih.back_handler->vlan;
-    pkt->destination = HIH;
+	if (likely(pkt->conn->hih.back_handler)) {
 
-    nat(pkt);
+		pkt->out = pkt->conn->hih.back_handler->iface;
+		if (pkt->conn->pin_ip) {
+			pkt->nat.src_ip = pkt->conn->pin_ip;
+		} else {
+			pkt->nat.src_ip = &pkt->conn->first_pkt_dst_ip;
+		}
+		pkt->nat.dst_mac = &pkt->conn->first_pkt_src_mac;
+		pkt->nat.dst_vlan = &pkt->conn->hih.back_handler->vlan;
+		pkt->destination = HIH;
 
-    printdbg("%s Sending INTRA2HIH PROXY packet on %s\n", H(6), pkt->out->tag);
+		nat(pkt);
 
-    if (pkt->out
-            && pcap_inject(pkt->out->pcap, pkt->packet.eth, pkt->size) != -1) {
-        return OK;
-    }
+		printdbg(
+				"%s Sending INTRA2HIH PROXY packet on %s\n", H(6), pkt->out->tag);
+
+		if (pkt->out
+				&& pcap_inject(pkt->out->pcap, pkt->packet.eth, pkt->size)
+						!= -1) {
+			return OK;
+		}
+	}
 
     return NOK;
 }
@@ -829,60 +838,65 @@ status_t proxy_intra2hih(struct pkt_struct* pkt) {
  */
 status_t forward_ext2hih(struct pkt_struct* pkt) {
 
-    pkt->out = pkt->conn->hih.back_handler->iface;
-    pkt->destination = HIH;
+	if (likely(pkt->conn->hih.back_handler)) {
 
-    memcpy(&pkt->packet.eth->ether_shost, &pkt->out->mac.addr_eth, ETH_ALEN);
-    memcpy(&pkt->packet.eth->ether_dhost,
-            &pkt->conn->hih.back_handler->mac->addr_eth, ETH_ALEN);
-    memcpy(&pkt->packet.ip->daddr, &pkt->conn->hih.back_handler->ip->addr_ip,
-            sizeof(ip_addr_t));
+		pkt->out = pkt->conn->hih.back_handler->iface;
+		pkt->destination = HIH;
 
-    if (pkt->conn->hih.back_handler->vlan.i) {
-        if (pkt->packet.eth->ether_type != htons(ETHERTYPE_VLAN)) {
-            // Regular ethernet headers are not at the start of FRAME
-            // to save space for this scenario, so we just move it there
-            memmove(pkt->packet.FRAME, pkt->packet.eth, ETHER_HDR_LEN);
-            pkt->size += VLAN_HLEN;
-        }
+		memcpy(&pkt->packet.eth->ether_shost, &pkt->out->mac.addr_eth,
+				ETH_ALEN);
+		memcpy(&pkt->packet.eth->ether_dhost,
+				&pkt->conn->hih.back_handler->mac->addr_eth, ETH_ALEN);
+		memcpy(&pkt->packet.ip->daddr,
+				&pkt->conn->hih.back_handler->ip->addr_ip, sizeof(ip_addr_t));
 
-        pkt->packet.vlan = (struct vlan_ethhdr *) pkt->packet.FRAME;
-        pkt->packet.vlan->h_vlan_proto = htons(ETHERTYPE_VLAN);
-        pkt->packet.vlan->h_vlan_encapsulated_proto = htons(ETHERTYPE_IP);
-        pkt->packet.vlan->h_vlan_TCI = pkt->conn->hih.back_handler->vlan;
-    }
+		if (pkt->conn->hih.back_handler->vlan.i) {
+			if (pkt->packet.eth->ether_type != htons(ETHERTYPE_VLAN)) {
+				// Regular ethernet headers are not at the start of FRAME
+				// to save space for this scenario, so we just move it there
+				memmove(pkt->packet.FRAME, pkt->packet.eth, ETHER_HDR_LEN);
+				pkt->size += VLAN_HLEN;
+			}
 
-    printdbg(
-            "%s forwarding packet to HIH %lu\n", H(pkt->conn->id), pkt->conn->hih.hihID);
+			pkt->packet.vlan = (struct vlan_ethhdr *) pkt->packet.FRAME;
+			pkt->packet.vlan->h_vlan_proto = htons(ETHERTYPE_VLAN);
+			pkt->packet.vlan->h_vlan_encapsulated_proto = htons(ETHERTYPE_IP);
+			pkt->packet.vlan->h_vlan_TCI = pkt->conn->hih.back_handler->vlan;
+		}
 
-    /*!If TCP, we update the destination port, the acknowledgement number if any, and the checksum*/
-    switch (pkt->packet.ip->protocol) {
-        case IPPROTO_TCP:
+		printdbg(
+				"%s forwarding packet to HIH %lu\n", H(pkt->conn->id), pkt->conn->hih.hihID);
 
-            pkt->packet.tcp->dest = pkt->conn->hih.port;
-            if (pkt->packet.tcp->ack == 1) {
-                pkt->packet.tcp->ack_seq = htonl(
-                        ntohl(pkt->packet.tcp->ack_seq)
-                        + ~(pkt->conn->hih.delta) + 1);
-            }
+		/*!If TCP, we update the destination port, the acknowledgement number if any, and the checksum*/
+		switch (pkt->packet.ip->protocol) {
+		case IPPROTO_TCP:
 
-            set_tcp_checksum(pkt->packet.tcppacket);
-            break;
+			pkt->packet.tcp->dest = pkt->conn->hih.port;
+			if (pkt->packet.tcp->ack == 1) {
+				pkt->packet.tcp->ack_seq = htonl(
+						ntohl(pkt->packet.tcp->ack_seq)
+								+ ~(pkt->conn->hih.delta) + 1);
+			}
 
-            /*!If UDP, we update the destination port and the checksum*/
-        case IPPROTO_UDP:
+			set_tcp_checksum(pkt->packet.tcppacket);
+			break;
 
-            pkt->packet.udp->dest = pkt->conn->hih.port;
-            set_udp_checksum(pkt->packet.udppacket);
-            break;
-    }
+			/*!If UDP, we update the destination port and the checksum*/
+		case IPPROTO_UDP:
 
-    set_ip_checksum(pkt->packet.ip);
+			pkt->packet.udp->dest = pkt->conn->hih.port;
+			set_udp_checksum(pkt->packet.udppacket);
+			break;
+		}
 
-    if (pkt->out
-            && pcap_inject(pkt->out->pcap, pkt->packet.eth, pkt->size) != -1) {
-        return OK;
-    }
+		set_ip_checksum(pkt->packet.ip);
+
+		if (pkt->out
+				&& pcap_inject(pkt->out->pcap, pkt->packet.eth, pkt->size)
+						!= -1) {
+			return OK;
+		}
+	}
 
     return NOK;
 
@@ -893,57 +907,61 @@ status_t forward_ext2hih(struct pkt_struct* pkt) {
  */
 status_t forward_hih2ext(struct pkt_struct* pkt) {
 
-    pkt->out = pkt->conn->target->default_route;
-    pkt->destination = EXT;
+	if (likely(pkt->conn->target->default_route)) {
+		pkt->out = pkt->conn->target->default_route;
+		pkt->destination = EXT;
 
-    memcpy(&pkt->packet.eth->ether_shost,
-            &pkt->conn->first_pkt_dst_mac.addr_eth, ETH_ALEN);
-    memcpy(&pkt->packet.eth->ether_dhost,
-            &pkt->conn->first_pkt_src_mac.addr_eth, ETH_ALEN);
-    memcpy(&pkt->packet.ip->saddr, &pkt->conn->first_pkt_dst_ip.addr_ip,
-            sizeof(ip_addr_t));
+		memcpy(&pkt->packet.eth->ether_shost,
+				&pkt->conn->first_pkt_dst_mac.addr_eth, ETH_ALEN);
+		memcpy(&pkt->packet.eth->ether_dhost,
+				&pkt->conn->first_pkt_src_mac.addr_eth, ETH_ALEN);
+		memcpy(&pkt->packet.ip->saddr, &pkt->conn->first_pkt_dst_ip.addr_ip,
+				sizeof(ip_addr_t));
 
-    if (ntohs(pkt->packet.eth->ether_type) == ETHERTYPE_VLAN) {
-        // Uplink VLANs should be configured with the 8021q kernel module
-        // so we are stripping any VLAN header downlink had
-        printdbg("%s Stripping VLAN header from HIH packet going to EXT\n", H(1));
+		if (ntohs(pkt->packet.eth->ether_type) == ETHERTYPE_VLAN) {
+			// Uplink VLANs should be configured with the 8021q kernel module
+			// so we are stripping any VLAN header downlink had
+			printdbg(
+					"%s Stripping VLAN header from HIH packet going to EXT\n", H(1));
 
-        memmove(pkt->packet.FRAME + VLAN_HLEN, pkt->packet.FRAME,
-                ETHER_HDR_LEN);
-        pkt->packet.eth =
-                (struct ether_header *) (pkt->packet.FRAME + VLAN_HLEN);
-        pkt->packet.eth->ether_type = htons(ETHERTYPE_IP);
-        pkt->size -= VLAN_HLEN;
-    }
+			memmove(pkt->packet.FRAME + VLAN_HLEN, pkt->packet.FRAME,
+					ETHER_HDR_LEN);
+			pkt->packet.eth = (struct ether_header *) (pkt->packet.FRAME
+					+ VLAN_HLEN);
+			pkt->packet.eth->ether_type = htons(ETHERTYPE_IP);
+			pkt->size -= VLAN_HLEN;
+		}
 
-    printdbg("%s forwarding packet to EXT\n", H(pkt->conn->id));
+		printdbg("%s forwarding packet to EXT\n", H(pkt->conn->id));
 
-    /*!If TCP, we update the source port, the sequence number, and the checksum*/
-    switch (pkt->packet.ip->protocol) {
-        case IPPROTO_TCP:
-            pkt->packet.tcp->source = pkt->conn->hih.port;
-            pkt->packet.tcp->seq = htonl(
-                    ntohl(pkt->packet.tcp->seq) + pkt->conn->hih.delta);
+		/*!If TCP, we update the source port, the sequence number, and the checksum*/
+		switch (pkt->packet.ip->protocol) {
+		case IPPROTO_TCP:
+			pkt->packet.tcp->source = pkt->conn->hih.port;
+			pkt->packet.tcp->seq = htonl(
+					ntohl(pkt->packet.tcp->seq) + pkt->conn->hih.delta);
 
-            fix_tcp_timestamps(pkt->packet.tcp, pkt->conn);
-            set_tcp_checksum(pkt->packet.tcppacket);
+			fix_tcp_timestamps(pkt->packet.tcp, pkt->conn);
+			set_tcp_checksum(pkt->packet.tcppacket);
 
-            break;
-            /*!If UDP, we update the source port and the checksum*/
-        case IPPROTO_UDP:
-            pkt->packet.udp->source = pkt->conn->hih.port;
+			break;
+			/*!If UDP, we update the source port and the checksum*/
+		case IPPROTO_UDP:
+			pkt->packet.udp->source = pkt->conn->hih.port;
 
-            set_udp_checksum(pkt->packet.udppacket);
+			set_udp_checksum(pkt->packet.udppacket);
 
-            break;
-    }
+			break;
+		}
 
-    set_ip_checksum(pkt->packet.ip);
+		set_ip_checksum(pkt->packet.ip);
 
-    if (pkt->out
-            && pcap_inject(pkt->out->pcap, pkt->packet.eth, pkt->size) != -1) {
-        return OK;
-    }
+		if (pkt->out
+				&& pcap_inject(pkt->out->pcap, pkt->packet.eth, pkt->size)
+						!= -1) {
+			return OK;
+		}
+	}
 
     return NOK;
 }
@@ -957,7 +975,7 @@ status_t forward_hih2ext(struct pkt_struct* pkt) {
 
 void reply_reset(struct pkt_struct *pkt, struct interface *iface) {
 
-    if (pkt && iface) {
+    if (likely(pkt && iface)) {
 
         uint32_t size;
         unsigned char frame[VLAN_ETH_HLEN + sizeof(struct tcp_packet)];

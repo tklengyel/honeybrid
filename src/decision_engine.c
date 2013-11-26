@@ -356,7 +356,7 @@ status_t DE_process_packet(struct pkt_struct *pkt) {
 			get_decision(&decision);
 
 			/* We need to get ACCEPT or REJECT from the intra rule */
-			if (decision.result == DE_DEFER) {
+			if (decision.result == DE_DEFER || decision.result == DE_NO_RULE) {
 				decision.result = DE_DROP;
 			}
 		}

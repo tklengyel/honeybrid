@@ -26,13 +26,11 @@
 
 #include "types.h"
 #include "structs.h"
+#include "connections.h"
 
 status_t add_target(struct target *target);
 
 status_t add_intra_handler(struct target *target, struct addr *target_ip,
 		struct handler *handler);
-
-status_t switch_to_intra(struct conn_struct *conn,
-		struct handler *intra_handler);
 
 #endif /* MANAGEMENT_H_ */

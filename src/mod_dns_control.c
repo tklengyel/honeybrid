@@ -142,7 +142,7 @@ mod_result_t mod_dns_control(struct mod_args *args) {
 			free(target_ip);
 		}
 
-		if(OK == switch_to_intra(args->pkt->conn, intra_handler)) {
+		if(OK == switch_conn_to_intra(args->pkt->conn, intra_handler)) {
 			result = ACCEPT;
 		}
 	}

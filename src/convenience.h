@@ -77,8 +77,8 @@ void ips2strings(const ip_addr_t *src, const ip_addr_t *dst, char **srcstr, char
 		GET_IP_STRINGS(key1->src_ip, key1->dst_ip, _key1_src, _key1_dst); \
 		GET_IP_STRINGS(key2->src_ip, key2->dst_ip, _key2_src, _key2_dst); \
 		printf(format, tag, \
-			key1->protocol, ntohs(key1->vlan_id), _key1_src, ntohs(key1->src_port), _key1_dst, ntohs(key1->dst_port), \
-			key2->protocol, ntohs(key2->vlan_id), _key2_src, ntohs(key2->src_port), _key2_dst, ntohs(key2->dst_port) \
+			key1->protocol, key1->vlan_id>>4, _key1_src, ntohs(key1->src_port), _key1_dst, ntohs(key1->dst_port), \
+			key2->protocol, key2->vlan_id>>4, _key2_src, ntohs(key2->src_port), _key2_dst, ntohs(key2->dst_port) \
 			); \
 	} while(0)
 

@@ -129,8 +129,15 @@ void usage(char **argv) {
  \param[in] context: NULL */
 static void term_signal_handler(int signal_nb, siginfo_t * siginfo,
 		__attribute__((unused)) void *unused) {
-	printdbg("%s: Signal %d received, halting engine\n", __func__, signal_nb); printdbg("* Signal number:\t%d\n", siginfo->si_signo); printdbg("* Signal code:  \t%d\n", siginfo->si_code); printdbg(
-			"* Signal error: \t%d '%s'\n", siginfo->si_errno, strerror(siginfo->si_errno)); printdbg("* Sending pid:  \t%d\n", siginfo->si_pid); printdbg("* Sending uid:  \t%d\n", siginfo->si_uid); printdbg("* Fault address:\t%p\n", siginfo->si_addr); printdbg("* Exit value:   \t%d\n", siginfo->si_status);
+	printdbg("%s: Signal %d received, halting engine\n", __func__, signal_nb);
+	printdbg("* Signal number:\t%d\n", siginfo->si_signo);
+	printdbg("* Signal code:  \t%d\n", siginfo->si_code);
+	printdbg(
+			"* Signal error: \t%d '%s'\n", siginfo->si_errno, strerror(siginfo->si_errno));
+	printdbg("* Sending pid:  \t%d\n", siginfo->si_pid);
+	printdbg("* Sending uid:  \t%d\n", siginfo->si_uid);
+	printdbg("* Fault address:\t%p\n", siginfo->si_addr);
+	printdbg("* Exit value:   \t%d\n", siginfo->si_status);
 
 	GHashTableIter i;
 	char *key = NULL;
@@ -289,7 +296,9 @@ void init_variables() {
 		errx(1, "%s: Fatal error while creating links hash table.\n", __func__);
 
 	/*! create the array of pointer to store the target information */
-	if (NULL == (targets = g_tree_new((GCompareFunc) intcmp)))
+	if (NULL
+			== (targets = g_tree_new_full((GCompareDataFunc) intcmp, NULL, NULL,
+					(GDestroyNotify) free_target)))
 		errx(1, "%s: Fatal error while target tree.\n", __func__);
 
 	/*! create the trees that track connections */
@@ -605,8 +614,7 @@ void pcap_cb(u_char *input, const struct pcap_pkthdr *header,
 
 		break;
 	default:
-		printdbg(
-				"%s Invalid ethernet type: %u. Skipped.\n", H(4), ethertype);
+		printdbg( "%s Invalid ethernet type: %u. Skipped.\n", H(4), ethertype);
 		return;
 		break;
 	}
@@ -727,9 +735,14 @@ void de_thread(gpointer data) {
 		free_raw_pcap(raw);
 
 		if (pkt->fragmented) {
+
+#ifdef HONEYBRID_DEBUG
+			char *src, *dst;
+			GET_IP_STRINGS(pkt->packet.ip->saddr, pkt->packet.ip->daddr, src,
+					dst);
 			printdbg(
-					"%s Fragmented packet detected %"PRIx32" -> %"PRIx32". Send ICMP fragmentation required packet!\n",
-					H(1), pkt->packet.ip->saddr, pkt->packet.ip->daddr);
+					"%s Fragmented packet detected %s -> %s. Got %u/%u bytes. MTU is %u on %s!\n", H(1), src, dst, BUFSIZE, pkt->size, pkt->in->mtu, pkt->in->name);
+#endif
 			send_icmp_frag_needed(pkt);
 			free_pkt(pkt);
 			goto done;

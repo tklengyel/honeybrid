@@ -49,4 +49,7 @@ void clean();
 
 status_t setup_redirection(struct conn_struct *conn, uint64_t hih_id);
 
+status_t switch_conn_to_intra(struct conn_struct *conn,
+		struct handler *intra_handler);
+
 #endif /* __CONNECTIONS_H_ */

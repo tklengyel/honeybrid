@@ -147,13 +147,15 @@ status_t init_pkt(struct interface *iface, uint16_t ethertype,
 
 		pkt->packet.payload = (char*) pkt->packet.udp + UDP_HDR_LEN;
 
-		pkt->data = ntohs(pkt->packet.ip->tot_len) - (pkt->packet.ip->ihl << 2) - UDP_HDR_LEN;
+		pkt->data =
+				ntohs(
+						pkt->packet.ip->tot_len) - (pkt->packet.ip->ihl << 2) - UDP_HDR_LEN;
 
-	} else {
-		printdbg("%s Invalid protocol: %u, packet skipped\n", H(4), pkt->packet.ip->protocol);
+}				else {
+					printdbg("%s Invalid protocol: %u, packet skipped\n", H(4), pkt->packet.ip->protocol);
 
-		goto done;
-	}
+					goto done;
+				}
 
 		// Check if the packet comes from a target interface
 	if (pkt->in->target) {
@@ -584,8 +586,17 @@ status_t create_conn(struct pkt_struct *pkt, struct conn_struct **conn,
 	/*! The key could not be found, so we need to figure out where this packet comes from */
 	if (pkt->packet.ip->protocol == IPPROTO_TCP && pkt->packet.tcp->syn == 0) {
 
-		printdbg(
-				"%s ~~~~ TCP packet without SYN: we skip %"PRIx32" -> %"PRIx32"~~~~\n", H(0), pkt->packet.ip->saddr, pkt->packet.ip->daddr);
+#ifdef HONEYBRID_DEBUG
+		do {
+			char *src, *dst;
+			GET_IP_STRINGS(pkt->packet.ip->saddr, pkt->packet.ip->daddr, src,
+					dst);
+
+			printdbg(
+					"%s ~~~~ TCP packet without SYN: %s:%u -> %s:%u. Skipping.\n", H(0), src, ntohs(pkt->packet.tcp->source), dst, ntohs(pkt->packet.tcp->dest));
+		} while (0);
+
+#endif
 		return result;
 	}
 
@@ -679,13 +690,10 @@ status_t create_conn(struct pkt_struct *pkt, struct conn_struct **conn,
 	addr_pack(&conn_init->first_pkt_dst_ip, ADDR_TYPE_IP, 32,
 			&pkt->packet.ip->daddr, sizeof(ip_addr_t));
 
-	if (conn_init->protocol == IPPROTO_TCP) {
-		conn_init->first_pkt_src_port = pkt->packet.tcp->source;
-		conn_init->first_pkt_dst_port = pkt->packet.tcp->dest;
-	} else {
-		conn_init->first_pkt_src_port = pkt->packet.udp->source;
-		conn_init->first_pkt_dst_port = pkt->packet.udp->dest;
-	}
+	// Doesn't matter if its TCP or UDP, the ports are at the same location
+	// in both headers
+	conn_init->first_pkt_src_port = pkt->packet.tcp->source;
+	conn_init->first_pkt_dst_port = pkt->packet.tcp->dest;
 
 	struct tm *tm;
 	struct timeval tv;
@@ -731,10 +739,7 @@ status_t create_conn(struct pkt_struct *pkt, struct conn_struct **conn,
 #ifdef HONEYBRID_DEBUG
 		PRINT_CONN_KEYS(g_printerr,
 				"%s Inserting new conn from EXT to dnat trees with keys "CONN_KEY_FORMAT" and "CONN_KEY_FORMAT"\n",
-				H(conn_init->id),
-				conn_init->ext_key,
-				conn_init->int_key
-				);
+				H(conn_init->id), conn_init->ext_key, conn_init->int_key);
 #endif
 
 		g_mutex_lock(&connlock);
@@ -747,8 +752,7 @@ status_t create_conn(struct pkt_struct *pkt, struct conn_struct **conn,
 			pin = malloc(sizeof(struct pin));
 			pin->count = 1;
 			pin->ip = conn_init->first_pkt_dst_ip;
-			pin->pin_key = g_memdup(conn_init->pin_key,
-					sizeof(sizeof(struct pin_key)));
+			pin->pin_key = g_memdup(conn_init->pin_key, sizeof(struct pin_key));
 			g_tree_insert(comm_pin_tree, pin->pin_key, pin);
 #ifdef HONEYBRID_DEBUG
 			do {
@@ -757,7 +761,8 @@ status_t create_conn(struct pkt_struct *pkt, struct conn_struct **conn,
 						src, dst);
 				GET_IP_STRINGS(pin->pin_key->target_ip,
 						pin->pin_key->handler_ip, target, handler);
-				printdbg("%s Pinning %s with key %s:%s:%u\n", H(conn_init->id), dst, target, handler, ntohs(pin->pin_key->vlan_id));
+				printdbg(
+						"%s Pinning %s with key %s:%s:%u\n", H(conn_init->id), dst, target, handler, ntohs(pin->pin_key->vlan_id));
 			} while (0);
 #endif
 
@@ -827,10 +832,7 @@ status_t create_conn(struct pkt_struct *pkt, struct conn_struct **conn,
 #ifdef HONEYBRID_DEBUG
 		PRINT_CONN_KEYS(g_printerr,
 				"%s Inserting new conn from LIH to snat trees with keys "CONN_KEY_FORMAT" and "CONN_KEY_FORMAT"\n",
-				H(conn_init->id),
-				conn_init->int_key,
-				conn_init->ext_key
-				);
+				H(conn_init->id), conn_init->int_key, conn_init->ext_key);
 #endif
 
 		g_mutex_lock(&connlock);
@@ -850,13 +852,21 @@ status_t create_conn(struct pkt_struct *pkt, struct conn_struct **conn,
 				conn_init->target->intra_handlers,
 				&conn_init->first_pkt_dst_ip);
 
-		if (conn_init->intra_handler
-				|| (conn_init->first_pkt_dst_ip.addr_ip
-						& hih_search.back_handler->netmask->addr_ip)) {
+		if (conn_init->intra_handler) {
 
 			// This connection is a new conn that will be going to an INTRA target
-			// or a target on the intra-lan (which may or may not exist)
 			conn_init->destination = INTRA;
+		} else if (hih_search.back_handler->netmask
+				&& (conn_init->first_pkt_dst_ip.addr_ip
+						& hih_search.back_handler->netmask->addr_ip)
+						== (hih_search.back_handler->ip->addr_ip
+								& hih_search.back_handler->netmask->addr_ip)) {
+
+			// This is a connection intra-lan to an IP that is undefined at the moment
+			// We skip the connection creation for now and go to the decision engine for help
+			conn_init->destination = INTRA;
+			result = OK;
+			goto done;
 		} else if (pkt->packet.ip->daddr == target->front_handler->ip->addr_ip) {
 			conn_init->destination = LIH;
 			// Invalid destination
@@ -941,10 +951,7 @@ status_t create_conn(struct pkt_struct *pkt, struct conn_struct **conn,
 #ifdef HONEYBRID_DEBUG
 			PRINT_CONN_KEYS(g_printerr,
 					"%s Inserting new conn from HIH to snat trees with keys "CONN_KEY_FORMAT" and "CONN_KEY_FORMAT"\n",
-					H(conn_init->id),
-					conn_init->int_key,
-					conn_init->ext_key
-					);
+					H(conn_init->id), conn_init->int_key, conn_init->ext_key);
 #endif
 
 			g_mutex_lock(&connlock);
@@ -953,12 +960,13 @@ status_t create_conn(struct pkt_struct *pkt, struct conn_struct **conn,
 			g_mutex_unlock(&connlock);
 
 			result = OK;
-		} else {
+		} else if (conn_init->destination == INTRA) {
 			// HIH Connecting to INTRA
 
 			// Check if we have a pin for this
 			// this is required to allow new connections back here from INTRA
-			if (conn_init->intra_handler->exclusive) {
+			if (conn_init->intra_handler
+					&& conn_init->intra_handler->exclusive) {
 				struct pin_key *pin_key = g_malloc0(sizeof(struct pin_key));
 				pin_key->vlan_id = conn_init->intra_handler->vlan.vid;
 				pin_key->handler_ip = conn_init->intra_handler->ip->addr_ip;
@@ -1483,4 +1491,70 @@ status_t setup_redirection(struct conn_struct *conn, uint64_t hih_use) {
 		printdbg("%s [** Error, no HIH address defined **]\n", H(conn->id));
 		return NOK;
 	}
+}
+
+status_t switch_conn_to_intra(struct conn_struct *conn,
+		struct handler *intra_handler) {
+
+	conn->intra_handler = intra_handler;
+
+	conn->intra_key = g_malloc0(sizeof(struct conn_key));
+	conn->intra_key->protocol = conn->protocol;
+	conn->intra_key->vlan_id = conn->intra_handler->vlan.vid;
+	conn->intra_key->src_ip = conn->intra_handler->ip->addr_ip;
+	conn->intra_key->src_port = conn->first_pkt_dst_port;
+	conn->intra_key->dst_ip = conn->first_pkt_src_ip.addr_ip;
+	conn->intra_key->dst_port = conn->first_pkt_src_port;
+
+	g_mutex_lock(&connlock);
+
+	// First remove this connection from the int_trees
+	g_tree_remove(int_tree1, conn->int_key);
+	g_tree_remove(int_tree2, conn->ext_key);
+
+	// And reinsert it into the intra_trees
+	g_tree_insert(intra_tree1, conn->int_key, conn);
+	g_tree_insert(intra_tree2, conn->intra_key, conn);
+
+	g_mutex_unlock(&connlock);
+
+	return OK;
+}
+
+status_t add_conn_to_intra(struct conn_struct *conn,
+		struct handler *intra_handler) {
+
+	if (!conn || conn->intra_handler || conn->int_key)
+		return NOK;
+
+	conn->intra_handler = intra_handler;
+
+	conn->intra_key = g_malloc0(sizeof(struct conn_key));
+	conn->intra_key->protocol = conn->protocol;
+	conn->intra_key->vlan_id = intra_handler->vlan.vid;
+	conn->intra_key->src_ip = intra_handler->ip->addr_ip;
+	conn->intra_key->src_port = conn->first_pkt_dst_port;
+	conn->intra_key->dst_ip = conn->first_pkt_src_ip.addr_ip;
+	conn->intra_key->dst_port = conn->first_pkt_src_port;
+
+	conn->int_key = g_malloc0(sizeof(struct conn_key));
+	conn->int_key->protocol = conn->protocol;
+	conn->int_key->vlan_id = conn->first_pkt_vlan.vid;
+	conn->int_key->src_ip = conn->first_pkt_src_ip.addr_ip;
+	conn->int_key->src_port = conn->first_pkt_src_port;
+	conn->int_key->dst_ip = conn->first_pkt_dst_ip.addr_ip;
+	conn->int_key->dst_port = conn->first_pkt_dst_port;
+
+#ifdef HONEYBRID_DEBUG
+	PRINT_CONN_KEYS(g_printerr,
+			"%s Inserting new conn from HIH to intra trees with keys "CONN_KEY_FORMAT" and "CONN_KEY_FORMAT"\n",
+			H(conn->id), conn->int_key, conn->intra_key);
+#endif
+
+	g_mutex_lock(&connlock);
+	g_tree_insert(intra_tree1, conn->int_key, conn);
+	g_tree_insert(intra_tree2, conn->intra_key, conn);
+	g_mutex_unlock(&connlock);
+
+	return OK;
 }

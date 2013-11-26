@@ -105,31 +105,3 @@ status_t remove_intra_handler(struct target *target, struct handler *intra) {
 
 	return ret;
 }
-
-status_t switch_to_intra(struct conn_struct *conn,
-		struct handler *intra_handler) {
-
-	conn->intra_handler = intra_handler;
-
-	conn->intra_key = g_malloc0(sizeof(struct conn_key));
-	conn->intra_key->protocol = conn->protocol;
-	conn->intra_key->vlan_id = conn->intra_handler->vlan.vid;
-	conn->intra_key->src_ip = conn->intra_handler->ip->addr_ip;
-	conn->intra_key->src_port = conn->first_pkt_dst_port;
-	conn->intra_key->dst_ip = conn->first_pkt_src_ip.addr_ip;
-	conn->intra_key->dst_port = conn->first_pkt_src_port;
-
-	g_mutex_lock(&connlock);
-
-	// First remove this connection from the int_trees
-	g_tree_remove(int_tree1, conn->int_key);
-	g_tree_remove(int_tree2, conn->ext_key);
-
-	// And reinsert it into the intra_trees
-	g_tree_insert(intra_tree1, conn->int_key, conn);
-	g_tree_insert(intra_tree2, conn->intra_key, conn);
-
-	g_mutex_unlock(&connlock);
-
-	return OK;
-}

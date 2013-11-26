@@ -229,6 +229,7 @@ target: TARGET OPEN rule END {
 		
 		printdbg("\tAdding target with default link '%s'\n", $6);
 		add_target($10);
+		free($6);
 	}
 	;
 

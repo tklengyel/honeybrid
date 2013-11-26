@@ -48,13 +48,13 @@ gpointer config_lookup(const char * parameter, gboolean required) {
 }
 
 gint intcmp(gconstpointer v1, gconstpointer v2,
-		__attribute__((unused))     gconstpointer unused) {
+		__attribute__((unused))      gconstpointer unused) {
 	return (*(uint32_t *) v1 < (*(uint32_t *) v2) ? 1 :
 			(*(uint32_t *) v1 == (*(uint32_t *) v2)) ? 0 : -1);
 }
 
 gint pincmp(gconstpointer v1, gconstpointer v2,
-		__attribute__((unused))     gconstpointer unused) {
+		__attribute__((unused))      gconstpointer unused) {
 
 	return ((((struct pin_key *) v1)->key < ((struct pin_key *) v2)->key) ? 1 :
 			(((struct pin_key *) v1)->key == ((struct pin_key *) v2)->key) ?
@@ -62,7 +62,7 @@ gint pincmp(gconstpointer v1, gconstpointer v2,
 }
 
 gint conn_key_cmp(gconstpointer v1, gconstpointer v2,
-		__attribute__((unused))     gconstpointer unused) {
+		__attribute__((unused))      gconstpointer unused) {
 	return ((((struct conn_key *) v1)->key < ((struct conn_key *) v2)->key) ?
 			1 :
 			(((struct conn_key *) v1)->key == ((struct conn_key *) v2)->key) ?
@@ -72,8 +72,7 @@ gint conn_key_cmp(gconstpointer v1, gconstpointer v2,
 status_t switch_state(struct conn_struct *conn, conn_status_t new_state) {
 
 	printdbg(
-			"%s switching state from %s to %s\n",
-			H(conn->id), lookup_state(conn->state), lookup_state(new_state));
+			"%s switching state from %s to %s\n", H(conn->id), lookup_state(conn->state), lookup_state(new_state));
 
 	conn->state = new_state;
 
@@ -81,17 +80,17 @@ status_t switch_state(struct conn_struct *conn, conn_status_t new_state) {
 }
 
 void free_f_0(void **x) {
-	if (*x) {
+	if (likely(*x)) {
 		free(*x);
 		*x = NULL;
 	}
 }
 
-void ips2strings(const ip_addr_t *src, const ip_addr_t *dst, char **srcstr, char **dststr) {
+void ips2strings(const ip_addr_t *src, const ip_addr_t *dst, char **srcstr,
+		char **dststr) {
 	if (likely(src && dst && srcstr && dststr)) {
 		inet_ntop(AF_INET, &src, *srcstr, INET_ADDRSTRLEN);
 		inet_ntop(AF_INET, &dst, *dststr, INET_ADDRSTRLEN);
 	}
 }
-
 
