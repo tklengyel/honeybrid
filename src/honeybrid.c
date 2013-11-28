@@ -88,9 +88,11 @@
 #include "convenience.h"
 #include "netcode.h"
 #include "log.h"
+#include "types.h"
 #include "decision_engine.h"
 #include "modules.h"
 #include "connections.h"
+#include "rpc_server.h"
 
 // Get the Queue ID the packet should be assigned to
 // based on the last byte of the external IP
@@ -371,14 +373,17 @@ void init_pcap() {
 	ghashtable_foreach(links, i, key, iface)
 	{
 
+		printdbg("%s Initializing link %s\n", H(1), key);
 		set_iface_info(iface);
 
 		char pcapErr[PCAP_ERRBUF_SIZE];
-		if (pcap_lookupnet(iface->name, &iface->ip_network, &iface->netmask,
-				pcapErr) < 0) {
-			errx(1,
-					"%s Couldn't get network interface information on %s: %s!\n",
-					__func__, iface->name, pcapErr);
+		if (iface->ip) {
+			if (pcap_lookupnet(iface->name, &iface->ip_network, &iface->netmask,
+					pcapErr) < 0) {
+				errx(1,
+						"%s Couldn't get network interface information on %s: %s!\n",
+						__func__, iface->name, pcapErr);
+			}
 		}
 
 		iface->pcap = pcap_open_live(iface->name, BUFSIZE, 0, -1, pcapErr);
@@ -449,6 +454,10 @@ int close_thread() {
 	g_thread_join(mod_backup);
 	g_thread_join(thread_clean);
 
+#ifdef HAVE_XMLRPC
+	close_rpc_server();
+#endif
+
 	return 0;
 }
 
@@ -457,13 +466,6 @@ int close_thread() {
 int close_hash() {
 	/*! Destroy hash tables
 	 */
-
-	/*if (high_redirection_table != NULL) {
-	 printdbg("%s: Destroying table high_redirection_table\n", H(0));
-	 g_rw_lock_writer_lock(&hihredirlock);
-	 g_hash_table_destroy(high_redirection_table);
-	 high_redirection_table = NULL;
-	 }*/
 
 	if (config != NULL) {
 		printdbg("%s: Destroying table config\n", H(0));
@@ -583,6 +585,10 @@ void pcap_cb(u_char *input, const struct pcap_pkthdr *header,
 	uint16_t ethertype = ntohs(((struct ether_header *) packet)->ether_type);
 
 	switch (ethertype) {
+	case ETHERTYPE_ARP:
+		send_arp_reply(ethertype, (struct interface *) input, packet);
+		return;
+		break;
 	case ETHERTYPE_IP:
 		ip = (struct iphdr *) (packet + ETHER_HDR_LEN);
 		break;
@@ -597,12 +603,12 @@ void pcap_cb(u_char *input, const struct pcap_pkthdr *header,
 		veth = (struct vlan_ethhdr *) packet;
 
 		switch (ntohs(veth->h_vlan_encapsulated_proto)) {
-		case ETHERTYPE_IP:
-			ip = (struct iphdr *) (packet + VLAN_ETH_HLEN);
-			break;
 		case ETHERTYPE_ARP:
 			send_arp_reply(ethertype, (struct interface *) input, packet);
 			return;
+			break;
+		case ETHERTYPE_IP:
+			ip = (struct iphdr *) (packet + VLAN_ETH_HLEN);
 			break;
 		default:
 			printdbg(
@@ -758,7 +764,7 @@ void de_thread(gpointer data) {
 		} else if (memcmp(&pkt->packet.eth->ether_dhost, &pkt->in->mac.addr_eth,
 				ETH_ALEN)) {
 			printdbg(
-					"%s Packet's destination MAC doesn't match the interface. Are you in promisc mode?\n", H(1));
+					"%s Packet's destination MAC (%s) doesn't match the interface's MAC (%s). Are you in promisc mode?\n", H(1), ether_ntoa((struct ether_addr *)&pkt->packet.eth->ether_dhost), addr_ntoa(&pkt->in->mac));
 			free_pkt(pkt);
 			goto done;
 		}
@@ -1203,6 +1209,14 @@ int main(int argc, char *argv[]) {
 			errx(1, "%s: Unable to start the decision engine thread %i",
 					__func__, i);
 		}
+	}
+
+	if (ICONFIG("xmlrpc_server_port")) {
+#ifdef HAVE_XMLRPC
+		init_rpc_server();
+#else
+		printdbg("%s Honeybrid wasn't compiled with XMLRPC!\n", H(0));
+#endif
 	}
 
 	/*! initiate modules that can have only one instance */

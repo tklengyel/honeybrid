@@ -37,6 +37,7 @@ internal	{ return INTERNAL; }
 with		{ return WITH; }
 exclusive 	{ return EXCLUSIVE; }
 intralan    { return INTRALAN; }
+src         { return SRC; }
 
 	/* Delimiters */
 "{"		{ return OPEN; }

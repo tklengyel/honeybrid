@@ -127,15 +127,15 @@ void set_iface_info(struct interface *iface) {
         exit(1);
     }
 
-    // Obtain the source IP address, copy into ARP request
-    if (ioctl(fd, SIOCGIFADDR, &ifr) == -1) {
-        perror(0);
-        close(fd);
-        exit(1);
-    }
-    struct sockaddr_in* source_ip_addr = (struct sockaddr_in*) &ifr.ifr_addr;
-    addr_pack(&iface->ip, ADDR_TYPE_IP, 0, &(source_ip_addr->sin_addr.s_addr),
-            sizeof(uint32_t));
+	// Obtain the source IP address, copy into ARP request
+	if (ioctl(fd, SIOCGIFADDR, &ifr) != -1) {
+		struct sockaddr_in* source_ip_addr = (struct sockaddr_in*) &ifr.ifr_addr;
+		iface->ip=g_malloc0(sizeof(struct addr));
+		addr_pack(iface->ip, ADDR_TYPE_IP, 32,
+				&(source_ip_addr->sin_addr.s_addr), sizeof(uint32_t));
+	} else {
+		printdbg("%s %s interface has no IP address assigned\n", H(1), iface->name);
+	}
 
     // Obtain the MTU
     if (ioctl(fd, SIOCGIFMTU, &ifr) == -1) {
@@ -158,7 +158,7 @@ void set_iface_info(struct interface *iface) {
     }
     close(fd);
 
-    addr_pack(&iface->mac, ADDR_TYPE_ETH, 0, ifr.ifr_hwaddr.sa_data, ETH_ALEN);
+    addr_pack(&iface->mac, ADDR_TYPE_ETH, ETH_ADDR_BITS, ifr.ifr_addr.sa_data, ETH_ALEN);
 }
 
 /*
@@ -171,7 +171,7 @@ void send_arp_reply(uint16_t ethertype, struct interface *iface,
     struct ether_arp *request = NULL;
     size_t psize = sizeof(struct ether_arp);
 
-    if (ethertype == ETHERTYPE_IP) {
+    if (ethertype == ETHERTYPE_ARP) {
         request = (struct ether_arp *) (packet + ETHER_HDR_LEN);
         psize += ETHER_HDR_LEN;
     } else {
@@ -187,7 +187,7 @@ void send_arp_reply(uint16_t ethertype, struct interface *iface,
 
         // Construct Ethernet/VLAN header.
         struct ether_header *header = (struct ether_header *) frame;
-        if (ethertype == ETHERTYPE_IP) {
+        if (ethertype == ETHERTYPE_ARP) {
             header->ether_type = htons(ETHERTYPE_ARP);
             reply = (struct ether_arp *) (frame + ETHER_HDR_LEN);
         } else {
@@ -749,7 +749,7 @@ status_t proxy_int2ext(struct pkt_struct* pkt) {
         if (pkt->conn->pin_ip) {
             pkt->nat.src_ip = pkt->conn->pin_ip;
         } else {
-            pkt->nat.src_ip = &pkt->conn->target->default_route->ip;
+            pkt->nat.src_ip = pkt->conn->target->default_route->ip;
         }
         pkt->nat.dst_mac = pkt->conn->target->default_route_mac;
     }

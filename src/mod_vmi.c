@@ -32,6 +32,23 @@
 #define check_lan_comm(ip, dst, netmask) \
     ((ip & netmask) == (dst & netmask))
 
+#ifdef HAVE_XMLRPC
+#include <xmlrpc-c/base.h>
+#include <xmlrpc-c/client.h>
+
+static xmlrpc_env env;
+
+static void
+dieIfFaultOccurred (xmlrpc_env * const envP) {
+    if (envP->fault_occurred) {
+        fprintf(stderr, "ERROR: %s (%d)\n",
+                envP->fault_string, envP->fault_code);
+        exit(1);
+    }
+}
+
+#endif
+
 struct vmi_vm {
 	ip_addr_t key_ext;
 	uint32_t logID;
@@ -53,100 +70,13 @@ struct vmi_vm {
 	gboolean close;
 };
 
-gboolean initialized;
-GMutex vmi_lock;
-GTree *vmi_vms_ext;
-GTree *vmi_vms_int;
-GMutex banned_lock;
-GTree *bannedIPs;
-
-int vmi_sock;
-struct sockaddr_in vmi_addr; /* VMI server address */
-unsigned short vmi_port; /* VMI server port */
-
-const char* vmi_log(gpointer data) {
-	static char vmi_log_buff[12];
-	snprintf(vmi_log_buff, 12, "'%u'", GPOINTER_TO_UINT(data));
-	return vmi_log_buff;
-}
-
-void open_tcp(int *s) {
-	if (!s)
-		return;
-	// socket: create the socket
-	*s = socket(AF_INET, SOCK_STREAM, 0);
-	if (*s < 0)
-		errx(1, "%s: ERROR opening socket", __func__);
-
-	// connect: create a connection with the server
-	if (connect(*s, (struct sockaddr *) &vmi_addr, sizeof(vmi_addr)) < 0)
-		errx(1, "%s: ERROR connecting", __func__);
-}
-
-void close_vmi_vm(struct vmi_vm *vm) {
-	//timeout, send signal
-	g_mutex_lock(&vmi_lock);
-
-	int fd;
-	open_tcp(&fd);
-	char *buf = g_malloc0(snprintf(NULL, 0, "close,%s\n", vm->name) + 1);
-	sprintf(buf, "close,%s\n", vm->name);
-	if (write(fd, buf, strlen(buf)) < 0)
-		printdbg( "%s Failed to write to socket!\n", H(1));
-	free(buf);
-	shutdown(fd, 0);
-
-	// ban the external ip
-	g_mutex_lock(&banned_lock);
-	if (!g_tree_lookup(bannedIPs, &vm->key_ext)) {
-		g_tree_insert(bannedIPs, g_memdup(&vm->key_ext, sizeof(ip_addr_t)), GINT_TO_POINTER(TRUE));
-	}
-	g_mutex_unlock(&banned_lock);
-
-	// drop any remaining connections
-	GSList* loop = vm->conn_keys;
-	while (loop) {
-		g_mutex_lock(&connlock);
-		struct conn_struct *conn = g_tree_lookup(ext_tree1, loop->data);
-		g_mutex_unlock(&connlock);
-
-		if (conn) {
-			g_mutex_lock(&conn->lock);
-			switch_state(conn, DROP);
-			g_mutex_unlock(&conn->lock);
-		}
-		loop = loop->next;
-	}
-
-	// remove the vm from the vmi trees
-	g_tree_steal(vmi_vms_ext, &vm->key_ext);
-	g_tree_remove(vmi_vms_int, &vm->backendID);
-
-	// remove the handler from the target
-	g_mutex_lock(&vm->target->lock);
-	g_tree_remove(vm->target->back_handlers, &vm->backendID);
-	g_mutex_unlock(&vm->target->lock);
-
-	g_mutex_unlock(&vmi_lock);
-
-	// free the struct
-	g_free(vm->name);
-	g_mutex_clear(&vm->lock);
-	g_cond_clear(&vm->timeout);
-	g_slist_free_full(vm->conn_keys, g_free);
-	g_timer_destroy(vm->start);
-	free(vm);
-}
-
-void free_vmi_vm(struct vmi_vm *vm) {
-	if (vm) {
-		g_mutex_lock(&vm->lock);
-		vm->close = TRUE;
-		vm->signal = TRUE;
-		g_cond_signal(&vm->timeout);
-		g_mutex_unlock(&vm->lock);
-	}
-}
+static GString *vmi_server;
+static gboolean initialized;
+static GMutex vmi_lock;
+static GTree *vmi_vms_ext;
+static GTree *vmi_vms_int;
+static GMutex banned_lock;
+static GTree *bannedIPs;
 
 void* vm_timer(void* data) {
 	struct vmi_vm *vm = (struct vmi_vm*) data;
@@ -175,7 +105,7 @@ void* vm_timer(void* data) {
 	}
 
 	g_mutex_unlock(&vm->lock);
-	close_vmi_vm(vm);
+	//close_vmi_vm(vm);
 
 	done: pthread_exit(NULL);
 	return NULL;
@@ -183,32 +113,13 @@ void* vm_timer(void* data) {
 
 struct vmi_vm *get_new_clone(struct pkt_struct *pkt, struct conn_struct *conn) {
 
-	int n = write(vmi_sock, "random\n", strlen("random\n"));
-	if (n < 0)
-		errx(1, "%s ERROR writing to socket\n", __func__);
-
-	char buf[100];
-	bzero(buf, 100);
-	n = read(vmi_sock, buf, 100);
-	if (n <= 0)
-		errx(1, "%s Error receiving from Honeymon!\n", __func__);
-
-	char *nl = strrchr(buf, '\r');
-	if (nl)
-		*nl = '\0';
-	nl = strrchr(buf, '\n');
-	if (nl)
-		*nl = '\0';
-
-	if (strcmp("-", buf)) {
-
 		struct vmi_vm *vm = g_malloc0(sizeof(struct vmi_vm));
 
 		g_mutex_lock(&conn->target->lock);
 
 		// Add new backend handler dynamically to Honeybrid
 
-		conn->target->back_handler_count++;
+		/*conn->target->back_handler_count++;
 		uint64_t *key = malloc(sizeof(uint64_t));
 		*key = conn->target->back_handler_count;
 
@@ -260,31 +171,7 @@ struct vmi_vm *get_new_clone(struct pkt_struct *pkt, struct conn_struct *conn) {
 		g_tree_insert(bannedIPs, banned, NULL);
 		g_mutex_unlock(&vmi_lock);
 		return NULL;
-	}
-}
-
-mod_result_t mod_vmi_front(struct mod_args *args) {
-	printdbg("%s VMI Front Module called\n", H(args->pkt->conn->id));
-
-	//printf("Check if attacker is banned..\n");
-	//g_tree_foreach(bannedIPs, (GTraverseFunc)find_if_banned,(gpointer)&attacker);
-	//if(attacker.banned==0) {
-	/*struct vm_search vm;
-	 vm.srcIP = args->pkt->src;
-	 vm.vm = NULL;
-
-	 g_tree_foreach(vmi_vms, (GTraverseFunc) find_used_vm, &vm);
-	 if (vm.vm != NULL) {
-	 g_rw_lock_writer_lock(&(vm.vm->lock));
-	 if (!vm.vm->paused) {
-	 GTimeVal t;
-	 g_get_current_time(&t);
-	 vm.vm->last_seen = (t.tv_sec);
-	 }
-	 g_rw_lock_writer_unlock(&(vm.vm->lock));
-	 }*/
-
-	return ACCEPT;
+	}*/
 }
 
 int init_mod_vmi() {
@@ -308,36 +195,22 @@ int init_mod_vmi() {
 	printdbg(
 			"%s Init mod_vmi. VMI-Honeymon is defined at %s:%i\n", H(22), vmi_server_ip, *vmi_server_port);
 
-	// socket: create the socket
-	vmi_sock = socket(AF_INET, SOCK_STREAM, 0);
-	if (vmi_sock < 0)
-		errx(1, "%s: ERROR opening socket", __func__);
 
-	// build the server's Internet address
-	bzero(&vmi_addr, sizeof(vmi_addr));
-	vmi_addr.sin_family = AF_INET;
-	vmi_addr.sin_addr.s_addr = inet_addr(vmi_server_ip);
-	vmi_addr.sin_port = htons(*vmi_server_port);
+	g_string_printf(vmi_server, "http://%s:%i/RPC2", vmi_server_ip, *vmi_server_port);
 
-	// connect: create a connection with the server
-	if (connect(vmi_sock, (struct sockaddr *) &vmi_addr, sizeof(vmi_addr)) < 0)
-		errx(1, "%s: ERROR connecting", __func__);
 
-	int n = write(vmi_sock, "hello\n", strlen("hello\n"));
-	if (n < 0)
-		errx(1, "%s ERROR writing to socket\n", __func__);
+	const char *test = NULL;
+	xmlrpc_env_init(&env);
+	xmlrpc_client_init2(&env, XMLRPC_CLIENT_NO_FLAGS, vmi_server->str, VERSION, NULL, 0);
 
-	char buf[100];
-	bzero(buf, 100);
-	n = read(vmi_sock, buf, 100);
-	if (n < 0 || strcmp(buf, "hi 2.1\n\r"))
-		errx(1, "%s Error receiving from VMI-Honeymon!\n", __func__);
-	else
-		printf("%s VMI-Honeymon is active.\n", H(22));
+	printf("Making 'ECHO TEST' XMLRPC call to VMI-Honeymon on URL '%s'\n", vmi_server->str);
 
-	vmi_vms_ext = g_tree_new_full((GCompareDataFunc) intcmp, NULL, NULL,
-			(GDestroyNotify) free_vmi_vm);
-	vmi_vms_int = g_tree_new((GCompareFunc) intcmp);
+	/* Make the remote procedure call */
+	xmlrpc_value *resultP = xmlrpc_client_call(&env, vmi_server->str, "echo_test", "(i)",
+			(xmlrpc_int32) 1);
+	xmlrpc_read_string(&env, resultP, &test);
+	dieIfFaultOccurred(&env);
+	printf("Got reply: %s\n", test);
 
 	bannedIPs = g_tree_new_full((GCompareDataFunc) intcmp, NULL,
 			(GDestroyNotify) g_free, NULL);
@@ -352,6 +225,12 @@ void close_mod_vmi() {
 		g_tree_destroy(vmi_vms_ext);
 		g_tree_destroy(vmi_vms_int);
 		g_tree_destroy(bannedIPs);
+
+		/* Clean up our error-handling environment. */
+		xmlrpc_env_clean(&env);
+
+		/* Shutdown our XML-RPC client library. */
+		xmlrpc_client_cleanup();
 	}
 }
 
@@ -451,18 +330,6 @@ mod_result_t mod_vmi_control(struct mod_args *args) {
 	if (!addr_cmp(&dst, &args->pkt->conn->first_pkt_src_ip)) {
 		// Packet is a reply in an existing connection
 		result = ACCEPT;
-	} else if (g_tree_lookup(args->pkt->conn->target->intra_handlers,
-			&args->pkt->packet.ip->daddr)) {
-		// Packet is going to a defined INTRA
-		result = ACCEPT;
-	} else if (check_lan_comm(
-			args->pkt->conn->hih.back_handler->ip->addr_ip,
-			args->pkt->packet.ip->daddr,
-			args->pkt->conn->hih.back_handler->netmask->addr_ip)) {
-
-		printdbg("%s Intra-lan packet\n", H(1));
-
-		result = ACCEPT;
 	} else if (vm->key_ext == args->pkt->packet.ip->daddr) {
 		// Connection back to the original IP
 		result = ACCEPT;
@@ -501,8 +368,6 @@ mod_result_t mod_vmi(struct mod_args *args) {
 	//else
 	//printf("VMI Mode %s\n", mode);
 
-	if (!strcmp(mode, "front"))
-		return mod_vmi_front(args);
 	else if (!strcmp(mode, "pick"))
 		return mod_vmi_pick(args);
 	//else if (!strcmp(mode, "back"))

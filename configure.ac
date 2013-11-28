@@ -137,16 +137,41 @@ AC_CHECK_FUNCS([dup2 gettimeofday inet_ntoa memset socket strdup strerror strstr
 
 AC_CHECK_LIB(pcap, pcap_compile_nopcap, [], [AC_ERROR(PCAP library missing)])
 AC_CHECK_LIB(dumbnet, addr_ntoa, [], [AC_ERROR(Dumbnet library missing)])
-
-PKG_CHECK_MODULES([CRYPTO], [libcrypto], [
-	AC_DEFINE([HAVE_CRYPTO], [1], [Crypto library found])
-	], [])
-PKG_CHECK_MODULES([GLIB], [glib-2.0 >= 2.32 gthread-2.0])
+PKG_CHECK_MODULES([GLIB], [glib-2.0 >= 2.32 gthread-2.0], [], [AC_ERROR(GLib is missing)])
 
 AC_CHECK_TYPE([__int128_t],
               [AC_DEFINE([HAVE_INT128_T], [1],
                          [Define to 1 if the system has the type `__int128_t'.])],
               [AC_ERROR(No __int128_t present)], [])
+
+AC_PATH_PROG(XMLRPC_C_CONFIG, xmlrpc-c-config)
+if test "x$XMLRPC_C_CONFIG" != "x"; then
+
+    PKG_CHECK_MODULES([CURL], [libcurl], [
+    
+        XMLRPC_SERVER_LIBS=$($XMLRPC_C_CONFIG abyss-server --libs)
+        XMLRPC_SERVER_CFLAGS=$($XMLRPC_C_CONFIG abyss-server --cflags)
+        XMLRPC_CLIENT_LIBS=$($XMLRPC_C_CONFIG client --libs)
+        XMLRPC_CLIENT_CFLAGS=$($XMLRPC_C_CONFIG client --cflags)
+    
+        AC_DEFINE(HAVE_XMLRPC, 1, "Working XMLRPC C library found")
+    
+        AC_SUBST(XMLRPC_SERVER_LIBS)
+        AC_SUBST(XMLRPC_SERVER_CFLAGS)
+        AC_SUBST(XMLRPC_CLIENT_LIBS)
+        AC_SUBST(XMLRPC_CLIENT_CFLAGS)
+    
+        xmlrpc_client="tools/xmlrpc_client"
+        AC_SUBST(xmlrpc_client)
+        AC_CONFIG_FILES(tools/xmlrpc_client/Makefile)
+    
+    ], [AC_ERROR(No CURL installed)])
+
+fi
+              
+PKG_CHECK_MODULES([CRYPTO], [libcrypto], [
+	AC_DEFINE([HAVE_CRYPTO], [1], [Crypto library found])
+	], [])
 
 AC_PATH_PROG(MYSQL_CONFIG, mysql_config)
 if test "x$MYSQL_CONFIG" != "x"; then

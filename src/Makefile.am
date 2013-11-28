@@ -27,6 +27,7 @@ honeybrid_SOURCES += constants.c constants.h
 honeybrid_SOURCES += structs.c structs.h
 honeybrid_SOURCES += convenience.c convenience.h
 honeybrid_SOURCES += management.c management.h
+honeybrid_SOURCES += rpc_server.c rpc_server.h
 honeybrid_SOURCES += connections.c connections.h
 honeybrid_SOURCES += decision_engine.c decision_engine.h
 honeybrid_SOURCES += modules.c modules.h
@@ -49,7 +50,8 @@ honeybrid_SOURCES += mod_vmi.c
 # Compiler flags:
 AM_CFLAGS =  $(GLIB_CFLAGS)
 AM_CFLAGS += $(CRYPTO_CFLAGS)
-AM_CFLAGS += $(XML2_CFLAGS)
+AM_CFLAGS += $(XMLRPC_CLIENT_CFLAGS)
+AM_CFLAGS += $(XMLRPC_SERVER_CFLAGS)
 AM_CFLAGS += $(MYSQL_CFLAGS)
 
 if HARDENING
@@ -66,7 +68,8 @@ endif
 
 AM_LDFLAGS =  $(GLIB_LIBS)
 AM_LDFLAGS += $(CRYPTO_LIBS)
-AM_LDFLAGS += $(XML2_LIBS)
+AM_LDFLAGS += $(XMLRPC_CLIENT_LIBS)
+AM_LDFLAGS += $(XMLRPC_SERVER_LIBS)
 AM_LDFLAGS += $(MYSQL_LIBS)
 
 if HARDENING

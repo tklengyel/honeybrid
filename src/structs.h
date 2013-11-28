@@ -64,6 +64,7 @@ struct vlan_ethhdr {
  \brief structure to hold target handler information (decision rule and interface information)
  */
 struct handler {
+	int64_t ID;
 	struct addr *mac;
 	struct addr *ip;
 	char *ip_str;
@@ -86,14 +87,20 @@ void free_handler(struct handler *);
  */
 struct target {
 	GMutex lock;
-	uint64_t targetID;
+	int64_t targetID;
 	struct interface *default_route; /* Default interface to send upstream packets on */
-	struct addr *default_route_mac; /* Default MAC address to send upstream packets to */
+	struct addr *default_route_ip; /* Default SOURCE IP to send upstream packets from */
+	struct addr *default_route_mac; /* Default MAC address to send upstream packets TO */
+
 	struct handler *front_handler; /* Honeypot frontend handling the first response */
+
 	GTree *back_handlers; /* Honeypot backends handling the second response with key: hihID, value: struct handler */
-	uint64_t back_handler_count; /* Number of backends defined in the GTree, used to generate hihIDs */
+	int64_t back_handler_count; /* Number of backends defined in the GTree, used to generate hihIDs */
 	struct node *back_picker; /* Rule(s) to pick which backend to use (such as VM name, etc.) */
-	GTree *intra_handlers; /* Honeypot intra handlers to handle internally initiated connections with */
+
+	GTree *intra_handlers; /* IPs to be handled with intra handlers */
+	GSList *intra_handlers_list; /* The list of actual intra handlers */
+
 	struct node *control_rule; /* Rules of decision modules to limit outbound packets from honeypots */
 	struct node *intra_rule; /* Rules of decision modules to control intra-lan connections */
 };
@@ -201,7 +208,7 @@ struct interface {
 	char *filter;
 	int promisc;
 
-	struct addr ip;
+	struct addr *ip;
 	bpf_u_int32 netmask; /* subnet mask  */
 	bpf_u_int32 ip_network; /* ip network */
 	struct addr mac;

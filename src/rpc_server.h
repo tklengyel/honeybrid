@@ -21,23 +21,10 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef MANAGEMENT_H_
-#define MANAGEMENT_H_
+#ifndef RPC_SERVER_H_
+#define RPC_SERVER_H_
 
-#include "types.h"
-#include "structs.h"
-#include "connections.h"
-#include "decision_engine.h"
+void init_rpc_server();
+void close_rpc_server();
 
-status_t add_target(struct target *target);
-status_t remove_target(int64_t targetID);
-
-status_t add_back_handler(struct target *target, struct handler *handler);
-status_t remove_back_handler(struct target *target, int64_t backendID);
-
-status_t add_intra_handler(struct target *target, struct addr *target_ip,
-		struct handler *handler);
-status_t remove_intra_handler(struct target *target, int64_t intraID);
-
-
-#endif /* MANAGEMENT_H_ */
+#endif /* RPC_SERVER_H_ */

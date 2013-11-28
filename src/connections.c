@@ -681,9 +681,9 @@ status_t create_conn(struct pkt_struct *pkt, struct conn_struct **conn,
 	conn_init->total_byte = pkt->size;
 	conn_init->decision_rule = g_string_new("");
 
-	addr_pack(&conn_init->first_pkt_src_mac, ADDR_TYPE_ETH, 0,
+	addr_pack(&conn_init->first_pkt_src_mac, ADDR_TYPE_ETH, ETH_ADDR_BITS,
 			&pkt->packet.eth->ether_shost, ETH_ALEN);
-	addr_pack(&conn_init->first_pkt_dst_mac, ADDR_TYPE_ETH, 0,
+	addr_pack(&conn_init->first_pkt_dst_mac, ADDR_TYPE_ETH, ETH_ADDR_BITS,
 			&pkt->packet.eth->ether_dhost, ETH_ALEN);
 	addr_pack(&conn_init->first_pkt_src_ip, ADDR_TYPE_IP, 32,
 			&pkt->packet.ip->saddr, sizeof(ip_addr_t));
@@ -805,7 +805,7 @@ status_t create_conn(struct pkt_struct *pkt, struct conn_struct **conn,
 		ip_addr_t snat_to;
 		struct pin *pin = g_tree_lookup(comm_pin_tree, comm_pin_key);
 		if (!pin) {
-			snat_to = target->default_route->ip.addr_ip;
+			snat_to = target->default_route->ip->addr_ip;
 			free(comm_pin_key);
 		} else {
 			snat_to = pin->ip.addr_ip;
@@ -902,7 +902,7 @@ status_t create_conn(struct pkt_struct *pkt, struct conn_struct **conn,
 				if (!pin) {
 					// So this HIH is initiating a conn without redirection taking place first.
 					// We will just take the default route's IP for this but we don't pin it
-					snat_to = target->default_route->ip.addr_ip;
+					snat_to = target->default_route->ip->addr_ip;
 					free(pin_key);
 				} else {
 					snat_to = pin->ip.addr_ip;
@@ -921,7 +921,7 @@ status_t create_conn(struct pkt_struct *pkt, struct conn_struct **conn,
 
 				struct pin *pin = g_tree_lookup(comm_pin_tree, comm_pin_key);
 				if (!pin) {
-					snat_to = target->default_route->ip.addr_ip;
+					snat_to = target->default_route->ip->addr_ip;
 					free(comm_pin_key);
 				} else {
 					snat_to = pin->ip.addr_ip;
@@ -1335,7 +1335,7 @@ void clean() {
 	// Wait for timeout or signal
 	g_mutex_lock(&threading_cond_lock);
 	rewind: sleep_cycle = g_get_monotonic_time() + 60 * G_TIME_SPAN_SECOND;
-	while (threading == OK) {
+	while (OK == threading) {
 		if (!g_cond_wait_until(&threading_cond, &threading_cond_lock,
 				sleep_cycle)) {
 

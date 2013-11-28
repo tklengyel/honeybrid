@@ -32,18 +32,16 @@ status_t add_target(struct target *target) {
 		goto done;
 
 	g_rw_lock_writer_lock(&targetlock);
-	target->targetID = target_counter++;
+	target->targetID = ++target_counter;
 	if (!g_tree_lookup(targets, &target->targetID)) {
-
 		g_mutex_init(&target->lock);
 
 		if (!target->back_handlers)
 			target->back_handlers = g_tree_new_full((GCompareDataFunc) intcmp,
-					NULL, g_free, (GDestroyNotify) free_handler);
+					NULL, NULL, (GDestroyNotify) free_handler);
 
 		if (!target->intra_handlers)
-			target->intra_handlers = g_tree_new_full((GCompareDataFunc) intcmp,
-					NULL, g_free, NULL);
+			target->intra_handlers = g_tree_new((GCompareFunc) addr_cmp);
 
 		g_tree_insert(targets, &target->targetID, target);
 
@@ -54,16 +52,51 @@ status_t add_target(struct target *target) {
 	done: return ret;
 }
 
-status_t remove_target(uint32_t targetID) {
+status_t remove_target(int64_t targetID) {
 	status_t ret = NOK;
 
 	g_rw_lock_writer_lock(&targetlock);
 	struct target *target = g_tree_lookup(targets, &targetID);
 	if (target && g_tree_remove(targets, &targetID)) {
+		if(target->default_route) {
+			target->default_route->target = NULL;
+		}
+
 		free_target(target);
 		ret = OK;
 	}
 	g_rw_lock_writer_unlock(&targetlock);
+
+	return ret;
+}
+
+status_t add_back_handler(struct target *target, struct handler *handler) {
+	status_t ret = NOK;
+
+	if (!target || !handler)
+		goto done;
+
+	g_mutex_lock(&target->lock);
+	handler->ID = ++(target->back_handler_count);
+	g_tree_insert(target->back_handlers, &handler->ID, handler);
+	g_mutex_unlock(&target->lock);
+
+	ret = OK;
+
+	done: return ret;
+}
+
+status_t remove_back_handler(struct target *target, int64_t backendID) {
+
+	status_t ret = NOK;
+
+	g_mutex_lock(&target->lock);
+	struct handler *handler = g_tree_lookup(target->back_handlers, &backendID);
+	if (handler && g_tree_remove(target->back_handlers, &backendID)) {
+		free_handler(handler);
+		ret = OK;
+	}
+	g_mutex_unlock(&target->lock);
 
 	return ret;
 }
@@ -82,6 +115,7 @@ status_t add_intra_handler(struct target *target, struct addr *target_ip,
 	if (!g_tree_lookup(target->intra_handlers, target_ip)) {
 		handler->intra_target_ips = g_slist_append(handler->intra_target_ips,
 				target_ip);
+		target->intra_handlers_list = g_slist_append(target->intra_handlers_list, handler);
 		g_tree_insert(target->intra_handlers, target_ip, handler);
 		ret = OK;
 	}
@@ -90,18 +124,26 @@ status_t add_intra_handler(struct target *target, struct addr *target_ip,
 	done: return ret;
 }
 
-status_t remove_intra_handler(struct target *target, struct handler *intra) {
+status_t remove_intra_handler(struct target *target, int64_t intraID) {
 	status_t ret = NOK;
 
 	g_mutex_lock(&target->lock);
-	GSList *loop = intra->intra_target_ips;
-	while (loop) {
-		g_tree_remove(target->intra_handlers, loop->data);
-		loop = loop->next;
+	GSList *loop = target->intra_handlers_list;
+	while(loop) {
+		struct handler *test = (struct handler *)loop->data;
+		if(test->ID==intraID) {
+			GSList *loop2 = test->intra_target_ips;
+			while(loop2) {
+				g_tree_remove(target->intra_handlers, loop->data);
+				loop2=loop2->next;
+			}
+
+			free_handler(test);
+			break;
+		}
+		loop=loop->next;
 	}
 	g_mutex_unlock(&target->lock);
-
-	free_handler(intra);
 
 	return ret;
 }

@@ -39,6 +39,7 @@ void free_interface(struct interface *iface) {
             pcap_freecode(&iface->pcap_filter);
             free_0(iface->filter);
         }
+        free_0(iface->ip);
         free_0(iface->name);
         free_0(iface->tag);
         free_0(iface);
@@ -46,7 +47,7 @@ void free_interface(struct interface *iface) {
 }
 
 void free_handler(struct handler *handler) {
-    if (likely(handler)) {
+    if (handler) {
         free_0(handler->ip);
         free_0(handler->ip_str);
         free_0(handler->mac);
@@ -70,6 +71,12 @@ void free_target(struct target *t) {
     free_0(t->default_route_mac);
     g_tree_destroy(t->back_handlers);
     g_tree_destroy(t->intra_handlers);
+    GSList *loop = t->intra_handlers_list;
+    while(loop) {
+    	free_handler((struct handler *)(loop->data));
+    	loop=loop->next;
+    }
+    g_slist_free(t->intra_handlers_list);
     DE_destroy_tree(t->control_rule);
     DE_destroy_tree(t->intra_rule);
     g_mutex_clear(&t->lock);

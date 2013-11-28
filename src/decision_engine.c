@@ -118,6 +118,8 @@ struct node *DE_build_subtree(const gchar *expr) {
  */
 struct node *DE_create_tree(const gchar *equation) {
 
+	if(!equation) return NULL;
+
 	/*! create a glib table to store the equation */
 	gchar **subgroups;
 

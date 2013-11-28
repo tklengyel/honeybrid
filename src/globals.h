@@ -61,7 +61,7 @@ int reset_ext;
 
 int exclusive_hih;
 
-uint32_t target_counter;
+int64_t target_counter;
 
 /*! \brief global array of pointers to hold target structures */
 GTree *targets;
@@ -117,6 +117,9 @@ GPtrArray *entrytoclean;
  \def thread_log */
 GThread *thread_clean;
 GThread *mod_backup;
+
+GThread *rpc_server;
+GThread *rpc_server_kill;
 
 /*!
  \def decision_threads

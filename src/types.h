@@ -44,7 +44,6 @@
 #include <pcap.h>
 #include <dumbnet.h>
 #include <glib.h>
-
 /*!
  \def PAYLOADSIZE
  * use by NF_QUEUE to set the data size of received packets

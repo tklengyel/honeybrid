@@ -124,10 +124,6 @@ void init_modules() {
     init_mod_hash();
 #endif
 
-#ifdef HAVE_XMPP
-    init_mod_dionaea();
-#endif
-
     init_mod_vmi();
 }
 
@@ -200,7 +196,7 @@ void save_backup_handler() {
 
     gint64 sleep_cycle;
 
-    while (threading == OK) {
+    while (OK == threading) {
         g_mutex_lock(&threading_cond_lock);
         sleep_cycle = g_get_monotonic_time() + 60 * G_TIME_SPAN_SECOND;
         g_cond_wait_until(&threading_cond, &threading_cond_lock, sleep_cycle);

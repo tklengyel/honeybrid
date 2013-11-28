@@ -26,6 +26,7 @@
 
  \author Julien Vehent, 2007
  \author Thomas Coquelin, 2008
+ \author Tamas K Lengyel, 2012-2013
  */
 
 #include "log.h"
