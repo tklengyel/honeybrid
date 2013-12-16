@@ -386,7 +386,7 @@ void init_pcap() {
 			}
 		}
 
-		iface->pcap = pcap_open_live(iface->name, BUFSIZE, 0, -1, pcapErr);
+		iface->pcap = pcap_open_live(iface->name, BUFSIZE, 0, 1000, pcapErr);
 
 		if (iface->pcap == NULL) {
 			errx(1, "%s Failed to open pcap interface on %s: %s!\n", __func__,
