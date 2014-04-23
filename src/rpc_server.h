@@ -21,35 +21,10 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __CONNECTIONS_H_
-#define __CONNECTIONS_H_
+#ifndef RPC_SERVER_H_
+#define RPC_SERVER_H_
 
-#include "types.h"
-#include "structs.h"
+void init_rpc_server();
+void close_rpc_server();
 
-status_t init_pkt(struct interface *iface, uint16_t ethertype,
-        const struct pcap_pkthdr *header, const u_char *packet,
-        struct pkt_struct **pkt_out);
-
-void free_pkt(struct pkt_struct *pkt);
-
-status_t store_pkt(struct conn_struct *conn, struct pkt_struct *pkt);
-
-status_t init_conn(struct pkt_struct *pkt, struct conn_struct **conn);
-
-gboolean expire_conn(char *key, struct conn_struct *conn, gpointer delay);
-
-void remove_conn(struct conn_struct *conn, gpointer data);
-
-void free_conn(struct conn_struct *conn);
-
-status_t init_mark(struct pkt_struct *pkt, const struct conn_struct *conn);
-
-void clean();
-
-status_t setup_redirection(struct conn_struct *conn, uint64_t hih_id);
-
-status_t switch_conn_to_intra(struct conn_struct *conn,
-		struct handler *intra_handler);
-
-#endif /* __CONNECTIONS_H_ */
+#endif /* RPC_SERVER_H_ */

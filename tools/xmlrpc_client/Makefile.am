@@ -19,12 +19,9 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-AUTOMAKE_OPTIONS = subdir-objects
-ACLOCAL_AMFLAGS = ${ACLOCAL_FLAGS}
-
-sbin_PROGRAMS = xmpp_listener
-xmpp_listener_SOURCES = xmpp_listener.cpp
+sbin_PROGRAMS = xmlrpc_client
+xmlrpc_client_SOURCES = xmlrpc_client.c
 
 # Compiler flags:
-AM_CPPFLAGS = -c -Wall $(XMPP_CFLAGS)
-AM_LDFLAGS = $(XMPP_LIBS)
+AM_CFLAGS = $(XMLRPC_CLIENT_CFLAGS)
+AM_LDFLAGS = $(XMLRPC_CLIENT_LIBS)

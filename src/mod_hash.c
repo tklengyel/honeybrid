@@ -122,7 +122,6 @@ mod_result_t mod_hash(struct mod_args *args) {
     }
 
     uint32_t ascii_len = 64;
-    gchar *port;
     gchar **info;
 
     char *hash;
@@ -132,17 +131,13 @@ mod_result_t mod_hash(struct mod_args *args) {
     char *payload = malloc(args->pkt->data + 1);
     char *ascii;
 
-    gchar **key_dst;
+    /*! get the destination port */
+    gchar *port = g_malloc0(snprintf(NULL, 0, "%u", args->pkt->packet.tcp->dest) + 1);
+    sprintf(port, "%u", args->pkt->packet.tcp->dest);
 
     GTimeVal t;
     g_get_current_time(&t);
     gint now = (t.tv_sec);
-
-    /*! get the IP address from the packet */
-    key_dst = g_strsplit(args->pkt->dst_with_port, ":", 2);
-
-    /*! get the destination port */
-    port = key_dst[1];
 
     /*! get the payload from the packet */
     memcpy(payload, args->pkt->packet.payload, args->pkt->data - 1);
@@ -299,7 +294,6 @@ mod_result_t mod_hash(struct mod_args *args) {
     //printerr("%s Free 2/5\n", H(args->pkt->conn->id));
     g_free(hash);
     //printerr("%s Free 3/5\n", H(args->pkt->conn->id));
-    g_free(port);
     /*
      printdbg("%s Free 4/5\n", H(args->pkt->conn->id));
      g_free(key_dst[0]);
@@ -310,6 +304,7 @@ mod_result_t mod_hash(struct mod_args *args) {
      printdbg("%s Free 7/5\n", H(args->pkt->conn->id));
      */
 
+    free(port);
     save_backup(backup, backup_file);
 
     return result;

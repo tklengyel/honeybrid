@@ -7,6 +7,7 @@
 #include "decision_engine.h"
 #include "modules.h"
 #include "log.h"
+#include "management.h"
 
 extern int  yylineno;
 extern char *yytext;
@@ -26,10 +27,10 @@ int yywrap() {
 
 /* Honeybrid configuration keywords */
 %token MODULE FILTER FRONTEND BACKEND
-%token BACKPICK LIMIT CONFIGURATION 
-%token TARGET LINK HW VLAN DEFAULT 
+%token BACKPICK INTERNET CONFIGURATION 
+%token TARGET LINK HW VLAN DEFAULT SRC
 %token ROUTE VIA NETMASK INTERNAL
-%token WITH EXCLUSIVE
+%token WITH EXCLUSIVE INTRALAN
 
 /* Content Variables */
 %token <number> NUMBER
@@ -212,35 +213,48 @@ module_settings: {
 	}
 	;
 
-target: TARGET QUOTE WORD QUOTE DEFAULT ROUTE VIA mac OPEN rule END {
+target: TARGET OPEN rule END {
+        add_target($3);
+    }
+    | TARGET DEFAULT ROUTE VIA QUOTE WORD QUOTE mac OPEN rule END {
 
-		struct interface *iface = g_hash_table_lookup(links, $3);
-		if(iface == NULL) {
+		struct interface *iface = g_hash_table_lookup(links, $6);
+		if(!iface) {
 			yyerror("\tTarget interface is not defined!\n");
-		}
-		
-		if(NULL != g_hash_table_lookup(targets, $3)) {
-			yyerror("\tThis link is already assigned to a target!\n");
 		}
 		
 		iface->target = $10;
 		iface->target->default_route=iface;
+		iface->target->default_route_ip = iface->ip;
 		iface->target->default_route_mac=$8;
 		
-		printdbg("\tAdding target with default link '%s'\n", $3);
-		g_hash_table_insert(targets, $3, $10);
+		printdbg("\tAdding target with default link '%s'\n", $6);
+		add_target($10);
+		free($6);
 	}
+    | TARGET DEFAULT ROUTE VIA QUOTE WORD QUOTE mac SRC honeynet OPEN rule END {
+
+        struct interface *iface = g_hash_table_lookup(links, $6);
+        if(iface == NULL) {
+            yyerror("\tTarget interface is not defined!\n");
+        }
+        
+        iface->target = $12;
+        iface->target->default_route=iface;
+        iface->target->default_route_ip = $10;
+        iface->target->default_route_mac=$8;
+        
+        printdbg("\tAdding target with default link '%s'\n", $6);
+        add_target($12);
+        free($6);
+    }
 	;
 
 rule: 	{
 		$$ = (struct target *)g_malloc0(sizeof(struct target));
-		
-		g_mutex_init(&$$->lock);
-		
-		// This tree holds the main backend structures
-		$$->back_handlers = g_tree_new_full((GCompareDataFunc)intcmp, NULL, g_free, (GDestroyNotify)free_handler);
-		$$->intra_handlers = g_tree_new_full((GCompareDataFunc)addr_cmp, NULL, NULL, (GDestroyNotify)free_handler);
-		
+		$$->back_handlers = g_tree_new_full((GCompareDataFunc) intcmp,
+                    NULL, NULL, (GDestroyNotify) free_handler);
+        $$->intra_handlers = g_tree_new((GCompareFunc) addr_cmp);		
 	}
 	| rule FRONTEND QUOTE WORD QUOTE honeynet mac netmask vlan SEMICOLON {
 		$$->front_handler = g_malloc0(sizeof(struct handler));
@@ -305,28 +319,21 @@ rule: 	{
     	if(iface == NULL) {
     		yyerror("Back handler interface is undefined!\n");
     	}	
-    		
-    	// This will be freed automatically when the tree is destroyed
-    	$$->back_handler_count++;
-    	uint64_t *key=malloc(sizeof(uint64_t));
-    	*key=$$->back_handler_count;
-    		
+    		    		
     	struct handler *back_handler = g_malloc0(sizeof(struct handler));
     	back_handler->iface=iface;
-    
         back_handler->ip=$6;
        	back_handler->mac=$7;
        	back_handler->netmask = $8;
        	back_handler->vlan.i = htons($9 & ((1 << 12)-1));    	
-       	
        	back_handler->ip_str=g_strdup(addr_ntoa($6));
        	    
-    	g_tree_insert($$->back_handlers, key, back_handler);
+        add_back_handler($$, back_handler);
     		
         char *mac = g_strdup(addr_ntoa(back_handler->mac));
         
     	g_printerr("\tBackend #%lu defined at %s hw %s VLAN %u on '%s' copied to handler without a rule\n",
-    		*key, addr_ntoa($6), mac, $9, $4);
+    		back_handler->ID, addr_ntoa($6), mac, $9, $4);
     		
     	g_free($4);
     	free(mac);
@@ -337,28 +344,22 @@ rule: 	{
     	if(iface == NULL) {
     		yyerror("Back handler interface is undefined!\n");
     	}
-    	
-    	// This will be freed automatically when the tree is destroyed
-        $$->back_handler_count++;
-        uint64_t *key=malloc(sizeof(uint64_t));
-        *key=$$->back_handler_count;
             
         struct handler *back_handler = g_malloc0(sizeof(struct handler));
+        back_handler->ID = ++($$->back_handler_count);
         back_handler->iface=g_hash_table_lookup(links, $4);
-    
         back_handler->ip=$6;
        	back_handler->mac=$7;
        	back_handler->netmask = $8;
        	back_handler->vlan.i = htons($9 & ((1 << 12)-1));  
-        back_handler->rule=DE_create_tree($11->str);
-        
+        back_handler->rule=DE_create_tree($11->str);        
         back_handler->ip_str=g_strdup(addr_ntoa($6));
     
-    	g_tree_insert($$->back_handlers, key, back_handler);
+        add_back_handler($$, back_handler);
         
         char *mac = g_strdup(addr_ntoa(back_handler->mac));
         
-        g_printerr("\tBackend #%lu defined at %s hw %s VLAN %u on '%s' with rule: %s\n", *key, back_handler->ip_str,
+        g_printerr("\tBackend #%lu defined at %s hw %s VLAN %u on '%s' with rule: %s\n", back_handler->ID, back_handler->ip_str,
         	mac, $9, $4, $11->str);
                 
         g_string_free($11, TRUE);
@@ -374,20 +375,17 @@ rule: 	{
     		
     	struct handler *intra_handler = g_malloc0(sizeof(struct handler));
     	intra_handler->iface=iface;
-    
-    	intra_handler->intra_target_ip=$6;
         intra_handler->ip=$8;
        	intra_handler->mac=$9;
        	intra_handler->netmask = $10;
        	intra_handler->vlan.i = htons($11 & ((1 << 12)-1));
        	intra_handler->exclusive = 1;  	
-       	
        	intra_handler->ip_str=g_strdup(addr_ntoa($8));
        	    
-    	g_tree_insert($$->intra_handlers, intra_handler->intra_target_ip, intra_handler);
-    		
+        add_intra_handler($$, $6, intra_handler);
+
         char *mac = g_strdup(addr_ntoa(intra_handler->mac));
-        char *intra_ip_str = g_strdup(addr_ntoa(intra_handler->intra_target_ip));    
+        char *intra_ip_str = g_strdup(addr_ntoa($6));    
         
     	g_printerr("\tInternal target for %s defined at %s hw %s VLAN %u on '%s'\n",
     		intra_ip_str, intra_handler->ip_str, mac, $11, $4);
@@ -405,21 +403,18 @@ rule: 	{
             
         struct handler *intra_handler = g_malloc0(sizeof(struct handler));
         intra_handler->iface=g_hash_table_lookup(links, $4);
-    
-    	intra_handler->intra_target_ip = $6;
         intra_handler->ip=$8;
        	intra_handler->mac=$9;
        	intra_handler->netmask = $10;
        	intra_handler->vlan.i = htons($11 & ((1 << 12)-1));  
         intra_handler->rule=DE_create_tree($13->str);
         intra_handler->exclusive = 1;
-        
         intra_handler->ip_str=g_strdup(addr_ntoa($8));
     
-    	g_tree_insert($$->intra_handlers, intra_handler->intra_target_ip, intra_handler);
-        
+        add_intra_handler($$, $6, intra_handler);
+    
         char *mac = g_strdup(addr_ntoa(intra_handler->mac));
-        char *intra_ip_str = g_strdup(addr_ntoa(intra_handler->intra_target_ip));
+        char *intra_ip_str = g_strdup(addr_ntoa($6));
         
         g_printerr("\tInternal target for %s defined at %s hw %s VLAN %u on '%s' with rule: %s\n", 
         	intra_ip_str, intra_handler->ip_str,
@@ -431,10 +426,17 @@ rule: 	{
         free(intra_ip_str);
         
     }
-	| rule LIMIT QUOTE equation QUOTE SEMICOLON {
+	| rule INTERNET QUOTE equation QUOTE SEMICOLON {
+		g_printerr("\tControl rule defined as: %s\n", $4->str);
 		$$->control_rule = DE_create_tree($4->str);
 		g_string_free($4, TRUE);
 	}
+	
+    | rule INTRALAN QUOTE equation QUOTE SEMICOLON {
+        g_printerr("\tControl rule defined as: %s\n", $4->str);
+        $$->intra_rule = DE_create_tree($4->str);
+        g_string_free($4, TRUE);
+    }
 	;
 
 honeynet: EXPR {
@@ -442,6 +444,8 @@ honeynet: EXPR {
 		if (addr_pton($1, $$) < 0) {
             yyerror("\tIllegal IP address");
         }
+        $$->addr_type = ADDR_TYPE_IP;
+        $$->addr_bits = 32;
         g_free($1);
 	}
 	
@@ -450,6 +454,8 @@ mac: HW EXPR {
 		if (addr_pton($2, $$) < 0) {
             yyerror("\tIllegal MAC address");
         }
+        $$->addr_type = ADDR_TYPE_ETH;
+        $$->addr_bits = 32;
         g_free($2);
 	}
 	;
@@ -462,6 +468,8 @@ netmask: {
 		if (addr_pton($3, $$) < 0) {
             yyerror("\tIllegal IP address");
         }
+        $$->addr_type = ADDR_TYPE_IP;
+        $$->addr_bits = 32;
         g_free($3);
 	}
 	;

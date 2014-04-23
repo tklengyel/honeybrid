@@ -30,15 +30,15 @@
  * VLAN Tag Control Information
  */
 struct vlan_tci {
-    union {
-        struct {
-            __be16 pcp :3;  // Priority Code Point (QoS)
-            __be16 dei :1;  // Drop Eligible Indicator
-            __be16 vid :12; // VLAN Identifier
-        };
-        __be16 i;
-    };
-} __attribute__ ((__packed__));
+	union {
+		struct {
+			__be16 pcp :3; // Priority Code Point (QoS)
+			__be16 dei :1; // Drop Eligible Indicator
+			__be16 vid :12; // VLAN Identifier
+		};
+		__be16 i;
+	};
+}__attribute__ ((__packed__));
 
 /*! vlan_ethhdr
  * Stolen from the Linux kernel header linux/if_vlan.h
@@ -52,27 +52,32 @@ struct vlan_tci {
 #define VLAN_HLEN       4
 #define VLAN_ETH_HLEN   18      /* Total octets in header.   */
 struct vlan_ethhdr {
-    unsigned char   h_dest[ETH_ALEN];
-    unsigned char   h_source[ETH_ALEN];
-    __be16          h_vlan_proto;
-    struct vlan_tci h_vlan_TCI;
-    __be16          h_vlan_encapsulated_proto;
-} __attribute__ ((__packed__));
+	unsigned char h_dest[ETH_ALEN];
+	unsigned char h_source[ETH_ALEN];
+	__be16 h_vlan_proto;
+	struct vlan_tci h_vlan_TCI;
+	__be16 h_vlan_encapsulated_proto;
+}__attribute__ ((__packed__));
 
 /*!
  \def handler
  \brief structure to hold target handler information (decision rule and interface information)
  */
 struct handler {
-    struct addr *mac;
-    struct addr *ip;
-    char *ip_str;
-    struct addr *netmask;
-    struct addr *intra_target_ip;
-    struct vlan_tci vlan;
-    struct interface *iface;
-    struct node *rule;
-    int exclusive;
+	int64_t ID;
+	struct addr *mac;
+	struct addr *ip;
+	char *ip_str;
+	struct addr *netmask;
+	struct vlan_tci vlan;
+	struct interface *iface;
+	struct node *rule;
+	uint8_t exclusive;
+
+	// If non-exclusive we can have multiple IPs handled by this handler
+	// otherwise this list has a single element.
+	// It's a list of struct addr*
+	GSList *intra_target_ips;
 };
 void free_handler(struct handler *);
 
@@ -81,15 +86,23 @@ void free_handler(struct handler *);
  \brief structure to hold target information: PCAP filter and rules to accept/forward/redirect/control packets
  */
 struct target {
-    GMutex lock;
-    struct interface *default_route; /* Default interface to send upstream packets on */
-    struct addr *default_route_mac; /* Default MAC address to send upstream packets to */
-    struct handler *front_handler; /* Honeypot frontend handling the first response */
-    GTree *back_handlers; /* Honeypot backends handling the second response with key: hihID, value: struct handler */
-    uint64_t back_handler_count; /* Number of backends defined in the GTree, used to generate hihIDs */
-    struct node *back_picker; /* Rule(s) to pick which backend to use (such as VM name, etc.) */
-    GTree *intra_handlers; /* Honeypot intra handlers to handle internally initiated connections with */
-    struct node *control_rule; /* Rules of decision modules to limit outbound packets from honeypots */
+	GMutex lock;
+	int64_t targetID;
+	struct interface *default_route; /* Default interface to send upstream packets on */
+	struct addr *default_route_ip; /* Default SOURCE IP to send upstream packets from */
+	struct addr *default_route_mac; /* Default MAC address to send upstream packets TO */
+
+	struct handler *front_handler; /* Honeypot frontend handling the first response */
+
+	GTree *back_handlers; /* Honeypot backends handling the second response with key: hihID, value: struct handler */
+	int64_t back_handler_count; /* Number of backends defined in the GTree, used to generate hihIDs */
+	struct node *back_picker; /* Rule(s) to pick which backend to use (such as VM name, etc.) */
+
+	GTree *intra_handlers; /* IPs to be handled with intra handlers */
+	GSList *intra_handlers_list; /* The list of actual intra handlers */
+
+	struct node *control_rule; /* Rules of decision modules to limit outbound packets from honeypots */
+	struct node *intra_rule; /* Rules of decision modules to control intra-lan connections */
 };
 
 void free_target(struct target *t);
@@ -99,9 +112,9 @@ void free_target(struct target *t);
  \brief memory structure to hold ethernet header (14 bytes)
  */
 struct ethernet_hdr {
-    u_char ether_dhost[ETHER_ADDR_LEN]; /* Destination host address */
-    u_char ether_shost[ETHER_ADDR_LEN]; /* Source host address */
-    u_short ether_type; /* IP? ARP? RARP? etc */
+	u_char ether_dhost[ETHER_ADDR_LEN]; /* Destination host address */
+	u_char ether_shost[ETHER_ADDR_LEN]; /* Source host address */
+	u_short ether_type; /* IP? ARP? RARP? etc */
 };
 
 /*!
@@ -114,25 +127,25 @@ struct ethernet_hdr {
  *
  */
 struct packet {
-    // The headers all point to a location inside FRAME
-    union {
-        struct ether_header *eth;
-        struct vlan_ethhdr *vlan;
-    };
-    union {
-        struct tcp_packet *tcppacket;
-        struct udp_packet *udppacket;
-        struct {
-            struct iphdr *ip;
-            union {
-                struct tcphdr *tcp;
-                struct udphdr *udp;
-            };
-            char *payload;
-        };
-    };
+	// The headers all point to a location inside FRAME
+	union {
+		struct ether_header *eth;
+		struct vlan_ethhdr *vlan;
+	};
+	union {
+		struct tcp_packet *tcppacket;
+		struct udp_packet *udppacket;
+		struct {
+			struct iphdr *ip;
+			union {
+				struct tcphdr *tcp;
+				struct udphdr *udp;
+			};
+			char *payload;
+		};
+	};
 
-    char *FRAME;
+	char *FRAME;
 };
 
 /*!
@@ -146,29 +159,29 @@ struct packet {
  *
  */
 struct tcp_packet {
-    struct iphdr ip;
-    struct tcphdr tcp;
-    char *payload;
+	struct iphdr ip;
+	struct tcphdr tcp;
+	char *payload;
 };
 
 struct pseudohdr {
-    uint32_t saddr;
-    uint32_t daddr;
-    uint8_t res1;
-    uint8_t proto;
-    uint16_t len;
+	uint32_t saddr;
+	uint32_t daddr;
+	uint8_t res1;
+	uint8_t proto;
+	uint16_t len;
 };
 
 struct tcp_chk_packet {
-    struct pseudohdr pseudohdr;
-    struct tcphdr tcp;
-    char payload[BUFSIZE];
+	struct pseudohdr pseudohdr;
+	struct tcphdr tcp;
+	char payload[BUFSIZE];
 };
 
 struct udp_chk_packet {
-    struct pseudohdr pseudohdr;
-    struct udphdr udp;
-    char payload[BUFSIZE];
+	struct pseudohdr pseudohdr;
+	struct udphdr udp;
+	char payload[BUFSIZE];
 };
 
 /*!
@@ -182,33 +195,59 @@ struct udp_chk_packet {
  *
  */
 struct udp_packet {
-    struct iphdr ip;
-    struct udphdr udp;
-    char *payload;
+	struct iphdr ip;
+	struct udphdr udp;
+	char *payload;
 };
 
 /*! \brief Structure to hold network interface information
  */
 struct interface {
-    char *name; // like "eth0"
-    char *tag; // like "main"
-    char *filter;
-    int promisc;
+	char *name; // like "eth0"
+	char *tag; // like "main"
+	char *filter;
+	int promisc;
 
-    struct addr ip;
-    bpf_u_int32 netmask; /* subnet mask  */
-    bpf_u_int32 ip_network; /* ip network */
-    struct addr mac;
+	struct addr *ip;
+	bpf_u_int32 netmask; /* subnet mask  */
+	bpf_u_int32 ip_network; /* ip network */
+	struct addr mac;
+	uint32_t mtu;
 
-    // only if the iface is set as a target's default route
-    struct target *target;
+	// only if the iface is set as a target's default route
+	struct target *target;
 
-    pcap_t *pcap;
-    GThread *pcap_looper;
-    struct bpf_program pcap_filter;
+	pcap_t *pcap;
+	GThread *pcap_looper;
+	struct bpf_program pcap_filter;
 };
 
 void free_interface(struct interface *iface);
+
+struct pin_key {
+	union {
+		struct {
+			ip_addr_t target_ip;
+			ip_addr_t handler_ip;
+			uint16_t vlan_id :12;
+		} __attribute__ ((__packed__));
+		uint128_t key;
+	};
+};
+
+struct conn_key {
+	union {
+		struct {
+			u_int8_t protocol;
+			ip_addr_t src_ip;
+			uint16_t src_port;
+			ip_addr_t dst_ip;
+			uint16_t dst_port;
+			uint16_t vlan_id :12;
+		} __attribute__ ((__packed__));
+		uint128_t key;
+	};
+};
 
 /*! hih_struct
  \brief hih info
@@ -217,28 +256,36 @@ void free_interface(struct interface *iface);
  \param port, port
  */
 struct hih_struct {
-    uint64_t hihID;
-    struct handler *back_handler;
-    uint16_t port;
-    unsigned lih_syn_seq;
-    unsigned delta;
-    char *redirected_int_key;
-    char *target_pin_key;
+	uint64_t hihID;
+	struct handler *back_handler;
+	uint16_t port;
+	unsigned lih_syn_seq;
+	unsigned delta;
+	struct conn_key *redirected_int_key;
+	struct pin_key *target_pin_key;
 };
 
 struct hih_search {
-    gboolean found;
-    struct pkt_struct *pkt;
-    uint64_t hihID;
-    struct target *target;
-    struct handler *back_handler;
+	gboolean found;
+	struct pkt_struct *pkt;
+	uint64_t hihID;
+	struct target *target;
+	struct handler *back_handler;
 };
 
 struct intra_search {
-    gboolean found;
-    struct pkt_struct *pkt;
-    struct target *target;
-    struct handler *intra_handler;
+	gboolean found;
+	struct pkt_struct *pkt;
+	struct target *target;
+	struct handler *intra_handler;
+};
+
+struct target_search {
+	gboolean found;
+	struct pkt_struct *pkt;
+	struct target *target;
+	struct hih_search *hih_search;
+	struct intra_search *intra_search;
 };
 
 /*! expected_data_struct
@@ -250,11 +297,11 @@ struct intra_search {
  \param payload, expected payload
  */
 struct expected_data_struct {
-    unsigned short ip_proto;
-    unsigned tcp_seq;
-    unsigned tcp_ack_seq;
-    int64_t tcp_ts;
-    const char* payload;
+	unsigned short ip_proto;
+	unsigned tcp_seq;
+	unsigned tcp_ack_seq;
+	int64_t tcp_ts;
+	const char* payload;
 };
 
 /*! custom_conn_data
@@ -265,9 +312,9 @@ struct expected_data_struct {
  \param data_print, function pointer to convert the data to a string
  */
 struct custom_conn_data {
-    gpointer data; // the actual data
-    gpointer (*data_free)(gpointer data); // define function to free data (if any)
-    const char* (*data_print)(gpointer data); // define function to print data in log (if any)
+	gpointer data; // the actual data
+	gpointer (*data_free)(gpointer data); // define function to free data (if any)
+	const char* (*data_print)(gpointer data); // define function to print data in log (if any)
 };
 
 /*! conn_struct
@@ -288,66 +335,66 @@ struct custom_conn_data {
  */
 struct conn_struct {
 
-    char *ext_key; //key to dnat_tree1 or snat_tree2
-    char *int_key; //key to dnat_tree2 or snat_tree1
-    char *pin_key; //key to the pin tree that holds what target IP to bind this conn to
-    char *intra_key;
+	struct conn_key *ext_key; //key to dnat_tree1 or snat_tree2
+	struct conn_key *int_key; //key to dnat_tree2 or snat_tree1
+	struct conn_key *intra_key;
+	struct pin_key *pin_key; //key to the pin tree that holds what target IP to bind this conn to
 
-    GMutex lock;
+	GMutex lock;
 
-    uint8_t protocol;
-    GString *start_timestamp;
-    gdouble start_microtime;
-    gint access_time;
+	uint8_t protocol;
+	GString *start_timestamp;
+	gdouble start_microtime;
+	gint access_time;
 
-    int64_t tcp_ts_diff;
-    //gboolean tcp_fin_in; // TRUE if a incoming side of the TCP connection has received a FIN flag
-                         // The connection can still send ACKs after it sent a FIN
-                         // but nothing else. Anything else is part of a new TCP connection.
-    //gboolean tcp_fin_out; // TRUE if a outgoing side of the TCP connection has sent a FIN flag
+	int64_t tcp_ts_diff;
+	//gboolean tcp_fin_in; // TRUE if a incoming side of the TCP connection has received a FIN flag
+	// The connection can still send ACKs after it sent a FIN
+	// but nothing else. Anything else is part of a new TCP connection.
+	//gboolean tcp_fin_out; // TRUE if a outgoing side of the TCP connection has sent a FIN flag
 
-    conn_status_t state;
-    uint32_t id;
-    uint32_t replay_id;
-    uint32_t count_data_pkt_from_lih;
-    uint32_t count_data_pkt_from_intruder;
-    GSList *BUFFER;
-    struct expected_data_struct expected_data;
+	conn_status_t state;
+	uint32_t id;
+	uint32_t replay_id;
+	uint32_t count_data_pkt_from_lih;
+	uint32_t count_data_pkt_from_intruder;
+	GSList *BUFFER;
+	struct expected_data_struct expected_data;
 
-    role_t initiator; // who initiated the conn? EXT/LIH/HIH/INTRA
-    role_t destination; // where is the conn going? EXT/LIH/HIH/INTRA
+	role_t initiator; // who initiated the conn? EXT/LIH/HIH/INTRA
+	role_t destination; // where is the conn going? EXT/LIH/HIH/INTRA
 
-    struct vlan_tci first_pkt_vlan;
-    struct addr first_pkt_src_mac;
-    struct addr first_pkt_dst_mac;
-    struct addr first_pkt_src_ip;
-    struct addr first_pkt_dst_ip;
-    uint16_t first_pkt_src_port;
-    uint16_t first_pkt_dst_port;
+	struct vlan_tci first_pkt_vlan;
+	struct addr first_pkt_src_mac;
+	struct addr first_pkt_dst_mac;
+	struct addr first_pkt_src_ip;
+	struct addr first_pkt_dst_ip;
+	uint16_t first_pkt_src_port;
+	uint16_t first_pkt_dst_port;
 
-    struct pkt_struct *last_pkt;
+	struct pkt_struct *last_pkt;
 
-    struct hih_struct hih;
+	struct hih_struct hih;
 
-    struct handler *intra_handler;
+	struct handler *intra_handler;
 
-    struct target *target;
+	struct target *target;
 
-    struct addr *pin_ip; //impersonate (SNAT/DNAT) this IP
+	struct addr *pin_ip; //impersonate (SNAT/DNAT) this IP
 
-    /* statistics */
-    gdouble stat_time[__MAX_CONN_STATUS ];
-    int stat_packet[__MAX_CONN_STATUS ];
-    int stat_byte[__MAX_CONN_STATUS ];
-    uint32_t total_packet;
-    uint32_t total_byte;
-    int decision_packet_id;
-    GString *decision_rule;
-    replay_problem_t replay_problem;
-    int invalid_problem; //unused
+	/* statistics */
+	gdouble stat_time[__MAX_CONN_STATUS ];
+	int stat_packet[__MAX_CONN_STATUS ];
+	int stat_byte[__MAX_CONN_STATUS ];
+	uint32_t total_packet;
+	uint32_t total_byte;
+	int decision_packet_id;
+	GString *decision_rule;
+	replay_problem_t replay_problem;
+	int invalid_problem; //unused
 
-    GSList *custom_data; // allow custom data to be assigned to the connection by modules
-                         // the list elements have to point to struct custom_conn_data
+	GSList *custom_data; // allow custom data to be assigned to the connection by modules
+						 // the list elements have to point to struct custom_conn_data
 
 #ifdef HAVE_XMPP
 uint8_t dionaeaDownload;
@@ -356,26 +403,26 @@ unsigned int dionaeaDownloadTime;
 }__attribute__ ((packed));
 
 struct nat {
-    struct addr *src_ip;
-    struct addr *dst_mac;
-    struct addr *dst_ip;
-    struct vlan_tci *dst_vlan;
+	struct addr *src_ip;
+	struct addr *dst_mac;
+	struct addr *dst_ip;
+	struct vlan_tci *dst_vlan;
 };
 
 struct raw_pcap {
-    struct interface *iface;
-    struct pcap_pkthdr *header;
-    u_char *packet;
-    gboolean last; // last packet to be pushed in the queue
+	struct interface *iface;
+	struct pcap_pkthdr *header;
+	u_char *packet;
+	gboolean last; // last packet to be pushed in the queue
 };
 void free_raw_pcap(struct raw_pcap *raw);
 
 struct headers {
-    struct ether_header *eth;
-    struct vlan_ethhdr *vlan;
-    struct iphdr *ip;
-    struct tcphdr *tcp;
-    struct udphdr *udp;
+	struct ether_header *eth;
+	struct vlan_ethhdr *vlan;
+	struct iphdr *ip;
+	struct tcphdr *tcp;
+	struct udphdr *udp;
 };
 
 /*! pkt_struct
@@ -387,28 +434,23 @@ struct headers {
  \param DE, (0) if the packet was received before the decision to redirect, (1) otherwise
  */
 struct pkt_struct {
-    struct packet packet;
-    struct headers original_headers;
-    role_t origin;
-    role_t destination;
-    uint32_t data;
-    uint32_t size;
-    int DE;
-    struct conn_struct * conn;
+	struct packet packet;
+	struct headers original_headers;
+	gboolean fragmented;
+	gboolean broadcast;
+	role_t origin;
+	role_t destination;
+	uint32_t data;
+	uint32_t size;
+	int DE;
+	struct conn_struct * conn;
 
-    struct nat nat;
+	struct nat nat;
 
-    char *src;
-    char *dst;
-    char *src_port;
-    char *dst_port;
-    char *src_with_port;
-    char *dst_with_port;
+	int position; // position in the connection queue
 
-    int position; // position in the connection queue
-
-    struct interface *in;
-    struct interface *out;
+	struct interface *in;
+	struct interface *out;
 
 }__attribute__ ((packed));
 
@@ -417,8 +459,8 @@ struct pkt_struct {
  \param packetposition, position of the packet to process in the Singly Linked List
  */
 struct DE_submit_args {
-    struct conn_struct *conn;
-    int packetposition;
+	struct conn_struct *conn;
+	int packetposition;
 };
 
 /*!
@@ -427,15 +469,15 @@ struct DE_submit_args {
  \brief arguments sent to a module while processing the tree
  */
 struct mod_args {
-    const struct node *node;
-    struct pkt_struct *pkt;
-    const uint32_t backend_test;
-    uint32_t backend_use;
+	const struct node *node;
+	struct pkt_struct *pkt;
+	const uint64_t backend_test;
+	uint64_t backend_use;
 };
 
 struct mod_def {
-    const char *name;
-    const module_function function;
+	const char *name;
+	const module_function function;
 };
 
 /*!
@@ -444,12 +486,12 @@ struct mod_def {
  \brief node of an execution tree, composed of a module and a argument, called by processing the tree
  */
 struct node {
-    module_function module;
-    GHashTable *config;
-    GString *module_name;
-    GString *function;
-    struct node *true_branch;
-    struct node *false_branch;
+	module_function module;
+	GHashTable *config;
+	GString *module_name;
+	GString *function;
+	struct node *true_branch;
+	struct node *false_branch;
 };
 
 /*!
@@ -458,25 +500,25 @@ struct node {
  \brief structure to hold decision input/output of the DE engine
  */
 struct decision_holder {
-    struct pkt_struct *pkt;
-    struct node *node;
-    uint64_t backend_test;
-    uint64_t backend_use;
-    decision_t result;
+	struct pkt_struct *pkt;
+	struct node *node;
+	uint64_t backend_test;
+	uint64_t backend_use;
+	decision_t result;
 };
 
 struct log_event {
-    char *sdata;
-    char *ddata;
-    int level;
-    unsigned id;
-    char *curtime;
+	char *sdata;
+	char *ddata;
+	int level;
+	unsigned id;
+	char *curtime;
 };
 
 struct pin {
-    char *key;
-    struct addr ip;
-    uint64_t count;
+	struct pin_key *pin_key;
+	struct addr ip;
+	uint64_t count;
 };
 void free_pin(struct pin *pin);
 

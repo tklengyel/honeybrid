@@ -21,46 +21,23 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __MOD_DIONAEA_H
-#define __MOD_DIONAEA_H
+#ifndef MANAGEMENT_H_
+#define MANAGEMENT_H_
 
-#ifdef HAVE_XMPP
-struct dionaeaEvent {
-	unsigned int dionaea;
-	unsigned int reference;
-	char* localIP;
-	char* remoteIP;
-	unsigned int localPort;
-	unsigned int remotePort;
-	char* transport;
-	char* incident;
-	char* type;
-	char* protocol;
-	unsigned int download;
-	unsigned int end;
-	unsigned int start;
-};
+#include "types.h"
+#include "structs.h"
+#include "connections.h"
+#include "decision_engine.h"
 
-struct dionaeaKeys {
-	unsigned int reference;
-	char* connectionKey;
-};
+status_t add_target(struct target *target);
+status_t remove_target(int64_t targetID);
 
-struct dionaeaSession {
-	int startTime;
-	int duration;
-	int dlTime;
-	unsigned int download;
-	char* localIP;
-	char* remoteIP;
-	char* transport;
-	unsigned int localPort;
-	unsigned int remotePort;
-	unsigned int incidentCount;
-	unsigned int sessionCount;
-	unsigned int sessionEndCount;
-	char* incident;
-};
-#endif
+status_t add_back_handler(struct target *target, struct handler *handler);
+status_t remove_back_handler(struct target *target, int64_t backendID);
 
-#endif //// __MOD_DIONAEA_H
+status_t add_intra_handler(struct target *target, struct addr *target_ip,
+		struct handler *handler);
+status_t remove_intra_handler(struct target *target, int64_t intraID);
+
+
+#endif /* MANAGEMENT_H_ */

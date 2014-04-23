@@ -36,6 +36,8 @@ extern const char* conn_status_string[__MAX_CONN_STATUS];
 
 extern const char* mod_result_string[];
 
+extern const char mac_broadcast_string[];
+
 static inline const char *lookup_proto(uint8_t proto) {
 	return protocol_string[proto];
 }

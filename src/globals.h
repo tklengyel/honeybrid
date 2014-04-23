@@ -61,8 +61,10 @@ int reset_ext;
 
 int exclusive_hih;
 
+int64_t target_counter;
+
 /*! \brief global array of pointers to hold target structures */
-GHashTable *targets;
+GTree *targets;
 
 /*! \brief global hash table that contain the values of the configuration file  */
 GHashTable *config;
@@ -99,6 +101,10 @@ GTree *intra_pin_tree;
  */
 GMutex connlock;
 
+/*! \brief security writing lock for the target table
+ */
+GRWLock targetlock;
+
 /*! \def list of module to save
  */
 GHashTable *module_to_save;
@@ -111,6 +117,9 @@ GPtrArray *entrytoclean;
  \def thread_log */
 GThread *thread_clean;
 GThread *mod_backup;
+
+GThread *rpc_server;
+GThread *rpc_server_kill;
 
 /*!
  \def decision_threads
@@ -149,5 +158,11 @@ gboolean debug;
  \Def file descriptor to log debug output
  */
 int fdebug;
+
+/*!
+ \Def broadcast
+ */
+gboolean broadcast_allowed;
+struct addr broadcast;
 
 #endif //__GLOBALS_H__

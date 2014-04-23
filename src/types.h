@@ -28,6 +28,7 @@
 
 // Include standard headers
 #include <stdint.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -43,7 +44,6 @@
 #include <pcap.h>
 #include <dumbnet.h>
 #include <glib.h>
-
 /*!
  \def PAYLOADSIZE
  * use by NF_QUEUE to set the data size of received packets
@@ -57,6 +57,8 @@
  * a regular ethernet connection limit payload size to 1500 bytes
  */
 #define BUFSIZE 2048
+
+#define MTU 1500
 
 #define MIN_PACKET_SIZE 42 // Ethernet(14) + IPv4(20) + UDP(8)
 
@@ -102,8 +104,8 @@ typedef enum {
 } output_t;
 
 typedef enum {
-	NOK = -1,
-	OK = 1
+	NOK = FALSE,
+	OK = TRUE
 } status_t;
 
 typedef enum {
@@ -177,5 +179,7 @@ typedef enum {
 
 struct mod_args;
 typedef mod_result_t (*module_function)(struct mod_args *);
+
+typedef unsigned __int128 uint128_t;
 
 #endif

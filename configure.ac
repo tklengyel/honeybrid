@@ -21,7 +21,7 @@
 
 AC_PREREQ(2.61)
 AC_INIT([Honeybrid - Advanced Honeypot Gateway],
-        [1.0.0-rc],
+        [1.0.0],
         [Tamas K Lengyel, tamas.k.lengyel@gmail.com],
         [honeybrid],
         [http://honeybrid.sf.net])
@@ -137,41 +137,41 @@ AC_CHECK_FUNCS([dup2 gettimeofday inet_ntoa memset socket strdup strerror strstr
 
 AC_CHECK_LIB(pcap, pcap_compile_nopcap, [], [AC_ERROR(PCAP library missing)])
 AC_CHECK_LIB(dumbnet, addr_ntoa, [], [AC_ERROR(Dumbnet library missing)])
+PKG_CHECK_MODULES([GLIB], [glib-2.0 >= 2.32 gthread-2.0], [], [AC_ERROR(GLib is missing)])
 
+AC_CHECK_TYPE([__int128_t],
+              [AC_DEFINE([HAVE_INT128_T], [1],
+                         [Define to 1 if the system has the type `__int128_t'.])],
+              [AC_ERROR(No __int128_t present)], [])
+
+AC_PATH_PROG(XMLRPC_C_CONFIG, xmlrpc-c-config)
+if test "x$XMLRPC_C_CONFIG" != "x"; then
+
+    PKG_CHECK_MODULES([CURL], [libcurl], [
+    
+        XMLRPC_SERVER_LIBS=$($XMLRPC_C_CONFIG abyss-server --libs)
+        XMLRPC_SERVER_CFLAGS=$($XMLRPC_C_CONFIG abyss-server --cflags)
+        XMLRPC_CLIENT_LIBS=$($XMLRPC_C_CONFIG client --libs)
+        XMLRPC_CLIENT_CFLAGS=$($XMLRPC_C_CONFIG client --cflags)
+    
+        AC_DEFINE(HAVE_XMLRPC, 1, "Working XMLRPC C library found")
+    
+        AC_SUBST(XMLRPC_SERVER_LIBS)
+        AC_SUBST(XMLRPC_SERVER_CFLAGS)
+        AC_SUBST(XMLRPC_CLIENT_LIBS)
+        AC_SUBST(XMLRPC_CLIENT_CFLAGS)
+    
+        xmlrpc_client="tools/xmlrpc_client"
+        AC_SUBST(xmlrpc_client)
+        AC_CONFIG_FILES(tools/xmlrpc_client/Makefile)
+    
+    ], [AC_ERROR(No CURL installed)])
+
+fi
+              
 PKG_CHECK_MODULES([CRYPTO], [libcrypto], [
 	AC_DEFINE([HAVE_CRYPTO], [1], [Crypto library found])
 	], [])
-PKG_CHECK_MODULES([GLIB], [glib-2.0 >= 2.32 gthread-2.0])
-
-AC_ARG_ENABLE(xmpp,
- [  --enable-xmpp=yes    specify if you want to compile Honeybrid with Dionaea-XMPP module],
- [ if   test "x$enableval" = "xyes" ; then
- 	dionaea="yes"
-	PKG_CHECK_MODULES([XMPP], [gloox libxml++-2.6], [
-		PKG_CHECK_MODULES([XML2], [libxml-2.0], [
-			AC_MSG_NOTICE([Enabling XMPP listener and Dionaea module])
-			AC_DEFINE([HAVE_XMPP], [1], [XMPP listener enabled])
-			])
-		],
-		[AC_MSG_NOTICE([XMPP listener won't be compiled])])
-		
-		if test "x$XMPP_LIBS" != "x" -a "xXML2_LIBS" == "x"; then
-			AC_ERROR(XML2 libs are missing)
-		fi
-		
-		if test "x$XML2_LIBS" != "x" -a "x$XML2_CFLAGS" != "x"; then
-			xmpp_listener="tools/dionaea_xmpp_listener"
-		else
-			xmpp_listener=""
-		fi
-		
-		AC_SUBST(xmpp_listener)
-		AC_CONFIG_FILES(tools/dionaea_xmpp_listener/Makefile)
-	else
-		dionaea="no"
-	fi
- ])
-AM_CONDITIONAL([DIONAEA], [test x$dionaea = xyes])
 
 AC_PATH_PROG(MYSQL_CONFIG, mysql_config)
 if test "x$MYSQL_CONFIG" != "x"; then

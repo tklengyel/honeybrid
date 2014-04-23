@@ -20,8 +20,8 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 ACLOCAL_AMFLAGS = --install -I m4
-EXTRA_DIST =  honeybrid.conf honeybrid.sh doc scripts tools
-SUBDIRS = src @doc@ @xmpp_listener@
+EXTRA_DIST =  honeybrid.conf honeybrid.sh doc scripts
+SUBDIRS = src @doc@ @xmlrpc_client@
 
 install-data-am:
 	@echo

@@ -2,5 +2,3 @@
 
 autoreconf -vi
 ./configure "$@"
-make clean
-make

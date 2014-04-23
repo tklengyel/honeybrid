@@ -21,669 +21,361 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <errno.h>
-
 #include "modules.h"
 
-#define ATTACK_TIMEOUT 600
+#include <errno.h>
 
-GThread *vmi_status_updater;
-GTree *vmi_vms;
-GTree *bannedIPs;
-int vmi_sock;
+#define MAX_LIFE        600
+#define IDLE_TIMEOUT    60
+#define VLAN_TRUNK_INTERFACE "honeynet"
 
-struct sockaddr_in vmi_addr; /* VMI server address */
-unsigned short vmi_port; /* VMI server port */
+#define check_lan_comm(ip, dst, netmask) \
+    ((ip & netmask) == (dst & netmask))
+
+#ifdef HAVE_XMLRPC
+#include <xmlrpc-c/base.h>
+#include <xmlrpc-c/client.h>
+
+static xmlrpc_env env;
+
+static void
+dieIfFaultOccurred (xmlrpc_env * const envP) {
+    if (envP->fault_occurred) {
+        fprintf(stderr, "ERROR: %s (%d)\n",
+                envP->fault_string, envP->fault_code);
+        exit(1);
+    }
+}
+
+#endif
 
 struct vmi_vm {
-    gchar *attacker;
-    char *name;
-    uint32_t vmID;
-    uint32_t logID;
-    int socket;
-    int paused;
-    gint start;
-    gint last_seen;
-    gint event;
+	ip_addr_t key_ext;
+	uint32_t logID;
+	uint64_t backendID;
+	char *name;
+	GTimer *start;
 
-    GRWLock lock;
+	struct handler *handler;
+	struct target *target;
 
-    // To manipulate connections associated
-    // we need to keys
-    GSList *conn_keys;
+	gboolean signal;
+	GCond timeout;
+	GMutex lock;
+
+	// To manipulate connections associated
+	// we need to keys
+	GSList *conn_keys;
+
+	gboolean close;
 };
 
-struct vm_search {
-    gchar *srcIP;
-    struct vmi_vm *vm;
-};
+static GString *vmi_server;
+static gboolean initialized;
+static GMutex vmi_lock;
+static GTree *vmi_vms_ext;
+static GTree *vmi_vms_int;
+static GMutex banned_lock;
+static GTree *bannedIPs;
 
-struct attacker_search {
-    gchar *srcIP;
-    gchar *outIP;
-    gchar *attacker;
-    uint32_t mark;
-    gint banned;
+void* vm_timer(void* data) {
+	struct vmi_vm *vm = (struct vmi_vm*) data;
+	if (!vm)
+		goto done;
 
-    struct vmi_vm *vm;
-    gint found;
-    gint event;
-};
+	gint64 sleep_cycle;
+	// Wait for timeout or signal
+	g_mutex_lock(&vm->lock);
+	rewind: sleep_cycle =
+			g_get_monotonic_time() + IDLE_TIMEOUT * G_TIME_SPAN_SECOND;
+	while (!vm->close) {
+		if (!g_cond_wait_until(&vm->timeout, &vm->lock, sleep_cycle)) {
+			printdbg(
+					"%s VM timer expired on %s. Sending close signal and shutting down HIH\n", H(1), vm->name);
+			break;
+		} else {
+			if (vm->signal) {
+				vm->signal = FALSE;
 
-/*const char* vmi_log(gpointer data) {
-    static char vmi_log_buff[12];
-    snprintf(vmi_log_buff, 12, "'%u'", GPOINTER_TO_UINT(data));
-    return vmi_log_buff;
+				//event, restart the timer
+				if (!vm->close)
+					goto rewind;
+			}
+		}
+	}
+
+	g_mutex_unlock(&vm->lock);
+	//close_vmi_vm(vm);
+
+	done: pthread_exit(NULL);
+	return NULL;
 }
 
-void free_vmi_vm(gpointer data) {
-    struct vmi_vm *vm = (struct vmi_vm *) data;
-    if (vm->attacker != NULL)
-        free(vm->attacker);
-    if (vm->name != NULL)
-        free(vm->name);
-
-    free(vm);
-}
-
-// Each backend
-gboolean build_vmi_vms2(gpointer key, gpointer value,
-        __attribute__((unused))  gpointer unused) {
-
-    //int *vmi_sock=(int *)data;
-    struct handler *back_handler = (struct handler *) value;
-    char *vm_name = back_handler->iface->tag;
-    char vmi_buffer[100];
-    bzero(vmi_buffer, 100);
-    sprintf(vmi_buffer, "status,%s\n", vm_name);
-
-    //printf("Sending on socket %i: %s", vmi_sock, vmi_buffer);
-
-    if (write(vmi_sock, vmi_buffer, strlen(vmi_buffer)) < 0) {
-        printdbg("%s Couldn't send message to VMI server\n", H(22));
-    } else {
-        bzero(vmi_buffer, 100);
-
-        if (read(vmi_sock, vmi_buffer, 100) < 0) {
-            printf("%s Didn't get any message back!\n", H(22));
-        } else {
-
-            char *nl = strrchr(vmi_buffer, '\r');
-            if (nl)
-                *nl = '\0';
-            nl = strrchr(vmi_buffer, '\n');
-            if (nl)
-                *nl = '\0';
-
-            if (!strcmp(vmi_buffer, "active")) {
-                printdbg("%s VM %s is active, pausing!\n", H(22), vm_name);
-
-                bzero(vmi_buffer, 100);
-                sprintf(vmi_buffer, "pause,%s\n", vm_name);
-                if (write(vmi_sock, vmi_buffer, strlen(vmi_buffer)) == 0)
-                    return FALSE;
-                bzero(vmi_buffer, 100);
-                if (read(vmi_sock, vmi_buffer, 100) == 0)
-                    return FALSE;
-                if (strcmp(vmi_buffer, "paused\n\r")) {
-                    printdbg("%s VM was not paused on our request, skipping\n",
-                            H(22));
-                    return FALSE;
-                } else
-                    printdbg("%s VM was paused, enabling\n", H(22));
-
-                struct vmi_vm *vm = g_malloc0(sizeof(struct vmi_vm));
-
-                vm->vmID = *(uint32_t*) key;
-                vm->name = strdup(vm_name);
-                vm->attacker = NULL;
-                vm->paused = 1;
-                vm->event = 0;
-                g_rw_lock_init(&(vm->lock));
-
-                g_tree_insert(vmi_vms, (gpointer) vm->name, (gpointer) vm);
-
-            } else if (!strcmp(vmi_buffer, "paused")) {
-
-                printdbg("%s VM %s is paused, enabling!\n", H(22), vm_name);
-                struct vmi_vm *vm = g_malloc0(sizeof(struct vmi_vm));
-
-                vm->vmID = *(uint32_t*) key;
-                vm->name = strdup(vm_name);
-                vm->attacker = NULL;
-                vm->paused = 1;
-                vm->logID = 0;
-                vm->event = 0;
-                g_rw_lock_init(&(vm->lock));
-
-                g_tree_insert(vmi_vms, (gpointer) vm->name, (gpointer) vm);
-            } else
-                printdbg("%s VM %s is inactive!\n", H(22), (char *) value);
-        }
-    }
-
-    return FALSE;
-}
-
-// Loop each target
-void build_vmi_vms(gpointer data, gpointer user_data) {
-
-    struct target *t = (struct target *) data;
-    g_tree_foreach(t->back_handlers, (GTraverseFunc) build_vmi_vms2, user_data);
-
-}
-
-gboolean find_free_vm(__attribute__((unused))  gpointer unused, gpointer value,
-        gpointer data) {
-
-    //uint32_t *vmID=(uint32_t *)key;
-    struct vmi_vm *vm = (struct vmi_vm *) value;
-    struct vm_search *search = (struct vm_search *) data;
-    int found = 0;
-
-    //printf("Searching for free VM: %s\n", vm->name);
-
-    g_rw_lock_writer_lock(&(vm->lock));
-    if (vm->paused) {
-
-        char buf[100];
-        bzero(buf, 100);
-        sprintf(buf, "activate,%s\n", vm->name);
-
-        int n = write(vmi_sock, buf, strlen(buf));
-        if (n < 0)
-            errx(1, "%s ERROR writing to socket\n", __func__);
-
-        bzero(buf, 100);
-        n = read(vmi_sock, buf, 100);
-        if (n <= 0)
-            errx(1, "%s Error receiving from Honeymon!\n", __func__);
-
-        char *p;
-        char delim[] = ",";
-        strtok_r(buf, delim, &p);
-
-        vm->logID = atoi(strtok_r(NULL, delim, &p));
-        vm->paused = 0;
-        vm->attacker = g_strdup(search->srcIP);
-        GTimeVal t;
-        g_get_current_time(&t);
-        vm->start = (t.tv_sec);
-        vm->event = 0;
-
-        search->vm = vm;
-        found = 1;
-
-        printdbg("%s Found free VM and activated it: %u!\n", H(22), vm->vmID);
-    }
-    g_rw_lock_writer_unlock(&(vm->lock));
-
-    if (found)
-        return TRUE;
-    else
-        return FALSE;
-}
-
-void get_random_vm(struct vm_search *search) {
-
-    int n = write(vmi_sock, "random\n", strlen("random\n"));
-    if (n < 0)
-        errx(1, "%s ERROR writing to socket\n", __func__);
-
-    char buf[100];
-    bzero(buf, 100);
-    n = read(vmi_sock, buf, 100);
-    if (n <= 0)
-        errx(1, "%s Error receiving from Honeymon!\n", __func__);
-
-    char *nl = strrchr(buf, '\r');
-    if (nl)
-        *nl = '\0';
-    nl = strrchr(buf, '\n');
-    if (nl)
-        *nl = '\0';
-
-    if (strcmp("-", buf)) {
-        struct vmi_vm *vm = (struct vmi_vm *) g_tree_lookup(vmi_vms, buf);
-        if (vm != NULL) {
-            bzero(buf, 100);
-            sprintf(buf, "activate,%s\n", vm->name);
-
-            n = write(vmi_sock, buf, strlen(buf));
-            if (n < 0)
-                errx(1, "%s ERROR writing to socket\n", __func__);
-
-            bzero(buf, 100);
-            n = read(vmi_sock, buf, 100);
-            if (n <= 0)
-                errx(1, "%s Error receiving from Honeymon!\n", __func__);
-
-            char *p;
-            char delim[] = ",";
-            strtok_r(buf, delim, &p);
-
-            g_rw_lock_writer_lock(&(vm->lock));
-            vm->logID = atoi(strtok_r(NULL, delim, &p));
-            vm->paused = 0;
-            vm->attacker = g_strdup(search->srcIP);
-            GTimeVal t;
-            g_get_current_time(&t);
-            vm->start = (t.tv_sec);
-            vm->event = 0;
-            g_rw_lock_writer_unlock(&(vm->lock));
-
-            search->vm = vm;
-        } else {
-            g_tree_insert(bannedIPs, (gpointer) strdup(search->srcIP), NULL);
-        }
-    } else {
-        g_tree_insert(bannedIPs, (gpointer) strdup(search->srcIP), NULL);
-    }
-}
-
-gboolean find_used_vm(__attribute__((unused))  gpointer unused, gpointer value,
-        gpointer data) {
-    struct vmi_vm *vm = (struct vmi_vm *) value;
-    struct vm_search *search = (struct vm_search *) data;
-
-    //printf("Searching for used VM: %s (%u)\n", vm->name, vm->vmID);
-    g_rw_lock_reader_lock(&(vm->lock));
-    if (!vm->paused) {
-        if (!strcmp(search->srcIP, vm->attacker)) {
-            printf("%s This attacker is already using a VM: %u\n", H(65),
-                    vm->vmID);
-            search->vm = vm;
-            g_rw_lock_reader_unlock(&(vm->lock));
-            return TRUE;
-        }
-    }
-    g_rw_lock_reader_unlock(&(vm->lock));
-
-    return FALSE;
-}
-
-gboolean find_if_banned(gpointer key, __attribute__((unused))  gpointer unused,
-        gpointer data) {
-    struct attacker_search *attacker = (struct attacker_search *) data;
-    if (!strcmp((char *) key, attacker->srcIP)) {
-        attacker->banned = 1;
-        return TRUE;
-    }
-
-    return FALSE;
-}
-
-mod_result_t mod_vmi_front(struct mod_args *args) {
-    printdbg("%s VMI Front Module called\n", H(args->pkt->conn->id));
-
-    //printf("Check if attacker is banned..\n");
-    //g_tree_foreach(bannedIPs, (GTraverseFunc)find_if_banned,(gpointer)&attacker);
-    //if(attacker.banned==0) {
-    struct vm_search vm;
-    vm.srcIP = args->pkt->src;
-    vm.vm = NULL;
-
-    g_tree_foreach(vmi_vms, (GTraverseFunc) find_used_vm, &vm);
-    if (vm.vm != NULL) {
-        g_rw_lock_writer_lock(&(vm.vm->lock));
-        if (!vm.vm->paused) {
-            GTimeVal t;
-            g_get_current_time(&t);
-            vm.vm->last_seen = (t.tv_sec);
-        }
-        g_rw_lock_writer_unlock(&(vm.vm->lock));
-    }
-
-    return ACCEPT;
-}
-
-mod_result_t mod_vmi_pick(struct mod_args *args) {
-
-    printdbg("%s VMI Backpick Module called\n", H(args->pkt->conn->id));
-
-    mod_result_t result = REJECT;
-    struct vm_search search;
-    gchar **values = g_strsplit(args->pkt->key_src, ":", 0);
-    search.srcIP = values[0];
-    search.vm = NULL;
-
-    struct attacker_search attacker;
-    attacker.srcIP = values[0];
-    attacker.banned = 0;
-
-    //printf("Check if attacker is banned..\n");
-    g_tree_foreach(bannedIPs, (GTraverseFunc) find_if_banned,
-            (gpointer) &attacker);
-
-    if (attacker.banned == 0) {
-
-        //printf("Check if he already uses a clone\n");
-
-        g_tree_foreach(vmi_vms, (GTraverseFunc) find_used_vm,
-                (gpointer) &search);
-
-        if (search.vm == NULL) {
-
-            //printf("Check if we have any clones available\n");
-
-            //g_tree_foreach(vmi_vms, (GTraverseFunc)find_free_vm, (gpointer)&search);
-            get_random_vm(&search);
-        }
-    } else {
-        printf("%s Attacker %s is banned!\n", H(64), attacker.srcIP);
-    }
-
-    if (search.vm != NULL) {
-        //printf("%s Picking %s (%u).\n", H(args->pkt->conn->id), search.vm->name, search.vm->vmID);
-        args->backend_use = search.vm->vmID;
-        result = ACCEPT;
-
-        struct custom_conn_data *log = g_malloc0(
-                sizeof(struct custom_conn_data));
-        log->data = GUINT_TO_POINTER(search.vm->logID);
-        log->data_print = vmi_log;
-
-        args->pkt->conn->custom_data = g_slist_append(
-                args->pkt->conn->custom_data, log);
-
-        // save the connection keys
-        g_rw_lock_writer_lock(&(search.vm->lock));
-        struct addr *key_dup = malloc(sizeof(struct addr));
-        memcpy(key_dup, &args->pkt->key_ip);
-        search.vm->conn_keys = g_slist_append(search.vm->conn_keys,
-                strdup(args->pkt->conn->key));
-        g_rw_lock_writer_unlock(&(search.vm->lock));
-
-    } else {
-        printdbg("%s No available backend found, rejecting!\n",
-                H(args->pkt->conn->id));
-        result = REJECT;
-    }
-
-    g_strfreev(values);
-    return result;
-}
-
-gboolean control_check_attacker(__attribute__((unused))  gpointer unused,
-        gpointer value, gpointer data) {
-    struct vmi_vm *vm = (struct vmi_vm *) value;
-    struct attacker_search *search = (struct attacker_search *) data;
-
-    GTimeVal t;
-    g_get_current_time(&t);
-    gint now = (t.tv_sec);
-    int found = 0;
-
-    g_rw_lock_writer_lock(&(vm->lock));
-    if (!vm->paused
-            && vm->vmID == search->mark&& now-(vm->start)<=ATTACK_TIMEOUT) {
-
-printf            ("%s Attack session found on clone %s!\n", H(67), vm->name);
-
-            search->found=1;
-            search->attacker=strdup(vm->attacker);
-            search->vm=vm;
-
-            if(vm->event)
-            search->event=1;
-            else
-            // Is the clone going somewhere else than the attacker?
-            if(strcmp(search->outIP, vm->attacker)) {
-                search->event=1;
-
-                vm->event=1;
-            }
-
-            found=1;
-        }
-    g_rw_lock_writer_unlock(&(vm->lock));
-
-    if (found)
-        return TRUE;
-    else
-        return FALSE;
-}
-
-mod_result_t mod_vmi_control(struct mod_args *args) {
-    // Only control packets coming from the clones
-    if (args->pkt->vlan == 0) {
-        return ACCEPT;
-    }
-
-    printdbg("%s VMI Control Module called\n", H(args->pkt->conn->id));
-
-    mod_result_t result = REJECT;
-    // get the IP address from the packet
-    gchar **key_dst;
-    //key_src = g_strsplit( args->pkt->key_src, ":", 0);
-    key_dst = g_strsplit(args->pkt->key_dst, ":", 2);
-
-    //printerr("Control module is looking for an attack session from %s\n", key_dst[0]);
-
-    struct attacker_search search;
-    search.found = 0;
-    search.event = 0;
-    search.outIP = key_dst[0];
-    search.attacker = NULL;
-    search.mark = args->pkt->vlan;
-    search.vm = NULL;
-
-    g_tree_foreach(vmi_vms, (GTraverseFunc) control_check_attacker,
-            (gpointer) &search);
-
-    if (search.found && search.vm != NULL) {
-
-        struct custom_conn_data *log = g_malloc0(
-                sizeof(struct custom_conn_data));
-        log->data = GUINT_TO_POINTER(search.vm->logID);
-        log->data_print = vmi_log;
-
-        args->pkt->conn->custom_data = g_slist_append(
-                args->pkt->conn->custom_data, log);
-
-        if (search.event) {
-            printdbg("%s Cought network event, sending signal!\n",
-                    H(args->pkt->conn->id));
-
-            char *buf = g_malloc0(
-                    snprintf(NULL, 0, "%s,%s,%s\n", search.vm->name,
-                            search.attacker, search.outIP) + 1);
-            sprintf(buf, "%s,%s,%s\n", search.vm->name, search.attacker,
-                    search.outIP);
-            if (write(vmi_sock, buf, strlen(buf)) < 0)
-                printdbg("%s Failed to write to socket!\n",
-                        H(args->pkt->conn->id));
-            free(buf);
-        } else
-            result = ACCEPT;
-
-        free(search.attacker);
-    }
-
-    g_strfreev(key_dst);
-    return result;
-}
-
-//////////////////////
-
-void vm_status_updater_thread() {
-
-    printf("%s Honeymon VM status updater thread started\n", H(66));
-
-    int vmi_sock_updater = socket(AF_INET, SOCK_STREAM, 0);
-    if (vmi_sock_updater < 0)
-        errx(1, "%s: ERROR opening socket", __func__);
-
-    if (connect(vmi_sock_updater, (struct sockaddr *) &vmi_addr,
-            sizeof(vmi_addr)) < 0)
-        errx(1, "%s: ERROR connecting", __func__);
-
-    char delim[] = ",";
-    char *signal = malloc(snprintf(NULL, 0, "listening\n") + 1);
-    sprintf(signal, "listening\n");
-    while (1) {
-        int n = write(vmi_sock_updater, signal, strlen(signal));
-        if (n < 0) {
-            printf("Updater thread failed to send signal: %s!\n",
-                    strerror(errno));
-            break;
-        }
-
-        char buf[100];
-        bzero(buf, 100);
-        n = read(vmi_sock_updater, buf, 100);
-
-        if (n > 0) {
-
-            char *nl = strrchr(buf, '\r');
-            if (nl)
-                *nl = '\0';
-            nl = strrchr(buf, '\n');
-            if (nl)
-                *nl = '\0';
-            char *p;
-
-            char *first = strtok_r(buf, delim, &p);
-            char *second = strtok_r(NULL, delim, &p);
-            if (!strcmp(first, "reverted") && second != NULL) {
-
-                struct vmi_vm *vm = g_tree_lookup(vmi_vms, (gpointer) second);
-
-                if (vm != NULL) {
-                    g_rw_lock_writer_lock(&(vm->lock));
-
-                    if (vm->attacker != NULL) {
-
-                        printdbg(
-                                "%s Setting connections to DROP and banning %s\n",
-                                H(62), vm->attacker);
-
-                        GSList *r = vm->conn_keys;
-                        struct conn_struct *conn;
-                        if (r != NULL) {
-                            g_rw_lock_writer_lock(&connlock);
-                            while (r != NULL) {
-                                conn = (struct conn_struct *) g_tree_lookup(
-                                        conn_tree, r->data);
-                                if (conn != NULL)
-                                    conn->state = DROP;
-                                free((char *) r->data);
-                                r = r->next;
-                            }
-                            g_rw_lock_writer_unlock(&connlock);
-                        }
-                        g_slist_free(vm->conn_keys);
-
-                        g_tree_insert(bannedIPs,
-                                (gpointer) strdup(vm->attacker),
-                                (gpointer) NULL);
-                        free(vm->attacker);
-                    }
-
-                    vm->attacker = NULL;
-                    vm->conn_keys = NULL;
-
-                    vm->paused = 1;
-                    vm->event = 0;
-
-                    g_rw_lock_writer_unlock(&(vm->lock));
-
-                }
-            }
-        }
-    }
-
-    free(signal);
+struct vmi_vm *get_new_clone(struct pkt_struct *pkt, struct conn_struct *conn) {
+
+		struct vmi_vm *vm = g_malloc0(sizeof(struct vmi_vm));
+
+		g_mutex_lock(&conn->target->lock);
+
+		// Add new backend handler dynamically to Honeybrid
+
+		/*conn->target->back_handler_count++;
+		uint64_t *key = malloc(sizeof(uint64_t));
+		*key = conn->target->back_handler_count;
+
+		struct handler *new_handler = g_malloc0(sizeof(struct handler));
+		new_handler->mac = g_malloc0(sizeof(struct addr));
+		new_handler->ip = g_malloc0(sizeof(struct addr));
+		new_handler->netmask = g_malloc0(sizeof(struct addr));
+		addr_pton("255.255.255.0", new_handler->netmask);
+
+		char *p;
+		char delim[] = ",";
+		vm->name = g_strdup(strtok_r(buf, delim, &p));
+		addr_pton(strtok_r(NULL, delim, &p), new_handler->ip);
+		new_handler->ip_str = g_strdup(addr_ntoa(new_handler->ip));
+		new_handler->iface = g_hash_table_lookup(links, VLAN_TRUNK_INTERFACE);
+		addr_pton(strtok_r(NULL, delim, &p), new_handler->mac);
+		new_handler->vlan.i = htons(
+				atoi(strtok_r(NULL, delim, &p)) & ((1 << 12) - 1));
+		uint32_t logID = atoi(strtok_r(NULL, delim, &p));
+
+		g_tree_insert(conn->target->back_handlers, key, new_handler);
+		g_mutex_unlock(&conn->target->lock);
+
+		// We need to pin the attacker's ip and destination ip to this VM
+
+
+		vm->key_ext = pkt->packet.ip->saddr;
+		vm->handler = new_handler;
+		vm->start = g_timer_new();
+		vm->logID = logID;
+		vm->backendID = *key;
+		vm->target = pkt->conn->target;
+		g_mutex_init(&vm->lock);
+		g_cond_init(&vm->timeout);
+		pthread_t c;
+		pthread_create(&c, NULL, (void *) vm_timer, (void *) vm);
+		pthread_detach(c);
+
+		g_mutex_lock(&vmi_lock);
+		g_tree_insert(vmi_vms_ext, &vm->key_ext, vm);
+		g_tree_insert(vmi_vms_int, &vm->backendID, vm);
+		g_mutex_unlock(&vmi_lock);
+
+		return vm;
+
+	} else {
+		g_mutex_lock(&vmi_lock);
+		uint32_t *banned = g_memdup(&pkt->packet.ip->saddr, sizeof(uint32_t));
+		g_tree_insert(bannedIPs, banned, NULL);
+		g_mutex_unlock(&vmi_lock);
+		return NULL;
+	}*/
 }
 
 int init_mod_vmi() {
 
-    gchar *vmi_server_ip, *vmi_server_port;
+	gchar *vmi_server_ip;
+	int *vmi_server_port;
 
-    if (NULL
-            == (vmi_server_ip = (gchar *) g_hash_table_lookup(config,
-                    "vmi_server_ip"))) {
-        // Not defined so skipping init
-        return 0;
-    }
+	if (NULL
+			== (vmi_server_ip = (gchar *) g_hash_table_lookup(config,
+					"vmi_server_ip"))) {
+		// Not defined so skipping init
+		initialized = FALSE;
+		return 0;
+	}
 
-    if (NULL
-            == (vmi_server_port = (gchar *) g_hash_table_lookup(config,
-                    "vmi_server_port"))) {
-        errx(1, "%s: VMI Server port not defined!!\n", __func__);
-    }
+	if (NULL
+			== (vmi_server_port = g_hash_table_lookup(config, "vmi_server_port"))) {
+		errx(1, "%s: VMI Server port not defined!!\n", __func__);
+	}
 
-    printdbg("%s Init mod vmi\n", H(22));
+	printdbg(
+			"%s Init mod_vmi. VMI-Honeymon is defined at %s:%i\n", H(22), vmi_server_ip, *vmi_server_port);
 
-    // socket: create the socket
-    vmi_sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (vmi_sock < 0)
-        errx(1, "%s: ERROR opening socket", __func__);
 
-    // build the server's Internet address
-    bzero(&vmi_addr, sizeof(vmi_addr));
-    vmi_addr.sin_family = AF_INET;
-    vmi_addr.sin_addr.s_addr = inet_addr(vmi_server_ip);
-    vmi_addr.sin_port = htons(atoi(vmi_server_port));
+	g_string_printf(vmi_server, "http://%s:%i/RPC2", vmi_server_ip, *vmi_server_port);
 
-    // connect: create a connection with the server
-    if (connect(vmi_sock, (struct sockaddr *) &vmi_addr, sizeof(vmi_addr)) < 0)
-        errx(1, "%s: ERROR connecting", __func__);
 
-    int n = write(vmi_sock, "hello\n", strlen("hello\n"));
-    if (n < 0)
-        errx(1, "%s ERROR writing to socket\n", __func__);
+	const char *test = NULL;
+	xmlrpc_env_init(&env);
+	xmlrpc_client_init2(&env, XMLRPC_CLIENT_NO_FLAGS, vmi_server->str, VERSION, NULL, 0);
 
-    char buf[100];
-    bzero(buf, 100);
-    n = read(vmi_sock, buf, 100);
-    if (n < 0 || strcmp(buf, "hi\n\r"))
-        errx(1, "%s Error receiving from Honeymon!\n", __func__);
-    else
-        printf("%s VMI-Honeymon is active, query VM states..\n", H(22));
+	printf("Making 'ECHO TEST' XMLRPC call to VMI-Honeymon on URL '%s'\n", vmi_server->str);
 
-    vmi_vms = g_tree_new_full((GCompareDataFunc) strcmp, NULL, NULL,
-            (GDestroyNotify) free_vmi_vm);
+	/* Make the remote procedure call */
+	xmlrpc_value *resultP = xmlrpc_client_call(&env, vmi_server->str, "echo_test", "(i)",
+			(xmlrpc_int32) 1);
+	xmlrpc_read_string(&env, resultP, &test);
+	dieIfFaultOccurred(&env);
+	printf("Got reply: %s\n", test);
 
-    GHashTableIter i;
-    char *key;
-    struct target *target;
-    ghashtable_foreach(targets, i, key, target) {
-        g_tree_foreach(target->back_handlers, (GTraverseFunc) build_vmi_vms, NULL);
-    }
+	bannedIPs = g_tree_new_full((GCompareDataFunc) intcmp, NULL,
+			(GDestroyNotify) g_free, NULL);
 
-    bannedIPs = g_tree_new_full((GCompareDataFunc) strcmp, NULL,
-            (GDestroyNotify) g_free, NULL);
+	initialized = TRUE;
 
-    vmi_status_updater = g_thread_new("vm_status_updater",
-            (void *) vm_status_updater_thread, NULL);
-
-    return 0;
+	return 0;
 }
-*/
+
+void close_mod_vmi() {
+	if (initialized) {
+		g_tree_destroy(vmi_vms_ext);
+		g_tree_destroy(vmi_vms_int);
+		g_tree_destroy(bannedIPs);
+
+		/* Clean up our error-handling environment. */
+		xmlrpc_env_clean(&env);
+
+		/* Shutdown our XML-RPC client library. */
+		xmlrpc_client_cleanup();
+	}
+}
+
+mod_result_t mod_vmi_pick(struct mod_args *args) {
+
+	printdbg("%s VMI Backpick Module called\n", H(args->pkt->conn->id));
+
+	if (!initialized) {
+		printdbg("%s VMI module is uninitialized!\n", H(1));
+		return ACCEPT;
+	}
+
+	mod_result_t result = REJECT;
+	struct vmi_vm *vm = NULL;
+
+	if (args->pkt->in != args->pkt->conn->target->default_route) {
+		return result;
+	}
+
+	g_mutex_lock(&banned_lock);
+	gpointer banned = g_tree_lookup(bannedIPs, &args->pkt->packet.ip->saddr);
+	g_mutex_unlock(&banned_lock);
+
+	if (banned) {
+		printf("%s Attacker %"PRIx32" is banned from the HIHs!\n",
+				H(args->pkt->conn->id), args->pkt->packet.ip->saddr);
+		return result;
+	} else {
+		//printf("Check if he already uses a clone\n");
+
+		g_mutex_lock(&vmi_lock);
+		vm = g_tree_lookup(vmi_vms_ext, &args->pkt->packet.ip->saddr);
+		g_mutex_unlock(&vmi_lock);
+		if (!vm)
+			vm = get_new_clone(args->pkt, args->pkt->conn);
+	}
+
+	if (vm != NULL) {
+		printdbg(
+				"%s Picking %s (%lu).\n", H(args->pkt->conn->id), vm->name, vm->backendID);
+		args->backend_use = vm->backendID;
+		result = ACCEPT;
+
+		// save the conns here (they could get expired so don't trust this list)
+		g_mutex_lock(&vm->lock);
+		vm->conn_keys = g_slist_append(vm->conn_keys,
+				g_memdup(args->pkt->conn->ext_key, sizeof(struct conn_key)));
+		g_mutex_unlock(&vm->lock);
+
+	} else {
+		printdbg(
+				"%s No available backend found, rejecting!\n", H(args->pkt->conn->id));
+		result = REJECT;
+	}
+
+	return result;
+}
+
+mod_result_t mod_vmi_control(struct mod_args *args) {
+	// Only control packets coming from the backends
+	if (args->pkt->origin != HIH) {
+		return ACCEPT;
+	}
+
+	if (!initialized) {
+		printdbg("%s VMI module is uninitialized!\n", H(0));
+		return ACCEPT;
+	}
+
+	printdbg("%s VMI Control Module called\n", H(args->pkt->conn->id));
+
+	mod_result_t result = REJECT;
+
+	g_mutex_lock(&vmi_lock);
+	struct vmi_vm *vm = g_tree_lookup(vmi_vms_int, &args->pkt->conn->hih.hihID);
+	g_mutex_unlock(&vmi_lock);
+
+	if (!vm) {
+		// Not a VMI HIH
+		return ACCEPT;
+	}
+
+	g_mutex_lock(&vm->lock);
+
+	if (g_timer_elapsed(vm->start, NULL) > MAX_LIFE) {
+		printdbg(
+				"%s VM max life expired, sending signal!\n", H(args->pkt->conn->id));
+
+		vm->close = TRUE;
+		goto signal;
+	}
+
+	struct addr dst;
+	addr_pack(&dst, ADDR_TYPE_IP, 32, &args->pkt->packet.ip->daddr,
+			sizeof(ip_addr_t));
+
+	if (!addr_cmp(&dst, &args->pkt->conn->first_pkt_src_ip)) {
+		// Packet is a reply in an existing connection
+		result = ACCEPT;
+	} else if (vm->key_ext == args->pkt->packet.ip->daddr) {
+		// Connection back to the original IP
+		result = ACCEPT;
+	} else {
+
+		// TODO: Don't touch DNS, we will use mod_dns_control.
+
+		printdbg(
+				"%s Cought network event, sending signal!\n", H(args->pkt->conn->id));
+
+		vm->close = TRUE;
+	}
+
+	vm->signal = TRUE;
+	signal: g_cond_signal(&vm->timeout);
+	g_mutex_unlock(&vm->lock);
+
+	return result;
+}
+
+mod_result_t mod_vmi_intra(struct mod_args *args) {
+	return DEFER;
+}
 
 mod_result_t mod_vmi(struct mod_args *args) {
 
-    /*gchar *mode;
-    // get the backup file for this module
-    if (NULL
-            == (mode = (gchar *) g_hash_table_lookup(args->node->config, "mode"))) {
-        // We can't decide
-        printdbg("%s mandatory argument 'mode' undefined (back/control)!\n",
-                H(args->pkt->conn->id));
-        return DEFER;
-    }
-    //else
-    //printf("VMI Mode %s\n", mode);
+	gchar *mode;
+	// get the backup file for this module
+	if (NULL
+			== (mode = (gchar *) g_hash_table_lookup(args->node->config, "mode"))) {
+		// We can't decide
+		printdbg(
+				"%s mandatory argument 'mode' undefined (back/control)!\n", H(args->pkt->conn->id));
+		return DEFER;
+	}
+	//else
+	//printf("VMI Mode %s\n", mode);
 
-    if (!strcmp(mode, "front"))
-        return mod_vmi_front(args);
-    else if (!strcmp(mode, "pick"))
-        return mod_vmi_pick(args);
-    //else if (!strcmp(mode, "back"))
-    //  mod_vmi_back(args);
-    else if (!strcmp(mode, "control"))
-        return mod_vmi_control(args);*/
+	else if (!strcmp(mode, "pick"))
+		return mod_vmi_pick(args);
+	//else if (!strcmp(mode, "back"))
+	//  mod_vmi_back(args);
+	else if (!strcmp(mode, "control"))
+		return mod_vmi_control(args);
+	else if (!strcmp(mode, "intra"))
+		return mod_vmi_intra(args);
 
-    return DEFER;
+	return DEFER;
 }
