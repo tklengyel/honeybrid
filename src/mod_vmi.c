@@ -23,6 +23,16 @@
 
 #include "modules.h"
 
+#ifndef HAVE_XMLRPC
+
+int init_mod_vmi() {}
+void close_mod_vmi() {}
+mod_result_t mod_vmi(struct mod_args *args) {
+    return DEFER;
+}
+
+#else /* HAVE_XMLRPC */
+
 #include <errno.h>
 
 #define MAX_LIFE        600
@@ -32,7 +42,6 @@
 #define check_lan_comm(ip, dst, netmask) \
     ((ip & netmask) == (dst & netmask))
 
-#ifdef HAVE_XMLRPC
 #include <xmlrpc-c/base.h>
 #include <xmlrpc-c/client.h>
 
@@ -46,8 +55,6 @@ dieIfFaultOccurred (xmlrpc_env * const envP) {
         exit(1);
     }
 }
-
-#endif
 
 struct vmi_vm {
 	ip_addr_t key_ext;
@@ -379,3 +386,5 @@ mod_result_t mod_vmi(struct mod_args *args) {
 
 	return DEFER;
 }
+
+#endif
