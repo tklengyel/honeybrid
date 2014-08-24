@@ -1,8 +1,12 @@
 /*
  * This file is part of the honeybrid project.
  *
- * Copyright (C) 2007-2009 University of Maryland (http://www.umd.edu)
- * (Written by Robin Berthier <robinb@umd.edu>, Thomas Coquelin <coquelin@umd.edu> and Julien Vehent <julien@linuxwall.info> for the University of Maryland)
+ * 2007-2009 University of Maryland (http://www.umd.edu)
+ * Robin Berthier <robinb@umd.edu>, Thomas Coquelin <coquelin@umd.edu>
+ * and Julien Vehent <julien@linuxwall.info>
+ *
+ * 2012-2014 University of Connecticut (http://www.uconn.edu)
+ * Tamas K Lengyel <tamas.k.lengyel@gmail.com>
  *
  * Honeybrid is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
