@@ -83,7 +83,7 @@ rpc_add_target(xmlrpc_env * const envP, xmlrpc_value * const paramArrayP,
 		const char *link = NULL, *mac=NULL, *srcip=NULL;
 		xmlrpc_array_read_item(envP, paramArrayP, 0, &linkp);
 		xmlrpc_array_read_item(envP, paramArrayP, 1, &macp);
-		xmlrpc_array_read_item(envP, paramArrayP, 2, &macp);
+		xmlrpc_array_read_item(envP, paramArrayP, 2, &srcipp);
 		xmlrpc_read_string(envP, linkp, &link);
 		xmlrpc_read_string(envP, macp, &mac);
 		xmlrpc_read_string(envP, srcipp, &srcip);
@@ -229,7 +229,7 @@ rpc_add_backend(xmlrpc_env * const envP, xmlrpc_value * const paramArrayP,
 			int vlan;
 			xmlrpc_array_read_item(envP, paramArrayP, i, &vlanp);
 			xmlrpc_read_int(envP, vlanp, &vlan);
-			backend->vlan.i = htons(vlan & ((1 << 12)-1));
+			backend->vlan.i = htons(vlan & BIT_MASK(0,11));
 			break;
 		}
 		case 6: {
@@ -358,7 +358,7 @@ rpc_add_intra(xmlrpc_env * const envP, xmlrpc_value * const paramArrayP,
 			int vlan;
 			xmlrpc_array_read_item(envP, paramArrayP, i, &vlanp);
 			xmlrpc_read_int(envP, vlanp, &vlan);
-			intra->vlan.i = htons(vlan & ((1 << 12) - 1));
+			intra->vlan.i = htons(vlan & BIT_MASK(0,11));
 			break;
 		}
 		case 6: {

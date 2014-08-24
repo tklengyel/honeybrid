@@ -267,7 +267,7 @@ rule: 	{
 		$$->front_handler->ip=$6;
 		$$->front_handler->mac=$7;
 		$$->front_handler->netmask = $8;
-        $$->front_handler->vlan.i = htons($9 & ((1 << 12)-1));
+        $$->front_handler->vlan.i = htons($9 & BIT_MASK(0,11));
         
         $$->front_handler->ip_str=g_strdup(addr_ntoa($6));
 		
@@ -291,7 +291,7 @@ rule: 	{
 		$$->front_handler->ip=$6;
 		$$->front_handler->mac=$7;
 		$$->front_handler->netmask = $8;
-        $$->front_handler->vlan.i = htons($9 & ((1 << 12)-1));
+        $$->front_handler->vlan.i = htons($9 & BIT_MASK(0,11));
 		$$->front_handler->rule = DE_create_tree($11->str);
 		
 		$$->front_handler->ip_str=g_strdup(addr_ntoa($6));
@@ -325,7 +325,7 @@ rule: 	{
         back_handler->ip=$6;
        	back_handler->mac=$7;
        	back_handler->netmask = $8;
-       	back_handler->vlan.i = htons($9 & ((1 << 12)-1));    	
+       	back_handler->vlan.i = htons($9 & BIT_MASK(0,11));    	
        	back_handler->ip_str=g_strdup(addr_ntoa($6));
        	    
         add_back_handler($$, back_handler);
@@ -351,7 +351,7 @@ rule: 	{
         back_handler->ip=$6;
        	back_handler->mac=$7;
        	back_handler->netmask = $8;
-       	back_handler->vlan.i = htons($9 & ((1 << 12)-1));  
+       	back_handler->vlan.i = htons($9 & BIT_MASK(0,11));  
         back_handler->rule=DE_create_tree($11->str);        
         back_handler->ip_str=g_strdup(addr_ntoa($6));
     
@@ -378,7 +378,7 @@ rule: 	{
         intra_handler->ip=$8;
        	intra_handler->mac=$9;
        	intra_handler->netmask = $10;
-       	intra_handler->vlan.i = htons($11 & ((1 << 12)-1));
+       	intra_handler->vlan.i = htons($11 & BIT_MASK(0,11));
        	intra_handler->exclusive = 1;  	
        	intra_handler->ip_str=g_strdup(addr_ntoa($8));
        	    
@@ -406,7 +406,7 @@ rule: 	{
         intra_handler->ip=$8;
        	intra_handler->mac=$9;
        	intra_handler->netmask = $10;
-       	intra_handler->vlan.i = htons($11 & ((1 << 12)-1));  
+       	intra_handler->vlan.i = htons($11 & BIT_MASK(0,11));  
         intra_handler->rule=DE_create_tree($13->str);
         intra_handler->exclusive = 1;
         intra_handler->ip_str=g_strdup(addr_ntoa($8));

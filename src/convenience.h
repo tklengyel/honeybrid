@@ -51,6 +51,11 @@ gint conn_key_cmp(gconstpointer a, gconstpointer b, gconstpointer c);
 #define likely(x)    __builtin_expect (!!(x), 1)
 #define unlikely(x)  __builtin_expect (!!(x), 0)
 
+/**
+ * Macro to compute bitfield masks (up to 64-bits)
+ */
+#define BIT_MASK(a, b) (((unsigned long long) -1 >> (63 - (b))) & ~((1ULL << (a)) - 1))
+
 status_t switch_state(struct conn_struct *conn, conn_status_t new_state);
 
 #define free_0(x) if(x) { free(x); x = NULL; }
