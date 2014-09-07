@@ -36,7 +36,7 @@
 mod_result_t mod_backpick_random(struct mod_args *args) {
     printdbg("%s Random backpick module called\n", H(args->pkt->conn->id));
     int n_backends = 0;
-    mod_result_t result = DE_DEFER;
+    mod_result_t result = DEFER;
 
     if ((n_backends = g_tree_nnodes(args->pkt->conn->target->back_handlers))
             <= 0) {

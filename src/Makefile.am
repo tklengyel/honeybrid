@@ -61,7 +61,10 @@ endif
 
 # Note that -pg is incompatible with HARDENING
 if DEBUG
-AM_CFLAGS += -DHONEYBRID_DEBUG -Wall -Wextra -Wno-override-init -Wno-strict-aliasing -g -ggdb3
+AM_CFLAGS += -DHONEYBRID_DEBUG -Wall -Wextra
+AM_CFLAGS += -Wno-override-init -Wno-initializer-overrides -Wno-strict-aliasing
+AM_CFLAGS += -Wno-unknown-warning-option
+AM_CFLAGS += -g -ggdb3
 if !HARDENING
 AM_CFLAGS += -pg
 endif
