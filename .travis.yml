@@ -1,0 +1,20 @@
+language: c
+compiler:
+- gcc
+- clang
+
+before_install:
+  - sudo apt-get update -qq
+  - sudo apt-get install -y bison flex libdumbnet-dev libpcap-dev libxmlrpc-c3-dev
+
+script: "./autogen.sh; ./configure --enable-debug --disable-hardening; make clean; make -j 4"
+
+#addons:
+#  coverity_scan:
+#    project:
+#      name: "tklengyel/honeybrid"
+#      description: "Build submitted via Travis CI"
+#    notification_email: tamas.k.lengyel@gmail.com
+#    build_command_prepend: "./autogen.sh; ./configure --enable-debug --disable-hardening; make clean"
+#    build_command:   "make -j 4"
+#    branch_pattern: staging
