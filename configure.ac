@@ -139,6 +139,7 @@ AC_CHECK_FUNCS([dup2 gettimeofday inet_ntoa memset socket strdup strerror strstr
 AC_CHECK_LIB(pcap, pcap_compile_nopcap, [], [AC_ERROR(PCAP library missing)])
 AC_CHECK_LIB(dumbnet, addr_ntoa, [], [AC_ERROR(Dumbnet library missing)])
 PKG_CHECK_MODULES([GLIB], [glib-2.0 >= 2.32 gthread-2.0], [], [AC_ERROR(GLib is missing)])
+AC_CHECK_LIB(glib-2.0, [g_malloc0, g_tree_lookup], [], [AC_ERROR([glib-2.0 library is not functional!])])
 
 AC_CHECK_TYPE([__int128_t],
               [AC_DEFINE([HAVE_INT128_T], [1],
@@ -173,6 +174,7 @@ fi
 PKG_CHECK_MODULES([CRYPTO], [libcrypto], [
 	AC_DEFINE([HAVE_CRYPTO], [1], [Crypto library found])
 	], [])
+AC_CHECK_LIB(crypto, [EVP_get_digestbyname], [], [AC_ERROR([libcrypto library is not functional!])])
 
 AC_PATH_PROG(MYSQL_CONFIG, mysql_config)
 if test "x$MYSQL_CONFIG" != "x"; then
