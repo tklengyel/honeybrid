@@ -24,4 +24,4 @@ xmlrpc_client_SOURCES = xmlrpc_client.c
 
 # Compiler flags:
 AM_CFLAGS = $(XMLRPC_CLIENT_CFLAGS)
-AM_LDFLAGS = $(XMLRPC_CLIENT_LIBS)
+xmlrpc_client_LDADD = $(XMLRPC_CLIENT_LIBS)
