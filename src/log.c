@@ -118,6 +118,7 @@ status_t honeylog(char *sdata, char *ddata, log_verbosity_t level, unsigned id) 
         tm = localtime(&tv.tv_sec);
         if (tm == NULL) {
             perror("localtime");
+            free(event);
             return NOK;
         }
         event->sdata = sdata;
@@ -282,7 +283,7 @@ void rotate_connection_log(int signal_nb) {
                 last_rotation);
         L(NULL, logbuf, LOG_HIGH, LOG_LOG);
 
-        free(logbuf);
+        g_free(logbuf);
 
     }
 
