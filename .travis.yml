@@ -9,12 +9,18 @@ before_install:
 
 script: "./autogen.sh; ./configure --enable-debug --disable-hardening; make clean; make -j 4"
 
-#addons:
-#  coverity_scan:
-#    project:
-#      name: "tklengyel/honeybrid"
-#      description: "Build submitted via Travis CI"
-#    notification_email: tamas.k.lengyel@gmail.com
-#    build_command_prepend: "./autogen.sh; ./configure --enable-debug --disable-hardening; make clean"
-#    build_command:   "make -j 4"
-#    branch_pattern: staging
+env:
+  global:
+   # The next declaration is the encrypted COVERITY_SCAN_TOKEN, created
+   #   via the "travis encrypt" command using the project repo's public key
+   - secure: "ikBMG8FYAC9MeLKaMrBPmz3y3okFaffxccA5e8ELLfoCKWJVKhDa/1WZoQ/96THY4ZTew9aITeRzG4eB+g1iaABi5apJt4vUi4Qt++7XLT/uuGIvgz6kJB9Es9IEctywpxK6Yvom6/fPnLPPAZmmO8VmKKP86/g1CLVldrCK4X0="
+
+addons:
+  coverity_scan:
+    project:
+      name: "tklengyel/honeybrid"
+      description: "Build submitted via Travis CI"
+    notification_email: tamas.k.lengyel@gmail.com
+    build_command_prepend: "./autogen.sh; ./configure --enable-debug --disable-hardening; make clean"
+    build_command:   "make -j 4"
+    branch_pattern: coverity
