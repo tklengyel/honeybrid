@@ -5,7 +5,7 @@ compiler:
 
 before_install:
   - sudo apt-get update -qq
-  - sudo apt-get install -y bison flex libdumbnet-dev libpcap-dev libxmlrpc-c3-dev
+  - sudo apt-get install -y bison flex libdumbnet-dev libpcap-dev libxmlrpc-core-c3-dev
 
 script: "./autogen.sh; ./configure --enable-debug --disable-hardening; make clean; make -j 4"
 
