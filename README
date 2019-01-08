@@ -18,7 +18,9 @@ This readme file contains the following sections:
 
 QUICK INSTALL
 
- ./build.sh
+ ./autogen.sh
+ ./configure
+ make
  sudo make install
  sudo mkdir /etc/honeybrid
  sudo mkdir /var/log/honeybrid
